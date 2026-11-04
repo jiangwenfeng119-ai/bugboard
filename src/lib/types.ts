@@ -70,6 +70,39 @@ export type BugRow = {
   updated_at: string;
 };
 
+export type AnalyticsRange = "all" | 7 | 30 | 90;
+
+export type StatusCounts = Record<BugStatus, number>;
+
+export type ReporterPresence = "active" | "disabled" | "revoked" | "missing";
+
+export type ReporterProjectStat = StatusCounts & {
+  projectId: number;
+  projectName: string;
+  total: number;
+  adopted: number;
+};
+
+export type ReporterStat = StatusCounts & {
+  reporterType: ActorType;
+  reporterId: number;
+  name: string;
+  presence: ReporterPresence;
+  total: number;
+  adopted: number;
+  projects: ReporterProjectStat[];
+};
+
+export type ReporterAnalytics = {
+  range: AnalyticsRange;
+  reporters: ReporterStat[];
+  totals: StatusCounts & {
+    total: number;
+    adopted: number;
+    submitters: number;
+  };
+};
+
 export type StatusEventRow = {
   id: number;
   bug_id: number;

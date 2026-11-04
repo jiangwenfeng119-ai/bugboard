@@ -1,27 +1,43 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { IconChart, IconKey, IconUsers } from "@/components/Icons";
 import { requireAdminUser } from "@/lib/session-guard";
-import { listApiKeys, listProjects, listUsers } from "@/lib/services";
+import {
+  listApiKeys,
+  listProjects,
+  listUsers,
+  parseAnalyticsRange,
+  reporterAnalytics,
+} from "@/lib/services";
 import { getDb } from "@/lib/db";
 import { UsersAdmin } from "./UsersAdmin";
 import { ApiKeysAdmin } from "./ApiKeysAdmin";
+import { AnalyticsAdmin } from "./AnalyticsAdmin";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+const TABS = [
+  { id: "users", href: "/admin", label: "用户", icon: IconUsers },
+  { id: "keys", href: "/admin?tab=keys", label: "API Key", icon: IconKey },
+  { id: "analytics", href: "/admin?tab=analytics", label: "数据分析", icon: IconChart },
+] as const;
+
+function localMcpScriptPath() {
+  const script = path.join(process.cwd(), "mcp", "server.ts");
+  const pkg = path.join(process.cwd(), "package.json");
+  return existsSync(script) && existsSync(pkg) ? script : null;
+}
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; range?: string }>;
+}) {
   const identity = await requireAdminUser();
-  const users = listUsers(identity);
-  const keys = listApiKeys(identity).map((k) => {
-    const projectIds = (
-      getDb()
-        .prepare(
-          "SELECT project_id FROM api_key_projects WHERE api_key_id = ?"
-        )
-        .all(k.id) as { project_id: number }[]
-    ).map((r) => r.project_id);
-    return { ...k, projectIds };
-  });
-  const projects = listProjects(identity);
+  const sp = await searchParams;
+  const tab = sp.tab === "keys" || sp.tab === "analytics" ? sp.tab : "users";
 
   return (
     <AppShell username={identity.username} role={identity.role}>
@@ -32,22 +48,58 @@ export default async function AdminPage() {
         <h1>管理后台</h1>
       </div>
 
-      <section className="bb-card bb-section-card">
-        <h2>用户</h2>
-        <UsersAdmin
-          users={users}
-          currentUserId={identity.userId}
-          actorRole={identity.role}
-        />
-      </section>
+      <nav className="bb-tabs" aria-label="管理分区">
+        {TABS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              className="bb-tab"
+              aria-current={tab === item.id ? "page" : undefined}
+            >
+              <span className="bb-tab-icon" aria-hidden>
+                <Icon size={15} />
+              </span>
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
 
-      <section className="bb-card bb-section-card">
-        <h2>API Key</h2>
-        <ApiKeysAdmin
-          keys={keys}
-          projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-        />
-      </section>
+      {tab === "users" ? (
+        <section className="bb-card bb-section-card">
+          <h2>用户</h2>
+          <UsersAdmin
+            users={listUsers(identity)}
+            currentUserId={identity.userId}
+            actorRole={identity.role}
+          />
+        </section>
+      ) : null}
+
+      {tab === "keys" ? (
+        <section className="bb-card bb-section-card">
+          <h2>API Key</h2>
+          <ApiKeysAdmin
+            keys={listApiKeys(identity).map((k) => {
+              const projectIds = (
+                getDb()
+                  .prepare("SELECT project_id FROM api_key_projects WHERE api_key_id = ?")
+                  .all(k.id) as { project_id: number }[]
+              ).map((r) => r.project_id);
+              return { ...k, projectIds };
+            })}
+            projects={listProjects(identity).map((p) => ({ id: p.id, name: p.name }))}
+            mcpScriptPath={localMcpScriptPath()}
+            configuredBaseUrl={process.env.BASE_URL?.trim() || null}
+          />
+        </section>
+      ) : null}
+
+      {tab === "analytics" ? (
+        <AnalyticsAdmin stats={reporterAnalytics(identity, parseAnalyticsRange(sp.range))} />
+      ) : null}
     </AppShell>
   );
 }

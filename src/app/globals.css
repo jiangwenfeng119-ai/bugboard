@@ -601,6 +601,10 @@ legend.bb-label + * {
   color: var(--accent-strong);
 }
 
+.bb-sort.is-end {
+  justify-content: flex-end;
+}
+
 .bb-sort-icon {
   flex: none;
   opacity: 0;
@@ -970,6 +974,48 @@ legend.bb-label + * {
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
+}
+
+.bb-key-prefix {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.bb-key-reveal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.6rem 0 0.75rem;
+}
+
+.bb-key-reveal-row pre {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem;
+  background: #fff;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.bb-key-reveal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .bb-key-reveal-row {
+    flex-direction: column;
+  }
+
+  .bb-key-reveal-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 
 .bb-dropzone {
@@ -1361,6 +1407,21 @@ legend.bb-label + * {
   text-align: left;
 }
 
+.bb-stat.is-static {
+  cursor: default;
+}
+
+.bb-stat.is-static:hover {
+  transform: none;
+  box-shadow: var(--shadow);
+  border-color: var(--line);
+}
+
+.bb-stat-adopted .bb-stat-icon {
+  color: var(--status-fixing);
+  background: color-mix(in srgb, var(--status-fixing) 12%, white);
+}
+
 .bb-stat-icon {
   display: inline-grid;
   place-items: center;
@@ -1426,4 +1487,174 @@ legend.bb-label + * {
   width: 0.55rem;
   border-radius: 3px;
   background: color-mix(in srgb, #1f6feb 28%, white);
+}
+
+.bb-analytics-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.bb-analytics-lead {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.bb-analytics-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bb-input-compact {
+  width: 14rem;
+}
+
+.bb-checkline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.bb-checkline input {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.bb-analytics-table .bb-num,
+.bb-subtable .bb-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bb-analytics-table td.bb-num.is-zero,
+.bb-subtable td.bb-num.is-zero {
+  color: var(--ink-muted);
+}
+
+.bb-analytics-table > thead > tr > th {
+  padding: 0;
+  white-space: nowrap;
+}
+
+.bb-analytics-table > thead > tr > th:not(:has(button)) {
+  padding: 0.8rem 0.95rem;
+}
+
+.bb-analytics-table td.bb-num.is-ok,
+.bb-subtable td.bb-num.is-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.bb-analytics-note {
+  margin: 0.85rem 0 0;
+  max-width: 78ch;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.bb-row-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.bb-row-toggle.is-static {
+  cursor: default;
+  padding-left: 1.2rem;
+}
+
+.bb-row-toggle:hover .bb-reporter-name {
+  color: var(--accent-strong);
+}
+
+.bb-row-toggle.is-static:hover .bb-reporter-name {
+  color: inherit;
+}
+
+.bb-chevron {
+  flex: none;
+  margin-top: 0.2rem;
+  color: var(--ink-muted);
+  transition: transform 160ms var(--ease-out);
+}
+
+.bb-chevron.is-open {
+  transform: rotate(90deg);
+  color: var(--accent-strong);
+}
+
+.bb-reporter-name {
+  display: block;
+  font-weight: 600;
+}
+
+.bb-reporter-meta {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.bb-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  max-width: 18rem;
+}
+
+.bb-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  max-width: 11rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.78rem;
+}
+
+.bb-pill b {
+  font-variant-numeric: tabular-nums;
+}
+
+.bb-analytics-detail > td {
+  background: color-mix(in srgb, var(--surface-2) 72%, white);
+  padding-top: 0.35rem;
+  padding-bottom: 0.85rem;
+}
+
+.bb-subtable {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.bb-subtable th,
+.bb-subtable td {
+  padding: 0.55rem 0.75rem;
+}
+
+.bb-subtable a {
+  font-weight: 600;
+  color: var(--accent-strong);
 }

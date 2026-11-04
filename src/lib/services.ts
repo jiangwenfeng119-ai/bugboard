@@ -15,6 +15,7 @@ import {
   type TransitionAction,
 } from "./state-machine";
 import type {
+  AnalyticsRange,
   ApiKeyRow,
   AttachmentRow,
   BugRow,
@@ -22,7 +23,12 @@ import type {
   Identity,
   Priority,
   ProjectRow,
+  ReporterAnalytics,
+  ReporterPresence,
+  ReporterProjectStat,
+  ReporterStat,
   Role,
+  StatusCounts,
   StatusEventRow,
   UserRow,
 } from "./types";
@@ -803,6 +809,205 @@ export function projectStats(
     created,
     inflow: daysList.map((day) => ({ day, ...inflow[day] })),
     days,
+  };
+}
+
+const BUG_STATUSES: BugStatus[] = [
+  "pending",
+  "fixing",
+  "awaiting_confirm",
+  "confirmed",
+  "invalid",
+];
+
+function emptyStatusCounts(): StatusCounts {
+  return {
+    pending: 0,
+    fixing: 0,
+    awaiting_confirm: 0,
+    confirmed: 0,
+    invalid: 0,
+  };
+}
+
+function isBugStatus(value: string): value is BugStatus {
+  return (BUG_STATUSES as string[]).includes(value);
+}
+
+function countTotal(counts: StatusCounts) {
+  return (
+    counts.pending +
+    counts.fixing +
+    counts.awaiting_confirm +
+    counts.confirmed +
+    counts.invalid
+  );
+}
+
+function countAdopted(counts: StatusCounts) {
+  return counts.fixing + counts.awaiting_confirm + counts.confirmed;
+}
+
+export function parseAnalyticsRange(raw: string | undefined): AnalyticsRange {
+  if (raw === "7" || raw === "30" || raw === "90") {
+    return Number(raw) as 7 | 30 | 90;
+  }
+  return "all";
+}
+
+function analyticsSince(range: AnalyticsRange) {
+  if (range === "all") return null;
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - (range - 1));
+  since.setUTCHours(0, 0, 0, 0);
+  return since.toISOString();
+}
+
+export function reporterAnalytics(
+  identity: Identity,
+  range: AnalyticsRange = "all"
+): ReporterAnalytics {
+  if (!requireAdmin(identity)) throw new Error("需要管理员权限");
+  const since = analyticsSince(range);
+  const grouped = getDb()
+    .prepare(
+      `SELECT b.reporter_type AS reporter_type,
+              b.reporter_id AS reporter_id,
+              b.project_id AS project_id,
+              p.name AS project_name,
+              b.status AS status,
+              COUNT(*) AS c
+       FROM bugs b
+       JOIN projects p ON p.id = b.project_id
+       WHERE (? IS NULL OR b.created_at >= ?)
+       GROUP BY b.reporter_type, b.reporter_id, b.project_id, p.name, b.status`
+    )
+    .all(since, since) as {
+    reporter_type: "user" | "api_key";
+    reporter_id: number;
+    project_id: number;
+    project_name: string;
+    status: string;
+    c: number;
+  }[];
+
+  const users = getDb()
+    .prepare("SELECT id, username, active FROM users")
+    .all() as { id: number; username: string; active: number }[];
+  const keys = getDb()
+    .prepare("SELECT id, name, disabled_at, revoked_at FROM api_keys")
+    .all() as {
+    id: number;
+    name: string;
+    disabled_at: string | null;
+    revoked_at: string | null;
+  }[];
+
+  const byReporter = new Map<
+    string,
+    {
+      reporterType: "user" | "api_key";
+      reporterId: number;
+      name: string;
+      presence: ReporterPresence;
+      counts: StatusCounts;
+      projects: Map<number, ReporterProjectStat>;
+    }
+  >();
+
+  function reporterKey(type: "user" | "api_key", id: number) {
+    return `${type}:${id}`;
+  }
+
+  function ensureReporter(type: "user" | "api_key", id: number) {
+    const key = reporterKey(type, id);
+    const existing = byReporter.get(key);
+    if (existing) return existing;
+    const created = {
+      reporterType: type,
+      reporterId: id,
+      name: type === "user" ? `已删除用户 #${id}` : `已删除 Key #${id}`,
+      presence: "missing" as ReporterPresence,
+      counts: emptyStatusCounts(),
+      projects: new Map<number, ReporterProjectStat>(),
+    };
+    byReporter.set(key, created);
+    return created;
+  }
+
+  for (const user of users) {
+    const row = ensureReporter("user", user.id);
+    row.name = user.username;
+    row.presence = user.active ? "active" : "disabled";
+  }
+  for (const key of keys) {
+    const row = ensureReporter("api_key", key.id);
+    row.name = key.name;
+    row.presence = key.revoked_at
+      ? "revoked"
+      : key.disabled_at
+        ? "disabled"
+        : "active";
+  }
+
+  const totals = emptyStatusCounts();
+  for (const row of grouped) {
+    if (!isBugStatus(row.status)) continue;
+    const reporter = ensureReporter(row.reporter_type, row.reporter_id);
+    reporter.counts[row.status] += row.c;
+    totals[row.status] += row.c;
+    let project = reporter.projects.get(row.project_id);
+    if (!project) {
+      project = {
+        projectId: row.project_id,
+        projectName: row.project_name,
+        ...emptyStatusCounts(),
+        total: 0,
+        adopted: 0,
+      };
+      reporter.projects.set(row.project_id, project);
+    }
+    project[row.status] += row.c;
+  }
+
+  const reporters: ReporterStat[] = [...byReporter.values()]
+    .map((row) => {
+      const projects = [...row.projects.values()]
+        .map((project) => ({
+          ...project,
+          total: countTotal(project),
+          adopted: countAdopted(project),
+        }))
+        .sort(
+          (a, b) =>
+            b.total - a.total ||
+            a.projectName.localeCompare(b.projectName, "zh")
+        );
+      return {
+        reporterType: row.reporterType,
+        reporterId: row.reporterId,
+        name: row.name,
+        presence: row.presence,
+        ...row.counts,
+        total: countTotal(row.counts),
+        adopted: countAdopted(row.counts),
+        projects,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.total - a.total || a.name.localeCompare(b.name, "zh")
+    );
+
+  return {
+    range,
+    reporters,
+    totals: {
+      ...totals,
+      total: countTotal(totals),
+      adopted: countAdopted(totals),
+      submitters: reporters.filter((row) => row.total > 0).length,
+    },
   };
 }
 

@@ -629,4 +629,159 @@ describe("services integration", () => {
       titles(services.listBugs(adminId, project.id, { sort: "status", dir: "asc" }))
     ).toEqual(["界面错位", "登录失败", "文案错误"]);
   });
+
+  it("aggregates each reporter by project and current outcome", async () => {
+    const services = await import("../src/lib/services");
+    const { getDb } = await import("../src/lib/db");
+    const admin = await services.setupAdmin("admin-stats", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const qa = await services.createUser(adminId, {
+      username: "qa",
+      password: "secret1",
+      role: "user",
+    });
+    const quiet = await services.createUser(adminId, {
+      username: "quiet",
+      password: "secret1",
+      role: "user",
+    });
+    const appA = services.createProject(adminId, { name: "门户", description: "" });
+    const appB = services.createProject(adminId, { name: "记账", description: "" });
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+    services.addMember(adminId, appA.id, qa.id);
+    services.addMember(adminId, appB.id, qa.id);
+
+    const confirmed = services.createBug(qaId, {
+      projectId: appA.id,
+      title: "登录失败",
+    });
+    services.transitionBug(adminId, confirmed.id, "start_fix");
+    services.transitionBug(adminId, confirmed.id, "submit_fix", "已修");
+    services.transitionBug(qaId, confirmed.id, "confirm_fix");
+
+    const rejected = services.createBug(qaId, {
+      projectId: appA.id,
+      title: "不是问题",
+    });
+    services.transitionBug(adminId, rejected.id, "mark_invalid", "无法复现");
+
+    const fixingThenInvalid = services.createBug(qaId, {
+      projectId: appA.id,
+      title: "后来不属实",
+    });
+    services.transitionBug(adminId, fixingThenInvalid.id, "start_fix");
+    services.transitionBug(adminId, fixingThenInvalid.id, "mark_invalid", "环境问题");
+
+    const fixing = services.createBug(qaId, {
+      projectId: appA.id,
+      title: "还在修",
+    });
+    services.transitionBug(adminId, fixing.id, "start_fix");
+
+    const pending = services.createBug(qaId, {
+      projectId: appB.id,
+      title: "还没看",
+    });
+
+    const old = services.createBug(qaId, {
+      projectId: appA.id,
+      title: "旧单",
+    });
+    const oldAt = new Date();
+    oldAt.setUTCDate(oldAt.getUTCDate() - 40);
+    getDb()
+      .prepare("UPDATE bugs SET created_at = ? WHERE id = ?")
+      .run(oldAt.toISOString(), old.id);
+
+    const key = services.createApiKey(adminId, {
+      name: "agent-qa",
+      role: "user",
+      projectIds: [appB.id],
+    });
+    const keyId = {
+      kind: "api_key" as const,
+      apiKeyId: key.id,
+      role: "user" as const,
+      name: "agent-qa",
+      projectIds: [appB.id],
+    };
+    const waiting = services.createBug(keyId, {
+      projectId: appB.id,
+      title: "接口超时",
+    });
+    services.transitionBug(adminId, waiting.id, "start_fix");
+    services.transitionBug(adminId, waiting.id, "submit_fix", "已加重试");
+
+    const member = {
+      kind: "user" as const,
+      userId: quiet.id,
+      role: "user" as const,
+      username: quiet.username,
+    };
+    expect(() => services.reporterAnalytics(member, "all")).toThrow(/需要管理员/);
+
+    const all = services.reporterAnalytics(adminId, "all");
+    const qaRow = all.reporters.find((row) => row.reporterId === qa.id && row.reporterType === "user");
+    const keyRow = all.reporters.find(
+      (row) => row.reporterId === key.id && row.reporterType === "api_key"
+    );
+    const quietRow = all.reporters.find((row) => row.reporterId === quiet.id);
+    expect(qaRow).toMatchObject({
+      name: "qa",
+      total: 6,
+      adopted: 2,
+      confirmed: 1,
+      invalid: 2,
+      fixing: 1,
+      pending: 2,
+      awaiting_confirm: 0,
+    });
+    expect(qaRow?.projects.map((project) => [project.projectName, project.total, project.adopted])).toEqual([
+      ["门户", 5, 2],
+      ["记账", 1, 0],
+    ]);
+    expect(keyRow).toMatchObject({
+      name: "agent-qa",
+      total: 1,
+      adopted: 1,
+      confirmed: 0,
+      awaiting_confirm: 1,
+    });
+    expect(keyRow?.projects).toMatchObject([{ projectName: "记账", total: 1, adopted: 1 }]);
+    expect(quietRow).toMatchObject({ total: 0, projects: [] });
+    expect(all.totals).toMatchObject({
+      total: 7,
+      adopted: 3,
+      confirmed: 1,
+      invalid: 2,
+      submitters: 2,
+    });
+    expect(pending.status).toBe("pending");
+
+    const recent = services.reporterAnalytics(adminId, 30);
+    const recentQa = recent.reporters.find((row) => row.reporterId === qa.id);
+    expect(recentQa).toMatchObject({ total: 5, pending: 1 });
+    expect(recent.totals.total).toBe(6);
+
+    services.deleteUser(adminId, qa.id);
+    const afterDelete = services.reporterAnalytics(adminId, "all");
+    expect(
+      afterDelete.reporters.find((row) => row.reporterType === "user" && row.reporterId === qa.id)
+    ).toMatchObject({
+      name: `已删除用户 #${qa.id}`,
+      presence: "missing",
+      total: 6,
+      confirmed: 1,
+    });
+  });
 });
