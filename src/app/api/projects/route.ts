@@ -1,0 +1,26 @@
+import { NextRequest } from "next/server";
+import { withAuth, json } from "@/lib/http";
+import { createProject, listProjects, openBugCountsByProject } from "@/lib/services";
+
+export const runtime = "nodejs";
+
+export async function GET(req: NextRequest) {
+  return withAuth(req, async (identity) => {
+    const projects = listProjects(identity);
+    const openCounts = openBugCountsByProject(identity);
+    return json({
+      projects: projects.map((p) => ({
+        ...p,
+        openCount: openCounts[p.id] || 0,
+      })),
+    });
+  });
+}
+
+export async function POST(req: NextRequest) {
+  return withAuth(req, async (identity) => {
+    const body = await req.json();
+    const project = createProject(identity, body);
+    return json({ project }, 201);
+  });
+}

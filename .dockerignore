@@ -1,0 +1,15 @@
+node_modules
+.next
+data
+.git
+*.sqlite
+*.sqlite-*
+.DS_Store
+coverage
+.env*
+README.md
+docs
+PRODUCT.md
+.cursor
+.impeccable
+agent-transcripts

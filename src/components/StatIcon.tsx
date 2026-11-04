@@ -1,0 +1,31 @@
+import {
+  IconAlert,
+  IconBan,
+  IconCheck,
+  IconClock,
+  IconInbox,
+  IconWrench,
+} from "./Icons";
+import type { BugStatus } from "@/lib/types";
+
+export function StatIcon({
+  kind,
+}: {
+  kind: BugStatus | "total";
+}) {
+  const common = { size: 18 } as const;
+  switch (kind) {
+    case "total":
+      return <IconInbox {...common} />;
+    case "pending":
+      return <IconAlert {...common} />;
+    case "fixing":
+      return <IconWrench {...common} />;
+    case "awaiting_confirm":
+      return <IconClock {...common} />;
+    case "confirmed":
+      return <IconCheck {...common} />;
+    case "invalid":
+      return <IconBan {...common} />;
+  }
+}

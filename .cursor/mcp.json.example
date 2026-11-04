@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "bugboard-qa": {
+      "command": "npx",
+      "args": ["tsx", "${workspaceFolder}/mcp/server.ts"],
+      "env": {
+        "BUGBOARD_BASE_URL": "http://127.0.0.1:3080",
+        "BUGBOARD_API_KEY": "${env:BUGBOARD_QA_KEY}"
+      }
+    },
+    "bugboard-fixer": {
+      "command": "npx",
+      "args": ["tsx", "${workspaceFolder}/mcp/server.ts"],
+      "env": {
+        "BUGBOARD_BASE_URL": "http://127.0.0.1:3080",
+        "BUGBOARD_API_KEY": "${env:BUGBOARD_FIXER_KEY}"
+      }
+    }
+  }
+}

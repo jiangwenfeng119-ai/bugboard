@@ -1,0 +1,20 @@
+services:
+  bugboard:
+    build: .
+    ports:
+      # 局域网可访问：主机 3080 → 容器 3000
+      - "0.0.0.0:3080:3000"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-secret-32+}
+      BASE_URL: ${BASE_URL:-http://192.168.166.8:3080}
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      DATA_DIR: /data
+      DB_PATH: /data/db/bugboard.sqlite
+      UPLOADS_DIR: /data/uploads
+    volumes:
+      - bugboard-data:/data
+    restart: unless-stopped
+
+volumes:
+  bugboard-data:

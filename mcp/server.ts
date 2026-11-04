@@ -1,0 +1,276 @@
+#!/usr/bin/env node
+/**
+ * Bugboard MCP server (stdio) for Cursor agents.
+ * Env: BUGBOARD_BASE_URL, BUGBOARD_API_KEY
+ */
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const BASE = process.env.BUGBOARD_BASE_URL || "http://127.0.0.1:3000";
+const KEY = process.env.BUGBOARD_API_KEY || "";
+
+async function api(
+  path: string,
+  init: RequestInit = {}
+): Promise<unknown> {
+  if (!KEY) throw new Error("BUGBOARD_API_KEY 未设置");
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${KEY}`,
+      ...(init.body && !(init.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...(init.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      (data as { error?: string }).error || `HTTP ${res.status}`
+    );
+  }
+  return data;
+}
+
+function textResult(data: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  };
+}
+
+function errResult(e: unknown) {
+  const message = e instanceof Error ? e.message : String(e);
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify({ error: message }) }],
+    isError: true,
+  };
+}
+
+const transitionNote = z.string().optional().describe("说明 / 修复说明 / 原因");
+
+const server = new McpServer({
+  name: "bugboard",
+  version: "0.1.0",
+});
+
+server.tool(
+  "list_projects",
+  "列出当前 Key 可见的项目",
+  {},
+  async () => {
+    try {
+      return textResult(await api("/api/projects"));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "get_project_stats",
+  "获取项目汇总与趋势",
+  {
+    projectId: z.number().int().positive().describe("项目 ID"),
+    days: z
+      .union([z.literal(7), z.literal(30), z.literal(90)])
+      .optional()
+      .describe("趋势窗口天数，默认 30"),
+  },
+  async ({ projectId, days }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/stats?days=${days || 30}`)
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "list_bugs",
+  "列出项目内报障",
+  {
+    projectId: z.number().int().positive(),
+    status: z
+      .enum([
+        "pending",
+        "fixing",
+        "awaiting_confirm",
+        "confirmed",
+        "invalid",
+      ])
+      .optional(),
+    priority: z.enum(["p1", "p2", "p3"]).optional(),
+    q: z.string().optional().describe("标题关键词"),
+  },
+  async ({ projectId, status, priority, q }) => {
+    try {
+      const sp = new URLSearchParams();
+      if (status) sp.set("status", status);
+      if (priority) sp.set("priority", priority);
+      if (q) sp.set("q", q);
+      const qs = sp.toString();
+      return textResult(
+        await api(
+          `/api/projects/${projectId}/bugs${qs ? `?${qs}` : ""}`
+        )
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "get_bug",
+  "获取报障详情（含时间线与可执行动作）",
+  { bugId: z.number().int().positive() },
+  async ({ bugId }) => {
+    try {
+      return textResult(await api(`/api/bugs/${bugId}`));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "create_bug",
+  "在项目中创建报障（测试 Agent / 用户级 Key）",
+  {
+    projectId: z.number().int().positive(),
+    title: z.string().min(1),
+    body: z.string().optional(),
+    priority: z.enum(["p1", "p2", "p3"]).optional().describe("默认 p2"),
+  },
+  async ({ projectId, title, body, priority }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/bugs`, {
+          method: "POST",
+          body: JSON.stringify({
+            title,
+            body,
+            priority: priority || "p2",
+          }),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+async function transition(
+  action: string,
+  bugId: number,
+  note?: string
+) {
+  return api(`/api/bugs/${bugId}/transitions`, {
+    method: "POST",
+    body: JSON.stringify({ action, note }),
+  });
+}
+
+server.tool(
+  "start_fix",
+  "接单：待处理 → 修复中（管理员级 Key）",
+  { bugId: z.number().int().positive(), note: transitionNote },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("start_fix", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "submit_fix",
+  "提交修复说明：修复中 → 待确认（管理员级 Key，note 必填）",
+  {
+    bugId: z.number().int().positive(),
+    note: z.string().min(1).describe("修复说明（必填）"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("submit_fix", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "mark_invalid",
+  "标为不属实（管理员级 Key，note 必填）",
+  {
+    bugId: z.number().int().positive(),
+    note: z.string().min(1).describe("不属实原因（必填）"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("mark_invalid", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "confirm_fix",
+  "确认已修复：待确认 → 已确认（仅原报障人 Key）",
+  { bugId: z.number().int().positive(), note: transitionNote },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("confirm_fix", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "reject_fix",
+  "仍有问题：待确认 → 待处理（仅原报障人 Key，note 必填）",
+  {
+    bugId: z.number().int().positive(),
+    note: z.string().min(1).describe("仍有问题说明（必填）"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("reject_fix", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "dispute_invalid",
+  "对不属实提出异议：不属实 → 待处理（仅原报障人 Key，note 必填）",
+  {
+    bugId: z.number().int().positive(),
+    note: z.string().min(1).describe("异议说明（必填）"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("dispute_invalid", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
