@@ -8,6 +8,7 @@ export function CreateProjectForm() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,7 +20,11 @@ export function CreateProjectForm() {
     const res = await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({
+        name,
+        description,
+        ...(code.trim() ? { code: code.trim() } : {}),
+      }),
     });
     const data = await res.json();
     setLoading(false);
@@ -29,6 +34,7 @@ export function CreateProjectForm() {
     }
     setOpen(false);
     setName("");
+    setCode("");
     setDescription("");
     router.push(`/projects/${data.project.id}/bugs`);
     router.refresh();
@@ -56,6 +62,20 @@ export function CreateProjectForm() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
+        />
+      </div>
+      <div className="bb-field">
+        <label className="bb-label" htmlFor="new-project-code">
+          缩写
+        </label>
+        <input
+          id="new-project-code"
+          className="bb-input"
+          value={code}
+          placeholder="如 SOC，留空自动生成"
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          maxLength={8}
+          spellCheck={false}
         />
       </div>
       <div className="bb-field">

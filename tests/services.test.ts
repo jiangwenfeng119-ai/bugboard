@@ -71,7 +71,12 @@ describe("services integration", () => {
     const stats = services.projectStats(adminId, project.id, 7);
     expect(stats.total).toBe(1);
     expect(stats.byStatus.confirmed).toBe(1);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
     const inflowToday = stats.inflow.find((d) => d.day === today);
     expect(inflowToday).toMatchObject({
       fixing: 1,
@@ -85,6 +90,101 @@ describe("services integration", () => {
       projectIds: [project.id],
     });
     expect(key.rawKey.startsWith("bb_")).toBe(true);
+  });
+
+  it("lets an admin undo a wrong invalid mark and a premature fix", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-undo", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const user = await services.createUser(adminId, {
+      username: "qa-undo",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, {
+      name: "App Undo",
+      description: "demo",
+    });
+    services.addMember(adminId, project.id, user.id);
+    const qaId = {
+      kind: "user" as const,
+      userId: user.id,
+      role: "user" as const,
+      username: user.username,
+    };
+    const bug = services.createBug(qaId, {
+      projectId: project.id,
+      title: "列表空白",
+      body: "打开列表没有数据",
+      priority: "p2",
+    });
+
+    services.transitionBug(adminId, bug.id, "mark_invalid", "没看附件");
+    expect(() =>
+      services.transitionBug(qaId, bug.id, "reopen_invalid", "我想收回")
+    ).toThrow(/需要管理员/);
+    services.transitionBug(
+      adminId,
+      bug.id,
+      "reopen_invalid",
+      "漏看了附件里的报错截图"
+    );
+    expect(services.getBug(adminId, bug.id).status).toBe("pending");
+
+    services.transitionBug(adminId, bug.id, "start_fix");
+    services.transitionBug(adminId, bug.id, "submit_fix", "已改");
+    expect(() => services.transitionBug(adminId, bug.id, "confirm_fix")).toThrow(
+      /仅原报障人/
+    );
+    expect(() =>
+      services.transitionBug(qaId, bug.id, "withdraw_fix", "我想收回")
+    ).toThrow(/需要管理员/);
+    services.transitionBug(
+      adminId,
+      bug.id,
+      "withdraw_fix",
+      "说明写早了，列表上还有一处要改"
+    );
+    expect(services.getBug(adminId, bug.id).status).toBe("fixing");
+  });
+
+  it("buckets daily stats by the Shanghai calendar day", async () => {
+    const services = await import("../src/lib/services");
+    const { getDb } = await import("../src/lib/db");
+    const admin = await services.setupAdmin("admin-tz", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const project = services.createProject(adminId, { name: "时区", description: "" });
+    const bug = services.createBug(adminId, {
+      projectId: project.id,
+      title: "刚过零点",
+    });
+    const shanghaiToday = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const justAfterMidnight = new Date(`${shanghaiToday}T00:30:00+08:00`).toISOString();
+    const utcDay = justAfterMidnight.slice(0, 10);
+    expect(utcDay).not.toBe(shanghaiToday);
+
+    getDb()
+      .prepare("UPDATE bugs SET created_at = ?, updated_at = ? WHERE id = ?")
+      .run(justAfterMidnight, justAfterMidnight, bug.id);
+
+    const stats = services.projectStats(adminId, project.id, 7);
+    expect(stats.created.find((row) => row.day === shanghaiToday)?.count).toBe(1);
+    expect(stats.created.find((row) => row.day === utcDay)?.count ?? 0).toBe(0);
   });
 
   it("lets an admin rename a project and rewrite its description", async () => {
@@ -783,5 +883,74 @@ describe("services integration", () => {
       total: 6,
       confirmed: 1,
     });
+  });
+
+  it("gives every bug a unique public id and a handler after someone takes it", async () => {
+    const services = await import("../src/lib/services");
+    const { shanghaiYymmdd } = await import("../src/lib/time");
+    const admin = await services.setupAdmin("admin-ids", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const qa = await services.createUser(adminId, {
+      username: "qa-ids",
+      password: "secret1",
+      role: "user",
+    });
+    const soc = services.createProject(adminId, { name: "安全运营", code: "SOC" });
+    const other = services.createProject(adminId, { name: "资产", code: "ZC" });
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+    services.addMember(adminId, soc.id, qa.id);
+
+    const first = services.createBug(qaId, { projectId: soc.id, title: "登录失败" });
+    const second = services.createBug(qaId, { projectId: soc.id, title: "列表错位" });
+    const elsewhere = services.createBug(adminId, { projectId: other.id, title: "拓扑难看" });
+    const day = shanghaiYymmdd(new Date());
+
+    expect(first.public_id).toBe(`SOC${day}001`);
+    expect(second.public_id).toBe(`SOC${day}002`);
+    expect(elsewhere.public_id).toBe(`ZC${day}001`);
+    expect(new Set([first.public_id, second.public_id, elsewhere.public_id]).size).toBe(3);
+
+    expect(
+      services.listBugs(adminId, soc.id).find((bug) => bug.id === first.id)?.handler_label
+    ).toBeNull();
+
+    services.transitionBug(adminId, first.id, "start_fix");
+    expect(
+      services.listBugs(adminId, soc.id).find((bug) => bug.id === first.id)?.handler_label
+    ).toBe("admin-ids");
+
+    services.transitionBug(adminId, first.id, "submit_fix", "已改");
+    services.transitionBug(qaId, first.id, "confirm_fix");
+    expect(services.getBugHandlerLabel(services.getBug(adminId, first.id))).toBe("admin-ids");
+
+    services.transitionBug(adminId, second.id, "mark_invalid", "不是缺陷");
+    expect(
+      services.listBugs(adminId, soc.id).find((bug) => bug.id === second.id)?.handler_label
+    ).toBe("admin-ids");
+
+    const found = services.listBugs(adminId, soc.id, { q: second.public_id });
+    expect(found.map((bug) => bug.id)).toEqual([second.id]);
+
+    expect(() => services.createProject(adminId, { name: "另一个", code: "SO" })).toThrow(
+      /前缀/
+    );
+    const renamed = services.updateProject(adminId, soc.id, {
+      name: "安全运营",
+      code: "SEC",
+    });
+    expect(renamed.code).toBe("SEC");
+    expect(services.getBug(adminId, first.id).public_id).toBe(first.public_id);
+    const after = services.createBug(qaId, { projectId: soc.id, title: "新单" });
+    expect(after.public_id).toBe(`SEC${day}001`);
   });
 });

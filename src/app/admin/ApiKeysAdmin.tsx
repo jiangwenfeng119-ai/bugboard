@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { IconMinus } from "@/components/Icons";
+import { formatDateTime } from "@/lib/time";
 import {
   buildMcpHandoff,
   resolveBugboardBaseUrl,
@@ -467,9 +468,7 @@ export function ApiKeysAdmin({
                   <td>{k.role === "admin" ? "管理员级" : "用户级"}</td>
                   <td>{boundProjectLabel(k)}</td>
                   <td className="bb-muted">
-                    {k.last_used_at
-                      ? new Date(k.last_used_at).toLocaleString("zh-CN")
-                      : "—"}
+                    {k.last_used_at ? formatDateTime(k.last_used_at) : "—"}
                   </td>
                   <td>{statusLabel(status)}</td>
                   <td>

@@ -14,21 +14,22 @@ export default async function AccountPage() {
 
   return (
     <AppShell username={identity.username} role={identity.role}>
-      <div
-        className="bb-page-head"
-        style={{ flexDirection: "column", alignItems: "flex-start" }}
-      >
-        <Link href="/projects" className="bb-muted" style={{ fontSize: "0.9rem" }}>
-          ← 返回项目
-        </Link>
-        <h1>修改密码</h1>
-        <p className="bb-muted" style={{ margin: "0.35rem 0 0" }}>
-          当前账号 {identity.username}。保存后这次登录仍然有效，下次请用新密码登录。
-        </p>
+      <div className="bb-account">
+        <div className="bb-page-head">
+          <div>
+            <Link href="/projects" className="bb-crumb">
+              ← 返回项目
+            </Link>
+            <h1>修改密码</h1>
+            <p className="bb-muted" style={{ margin: "0.45rem 0 0" }}>
+              当前账号 {identity.username}。保存后这次登录仍然有效，下次请用新密码登录。
+            </p>
+          </div>
+        </div>
+        <section className="bb-card bb-account-card">
+          <PasswordForm />
+        </section>
       </div>
-      <section className="bb-card bb-account-card">
-        <PasswordForm />
-      </section>
     </AppShell>
   );
 }

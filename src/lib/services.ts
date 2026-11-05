@@ -1,5 +1,6 @@
 import fs from "fs";
 import { getDb, isSetupComplete, nowIso } from "./db";
+import { recentShanghaiDateKeys, shanghaiDaySql, shanghaiDayStartIso } from "./time";
 import {
   actorFromIdentity,
   generateApiKey,
@@ -33,6 +34,7 @@ import type {
   UserRow,
 } from "./types";
 import { STATUS_LABEL } from "./types";
+import { allocateProjectCode, assertUsableCode, nextPublicId } from "./ticket-id";
 import { absoluteAttachmentPath } from "./uploads";
 
 function slugify(name: string) {
@@ -107,9 +109,16 @@ export function listProjects(identity: Identity): ProjectRow[] {
     .all(...ids) as ProjectRow[];
 }
 
+function takenProjectCodes(exceptId?: number) {
+  const rows = getDb()
+    .prepare("SELECT id, code FROM projects WHERE code IS NOT NULL AND code != ''")
+    .all() as { id: number; code: string }[];
+  return rows.flatMap((row) => (row.id === exceptId ? [] : [row.code]));
+}
+
 export function createProject(
   identity: Identity,
-  data: { name: string; description?: string; slug?: string }
+  data: { name: string; description?: string; slug?: string; code?: string }
 ) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   const name = data.name.trim();
@@ -119,13 +128,16 @@ export function createProject(
     .prepare("SELECT id FROM projects WHERE slug = ?")
     .get(slug);
   if (exists) slug = `${slug}-${Date.now().toString(36)}`;
+  const code = data.code?.trim()
+    ? assertUsableCode(data.code, takenProjectCodes())
+    : allocateProjectCode(name, slug, takenProjectCodes());
   const t = nowIso();
   const info = getDb()
     .prepare(
-      `INSERT INTO projects (name, slug, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO projects (name, slug, code, description, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(name, slug, data.description?.trim() || "", t, t);
+    .run(name, slug, code, data.description?.trim() || "", t, t);
   return getDb()
     .prepare("SELECT * FROM projects WHERE id = ?")
     .get(info.lastInsertRowid) as ProjectRow;
@@ -185,18 +197,22 @@ export function getProject(identity: Identity, projectId: number) {
 export function updateProject(
   identity: Identity,
   projectId: number,
-  data: { name: string; description?: string }
+  data: { name: string; description?: string; code?: string }
 ) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   const existing = getProject(identity, projectId);
   const name = data.name.trim();
   if (!name) throw new Error("项目名称必填");
   const description = (data.description ?? existing.description).trim();
+  const code =
+    data.code === undefined
+      ? existing.code
+      : assertUsableCode(data.code, takenProjectCodes(projectId));
   getDb()
     .prepare(
-      `UPDATE projects SET name = ?, description = ?, updated_at = ? WHERE id = ?`
+      `UPDATE projects SET name = ?, code = ?, description = ?, updated_at = ? WHERE id = ?`
     )
-    .run(name, description, nowIso(), projectId);
+    .run(name, code, description, nowIso(), projectId);
   return getProject(identity, projectId);
 }
 
@@ -480,39 +496,56 @@ export function createBug(
     identity.kind === "user"
       ? { type: "user" as const, id: identity.userId }
       : { type: "api_key" as const, id: identity.apiKeyId };
-  const info = getDb()
-    .prepare(
-      `INSERT INTO bugs (project_id, title, body, priority, status, reporter_type, reporter_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
-    )
-    .run(
-      data.projectId,
-      title,
-      data.body?.trim() || "",
-      priority,
-      reporter.type,
-      reporter.id,
-      t,
-      t
-    );
-  const bugId = Number(info.lastInsertRowid);
-  getDb()
-    .prepare(
-      `INSERT INTO bug_status_events (bug_id, from_status, to_status, actor_type, actor_id, note, created_at)
-       VALUES (?, NULL, 'pending', ?, ?, ?, ?)`
-    )
-    .run(bugId, reporter.type, reporter.id, "创建报障", t);
-  getDb()
-    .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
-    .run(t, data.projectId);
+  const bugId = getDb().transaction(() => {
+    const project = getDb()
+      .prepare("SELECT code FROM projects WHERE id = ?")
+      .get(data.projectId) as { code: string } | undefined;
+    if (!project?.code) throw new Error("项目缺少缩写");
+    const existing = (
+      getDb()
+        .prepare("SELECT public_id FROM bugs WHERE public_id IS NOT NULL")
+        .all() as { public_id: string }[]
+    ).map((row) => row.public_id);
+    const publicId = nextPublicId(project.code, t, existing);
+    const info = getDb()
+      .prepare(
+        `INSERT INTO bugs (project_id, public_id, title, body, priority, status, reporter_type, reporter_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
+      )
+      .run(
+        data.projectId,
+        publicId,
+        title,
+        data.body?.trim() || "",
+        priority,
+        reporter.type,
+        reporter.id,
+        t,
+        t
+      );
+    const id = Number(info.lastInsertRowid);
+    getDb()
+      .prepare(
+        `INSERT INTO bug_status_events (bug_id, from_status, to_status, actor_type, actor_id, note, created_at)
+         VALUES (?, NULL, 'pending', ?, ?, ?, ?)`
+      )
+      .run(id, reporter.type, reporter.id, "创建报障", t);
+    getDb()
+      .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
+      .run(t, data.projectId);
+    return id;
+  })();
   return getBug(identity, bugId);
 }
 
 export const BUG_SORT_KEYS = [
+  "id",
   "priority",
   "title",
   "status",
   "reporter",
+  "handler",
+  "created",
   "updated",
 ] as const;
 export type BugSortKey = (typeof BUG_SORT_KEYS)[number];
@@ -526,14 +559,24 @@ export type BugFilters = {
   dir?: string | null;
 };
 
-export type BugListItem = BugRow & { reporter_label: string };
+export type BugListItem = BugRow & {
+  reporter_label: string;
+  handler_label: string | null;
+};
 
 const REPORTER_LABEL_SQL = `CASE
   WHEN b.reporter_type = 'user' THEN COALESCE(u.username, '用户#' || b.reporter_id)
   ELSE COALESCE('Key:' || k.name, 'Key#' || b.reporter_id)
 END`;
 
+const HANDLER_LABEL_SQL = `CASE
+  WHEN b.status = 'pending' OR h.id IS NULL THEN NULL
+  WHEN h.actor_type = 'user' THEN COALESCE(hu.username, '用户#' || h.actor_id)
+  ELSE COALESCE('Key:' || hk.name, 'Key#' || h.actor_id)
+END`;
+
 const BUG_ORDER_SQL: Record<BugSortKey, string> = {
+  id: "b.public_id",
   priority: "b.priority",
   title: "b.title COLLATE NOCASE",
   status: `CASE b.status
@@ -544,6 +587,8 @@ const BUG_ORDER_SQL: Record<BugSortKey, string> = {
     WHEN 'invalid' THEN 4
     ELSE 5 END`,
   reporter: `(${REPORTER_LABEL_SQL}) COLLATE NOCASE`,
+  handler: `COALESCE(${HANDLER_LABEL_SQL}, '') COLLATE NOCASE`,
+  created: "b.created_at",
   updated: "b.updated_at",
 };
 
@@ -555,7 +600,10 @@ export function resolveBugSort(
     ? (sort as BugSortKey)
     : "updated";
   if (dir === "asc" || dir === "desc") return { sort: key, dir };
-  return { sort: key, dir: key === "updated" ? "desc" : "asc" };
+  return {
+    sort: key,
+    dir: key === "updated" || key === "created" || key === "id" ? "desc" : "asc",
+  };
 }
 
 export function listBugs(
@@ -575,17 +623,27 @@ export function listBugs(
     params.push(filters.priority);
   }
   if (filters.q?.trim()) {
-    where.push("b.title LIKE ?");
-    params.push(`%${filters.q.trim()}%`);
+    where.push("(b.title LIKE ? OR b.public_id LIKE ?)");
+    const term = `%${filters.q.trim()}%`;
+    params.push(term, term);
   }
   const order = resolveBugSort(filters.sort, filters.dir);
   const sqlDir = order.dir === "asc" ? "ASC" : "DESC";
   return getDb()
     .prepare(
-      `SELECT b.*, ${REPORTER_LABEL_SQL} AS reporter_label
+      `SELECT b.*, ${REPORTER_LABEL_SQL} AS reporter_label, ${HANDLER_LABEL_SQL} AS handler_label
        FROM bugs b
        LEFT JOIN users u ON b.reporter_type = 'user' AND u.id = b.reporter_id
        LEFT JOIN api_keys k ON b.reporter_type = 'api_key' AND k.id = b.reporter_id
+       LEFT JOIN bug_status_events h ON h.id = (
+         SELECT e.id FROM bug_status_events e
+         WHERE e.bug_id = b.id
+           AND e.to_status IN ('fixing', 'awaiting_confirm', 'invalid')
+         ORDER BY e.id DESC
+         LIMIT 1
+       )
+       LEFT JOIN users hu ON h.actor_type = 'user' AND hu.id = h.actor_id
+       LEFT JOIN api_keys hk ON h.actor_type = 'api_key' AND hk.id = h.actor_id
        WHERE ${where.join(" AND ")}
        ORDER BY ${BUG_ORDER_SQL[order.sort]} ${sqlDir}, b.id ${sqlDir}`
     )
@@ -748,14 +806,12 @@ export function projectStats(
     total += row.c;
   }
 
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - (days - 1));
-  since.setUTCHours(0, 0, 0, 0);
-  const sinceIso = since.toISOString();
+  const daysList = recentShanghaiDateKeys(days);
+  const sinceIso = shanghaiDayStartIso(daysList[0]);
 
   const createdSeries = getDb()
     .prepare(
-      `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS c
+      `SELECT ${shanghaiDaySql("created_at")} AS day, COUNT(*) AS c
        FROM bugs WHERE project_id = ? AND created_at >= ?
        GROUP BY day ORDER BY day`
     )
@@ -764,7 +820,7 @@ export function projectStats(
   // GROUP BY 必须用 e.to_status：bugs 表也有 status 列，写成 status 会误分组
   const inflowSeries = getDb()
     .prepare(
-      `SELECT substr(e.created_at, 1, 10) AS day, e.to_status AS to_status, COUNT(*) AS c
+      `SELECT ${shanghaiDaySql("e.created_at")} AS day, e.to_status AS to_status, COUNT(*) AS c
        FROM bug_status_events e
        JOIN bugs b ON b.id = e.bug_id
        WHERE b.project_id = ? AND e.created_at >= ? AND e.from_status IS NOT NULL
@@ -776,13 +832,6 @@ export function projectStats(
     to_status: BugStatus;
     c: number;
   }[];
-
-  const daysList: string[] = [];
-  for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setUTCDate(since.getUTCDate() + i);
-    daysList.push(d.toISOString().slice(0, 10));
-  }
 
   const createdMap = Object.fromEntries(createdSeries.map((r) => [r.day, r.c]));
   const created = daysList.map((day) => ({ day, count: createdMap[day] || 0 }));
@@ -857,10 +906,8 @@ export function parseAnalyticsRange(raw: string | undefined): AnalyticsRange {
 
 function analyticsSince(range: AnalyticsRange) {
   if (range === "all") return null;
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - (range - 1));
-  since.setUTCHours(0, 0, 0, 0);
-  return since.toISOString();
+  const days = recentShanghaiDateKeys(range);
+  return shanghaiDayStartIso(days[0]);
 }
 
 export function reporterAnalytics(
@@ -1186,6 +1233,20 @@ export function deleteApiKey(identity: Identity, keyId: number) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   getApiKeyOrThrow(keyId);
   getDb().prepare("DELETE FROM api_keys WHERE id = ?").run(keyId);
+}
+
+export function getBugHandlerLabel(bug: Pick<BugRow, "id" | "status">) {
+  if (bug.status === "pending") return null;
+  const event = getDb()
+    .prepare(
+      `SELECT actor_type, actor_id FROM bug_status_events
+       WHERE bug_id = ? AND to_status IN ('fixing', 'awaiting_confirm', 'invalid')
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    .get(bug.id) as { actor_type: "user" | "api_key"; actor_id: number } | undefined;
+  if (!event) return null;
+  return resolveActorLabel(event.actor_type, event.actor_id);
 }
 
 export function resolveActorLabel(

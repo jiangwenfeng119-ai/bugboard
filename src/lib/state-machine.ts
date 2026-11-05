@@ -9,7 +9,9 @@ export type TransitionAction =
   | "submit_fix"
   | "confirm_fix"
   | "reject_fix"
-  | "dispute_invalid";
+  | "dispute_invalid"
+  | "reopen_invalid"
+  | "withdraw_fix";
 
 export type TransitionSpec = {
   from: BugStatus[];
@@ -60,6 +62,20 @@ export const TRANSITIONS: TransitionSpec[] = [
     to: "pending",
     action: "dispute_invalid",
     who: "reporter",
+    noteRequired: true,
+  },
+  {
+    from: ["invalid"],
+    to: "pending",
+    action: "reopen_invalid",
+    who: "admin",
+    noteRequired: true,
+  },
+  {
+    from: ["awaiting_confirm"],
+    to: "fixing",
+    action: "withdraw_fix",
+    who: "admin",
     noteRequired: true,
   },
 ];
@@ -128,4 +144,6 @@ export const ACTION_LABEL: Record<TransitionAction, string> = {
   confirm_fix: "确认已修复",
   reject_fix: "仍有问题",
   dispute_invalid: "提出异议",
+  reopen_invalid: "撤回不属实",
+  withdraw_fix: "撤回修复提交",
 };

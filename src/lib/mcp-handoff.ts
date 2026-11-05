@@ -136,7 +136,7 @@ export function buildMcpHandoff(input: McpHandoffInput) {
     "",
     `写完后在 Cursor Settings → MCP 确认「${serverId}」已连接；没有出现就重载窗口。然后调用 list_projects，应能看到该 Key 可访问的项目。`,
     input.role === "admin"
-      ? "这个 Key 是管理员级，适合修复 Agent：可以接单（start_fix）、提交修复（submit_fix）、标记不属实（mark_invalid），可访问全部项目。"
+      ? "这个 Key 是管理员级，适合修复 Agent：可以接单（start_fix）、提交修复（submit_fix）、标记不属实（mark_invalid），也可以撤回判错的不属实（reopen_invalid）或撤回已提交的修复（withdraw_fix）。可访问全部项目。不能代替报障人确认已修复。"
       : "这个 Key 是用户级，适合提报 Agent：可以建单（create_bug），并对自己提的单确认、打回或提出异议。不能接单或提交修复。"
   );
 

@@ -17,7 +17,18 @@ const NOTE_ACTIONS = new Set<TransitionAction>([
   "submit_fix",
   "reject_fix",
   "dispute_invalid",
+  "reopen_invalid",
+  "withdraw_fix",
 ]);
+
+const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
+  submit_fix:
+    "写给报障人：原来的问题、现在的表现、请这样重测。用界面上的说法，不要写文件名或实现细节。",
+  mark_invalid:
+    "写给报障人：实际做了什么、看到了什么、为什么和报障对不上。改产品时写明现在的做法，并请报障人去和产品经理沟通。",
+  reopen_invalid: "写清上次漏看或判错的是哪一处。",
+  withdraw_fix: "写清为什么先收回这次修复说明，还有哪一点要再改。",
+};
 
 export function BugActions({
   bugId,
@@ -158,6 +169,11 @@ export function BugActions({
           </h3>
           <div className="bb-field">
             <label className="bb-label">说明（必填）</label>
+            {NOTE_HINT[active] ? (
+              <p className="bb-muted" style={{ margin: "0 0 0.35rem" }}>
+                {NOTE_HINT[active]}
+              </p>
+            ) : null}
             <textarea
               className="bb-textarea"
               value={note}

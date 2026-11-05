@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { dbPath, ensureDataDirs } from "./paths";
+import { allocateProjectCode, nextPublicId } from "./ticket-id";
 
 let _db: Database.Database | null = null;
 
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
+  code TEXT NOT NULL UNIQUE,
   description TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -39,6 +41,7 @@ CREATE TABLE IF NOT EXISTS project_members (
 CREATE TABLE IF NOT EXISTS bugs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL,
+  public_id TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
   body TEXT NOT NULL DEFAULT '',
   priority TEXT NOT NULL CHECK(priority IN ('p1','p2','p3')),
@@ -120,6 +123,67 @@ function migrateSchema(db: Database.Database) {
     db.exec("ALTER TABLE api_keys ADD COLUMN disabled_at TEXT");
   }
   ensureSuperAdminRole(db);
+  ensureProjectCodes(db);
+  ensurePublicIds(db);
+}
+
+function columnNames(db: Database.Database, table: string) {
+  return (
+    db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  ).map((col) => col.name);
+}
+
+function ensureProjectCodes(db: Database.Database) {
+  if (!columnNames(db, "projects").includes("code")) {
+    db.exec("ALTER TABLE projects ADD COLUMN code TEXT");
+  }
+  const rows = db
+    .prepare("SELECT id, name, slug, code FROM projects ORDER BY id")
+    .all() as { id: number; name: string; slug: string; code: string | null }[];
+  const taken = rows.flatMap((row) => (row.code ? [row.code] : []));
+  const update = db.prepare("UPDATE projects SET code = ? WHERE id = ?");
+  for (const row of rows) {
+    if (row.code) continue;
+    const code = allocateProjectCode(row.name, row.slug, taken);
+    update.run(code, row.id);
+    taken.push(code);
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_code ON projects(code)");
+}
+
+function ensurePublicIds(db: Database.Database) {
+  if (!columnNames(db, "bugs").includes("public_id")) {
+    db.exec("ALTER TABLE bugs ADD COLUMN public_id TEXT");
+  }
+  const missing = db
+    .prepare(
+      `SELECT b.id, b.created_at, p.code AS code
+       FROM bugs b
+       JOIN projects p ON p.id = b.project_id
+       WHERE b.public_id IS NULL OR b.public_id = ''
+       ORDER BY b.created_at ASC, b.id ASC`
+    )
+    .all() as { id: number; created_at: string; code: string }[];
+  if (missing.length > 0) {
+    const taken = (
+      db
+        .prepare(
+          "SELECT public_id FROM bugs WHERE public_id IS NOT NULL AND public_id != ''"
+        )
+        .all() as { public_id: string }[]
+    ).map((row) => row.public_id);
+    const update = db.prepare("UPDATE bugs SET public_id = ? WHERE id = ?");
+    const fill = db.transaction(() => {
+      for (const row of missing) {
+        if (!row.code) throw new Error("项目缺少缩写，无法生成报障 ID");
+        const publicId = nextPublicId(row.code, row.created_at, taken);
+        update.run(publicId, row.id);
+        taken.push(publicId);
+      }
+    });
+    fill();
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bugs_public_id ON bugs(public_id)");
 }
 
 function ensureSuperAdminRole(db: Database.Database) {

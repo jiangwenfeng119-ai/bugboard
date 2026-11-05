@@ -34,8 +34,8 @@ export default async function ProjectSummaryPage({
   ];
 
   return (
-    <div>
-      <div className="bb-stat-grid" style={{ marginBottom: "1rem" }}>
+    <div className="bb-summary">
+      <div className="bb-stat-grid">
         {entries.map((e) => (
           <Link
             key={e.key}
@@ -57,7 +57,7 @@ export default async function ProjectSummaryPage({
 
       <div className="bb-card bb-section-card">
         <div className="bb-section-head">
-          <h2 className="bb-title-with-icon" style={{ fontSize: "1.02rem" }}>
+          <h2 className="bb-title-with-icon">
             <span className="bb-title-icon is-sm" aria-hidden>
               <IconChart size={16} />
             </span>

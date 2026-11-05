@@ -10,7 +10,7 @@ export function TrendChart({
   inflow: { day: string; pending: number }[];
 }) {
   const width = 1000;
-  const height = 220;
+  const height = 320;
   const pad = 24;
   const max = Math.max(
     1,

@@ -65,8 +65,8 @@ export function MembersManager({
 
   return (
     <div>
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
-        <div className="bb-select bb-multi-select" style={{ flex: 1 }}>
+      <div className="bb-member-add">
+        <div className="bb-select bb-multi-select">
           {candidates.length === 0 ? (
             <div className="bb-multi-select-empty">暂无可添加用户</div>
           ) : (

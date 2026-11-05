@@ -27,6 +27,7 @@ export async function PATCH(
       ...(typeof body.description === "string"
         ? { description: body.description }
         : {}),
+      ...(typeof body.code === "string" ? { code: body.code } : {}),
     });
     return json({ project });
   });

@@ -9,12 +9,14 @@ import { DeleteProjectButton } from "../DeleteProjectButton";
 export function ProjectHeader({
   projectId,
   name,
+  code,
   description,
   isAdmin,
   canDelete,
 }: {
   projectId: number;
   name: string;
+  code: string;
   description: string;
   isAdmin: boolean;
   canDelete?: boolean;
@@ -22,20 +24,24 @@ export function ProjectHeader({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [shownName, setShownName] = useState(name);
+  const [shownCode, setShownCode] = useState(code);
   const [shownDescription, setShownDescription] = useState(description);
   const [draftName, setDraftName] = useState(name);
+  const [draftCode, setDraftCode] = useState(code);
   const [draftDescription, setDraftDescription] = useState(description);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setShownName(name);
+    setShownCode(code);
     setShownDescription(description);
     setEditing(false);
-  }, [projectId, name, description]);
+  }, [projectId, name, code, description]);
 
   function startEdit() {
     setDraftName(shownName);
+    setDraftCode(shownCode);
     setDraftDescription(shownDescription);
     setError("");
     setEditing(true);
@@ -50,6 +56,7 @@ export function ProjectHeader({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: draftName,
+        code: draftCode,
         description: draftDescription,
       }),
     });
@@ -60,6 +67,7 @@ export function ProjectHeader({
       return;
     }
     setShownName(data.project.name);
+    setShownCode(data.project.code);
     setShownDescription(data.project.description);
     setEditing(false);
     router.refresh();
@@ -67,7 +75,7 @@ export function ProjectHeader({
 
   return (
     <div style={{ marginBottom: "0.75rem" }}>
-      <Link href="/projects" className="bb-muted" style={{ fontSize: "0.9rem" }}>
+      <Link href="/projects" className="bb-crumb">
         ← 全部项目
       </Link>
       {editing ? (
@@ -83,6 +91,27 @@ export function ProjectHeader({
               onChange={(e) => setDraftName(e.target.value)}
               required
             />
+          </div>
+          <div className="bb-field">
+            <label className="bb-label" htmlFor="project-code">
+              缩写
+            </label>
+            <input
+              id="project-code"
+              className="bb-input"
+              value={draftCode}
+              onChange={(e) => setDraftCode(e.target.value.toUpperCase())}
+              required
+              minLength={2}
+              maxLength={8}
+              pattern="[A-Za-z][A-Za-z0-9]{1,7}"
+              spellCheck={false}
+            />
+            <p className="bb-muted bb-field-hint">
+              {`报障 ID 为缩写 + 年月日 + 序号，例如 ${
+                draftCode.trim().toUpperCase() || "SOC"
+              }261106001。已有 ID 不会改。`}
+            </p>
           </div>
           <div className="bb-field">
             <label className="bb-label" htmlFor="project-description">
@@ -114,6 +143,9 @@ export function ProjectHeader({
         <>
           <div className="bb-project-heading">
             <h1>{shownName}</h1>
+            <code className="bb-slug" title="报障 ID 前缀">
+              {shownCode}
+            </code>
             {isAdmin ? (
               <button type="button" className="bb-btn bb-btn-ghost" onClick={startEdit}>
                 <IconPencil size={15} />
@@ -130,7 +162,7 @@ export function ProjectHeader({
             ) : null}
           </div>
           {shownDescription ? (
-            <p className="bb-muted" style={{ margin: 0 }}>
+            <p className="bb-muted bb-measure" style={{ margin: 0 }}>
               {shownDescription}
             </p>
           ) : null}

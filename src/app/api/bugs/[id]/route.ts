@@ -6,6 +6,7 @@ import {
   getAttachments,
   getBug,
   getBugEvents,
+  getBugHandlerLabel,
   resolveActorLabel,
   updateBugPriority,
 } from "@/lib/services";
@@ -32,6 +33,7 @@ export async function GET(
         ...bug,
         statusLabel: STATUS_LABEL[bug.status],
         reporterLabel: resolveActorLabel(bug.reporter_type, bug.reporter_id),
+        handlerLabel: getBugHandlerLabel(bug),
       },
       events,
       attachments,

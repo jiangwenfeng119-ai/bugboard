@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { IconChart, IconKey, IconUsers } from "@/components/Icons";
+import { IconChart, IconKey, IconPencil, IconUsers } from "@/components/Icons";
 import { requireAdminUser } from "@/lib/session-guard";
 import {
   listApiKeys,
@@ -15,6 +15,7 @@ import { getDb } from "@/lib/db";
 import { UsersAdmin } from "./UsersAdmin";
 import { ApiKeysAdmin } from "./ApiKeysAdmin";
 import { AnalyticsAdmin } from "./AnalyticsAdmin";
+import { AgentPromptsAdmin } from "./AgentPromptsAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ const TABS = [
   { id: "users", href: "/admin", label: "用户", icon: IconUsers },
   { id: "keys", href: "/admin?tab=keys", label: "API Key", icon: IconKey },
   { id: "analytics", href: "/admin?tab=analytics", label: "数据分析", icon: IconChart },
+  { id: "prompts", href: "/admin?tab=prompts", label: "提示词", icon: IconPencil },
 ] as const;
 
 function localMcpScriptPath() {
@@ -37,15 +39,20 @@ export default async function AdminPage({
 }) {
   const identity = await requireAdminUser();
   const sp = await searchParams;
-  const tab = sp.tab === "keys" || sp.tab === "analytics" ? sp.tab : "users";
+  const tab =
+    sp.tab === "keys" || sp.tab === "analytics" || sp.tab === "prompts"
+      ? sp.tab
+      : "users";
 
   return (
     <AppShell username={identity.username} role={identity.role}>
-      <div className="bb-page-head" style={{ flexDirection: "column", alignItems: "flex-start" }}>
-        <Link href="/projects" className="bb-muted" style={{ fontSize: "0.9rem" }}>
-          ← 返回项目
-        </Link>
-        <h1>管理后台</h1>
+      <div className="bb-page-head">
+        <div>
+          <Link href="/projects" className="bb-crumb">
+            ← 返回项目
+          </Link>
+          <h1>管理后台</h1>
+        </div>
       </div>
 
       <nav className="bb-tabs" aria-label="管理分区">
@@ -100,6 +107,8 @@ export default async function AdminPage({
       {tab === "analytics" ? (
         <AnalyticsAdmin stats={reporterAnalytics(identity, parseAnalyticsRange(sp.range))} />
       ) : null}
+
+      {tab === "prompts" ? <AgentPromptsAdmin /> : null}
     </AppShell>
   );
 }

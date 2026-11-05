@@ -52,6 +52,7 @@ export type ProjectRow = {
   id: number;
   name: string;
   slug: string;
+  code: string;
   description: string;
   created_at: string;
   updated_at: string;
@@ -60,6 +61,7 @@ export type ProjectRow = {
 export type BugRow = {
   id: number;
   project_id: number;
+  public_id: string;
   title: string;
   body: string;
   priority: Priority;

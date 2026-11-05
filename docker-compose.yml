@@ -9,6 +9,7 @@ services:
       BASE_URL: ${BASE_URL:-http://192.168.166.8:3080}
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
+      TZ: Asia/Shanghai
       DATA_DIR: /data
       DB_PATH: /data/db/bugboard.sqlite
       UPLOADS_DIR: /data/uploads

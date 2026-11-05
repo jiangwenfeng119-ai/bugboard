@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { agentFilesRoot, enrichBugDetail } from "./materialize";
 
 const BASE = process.env.BUGBOARD_BASE_URL || "http://127.0.0.1:3000";
 const KEY = process.env.BUGBOARD_API_KEY || "";
@@ -46,6 +47,18 @@ function errResult(e: unknown) {
     content: [{ type: "text" as const, text: JSON.stringify({ error: message }) }],
     isError: true,
   };
+}
+
+async function downloadAttachment(id: number): Promise<Buffer> {
+  if (!KEY) throw new Error("BUGBOARD_API_KEY 未设置");
+  const res = await fetch(`${BASE}/api/attachments/${id}`, {
+    headers: { Authorization: `Bearer ${KEY}` },
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
 }
 
 const transitionNote = z.string().optional().describe("说明 / 修复说明 / 原因");
@@ -104,7 +117,7 @@ server.tool(
       ])
       .optional(),
     priority: z.enum(["p1", "p2", "p3"]).optional(),
-    q: z.string().optional().describe("标题关键词"),
+    q: z.string().optional().describe("标题或报障 ID 关键词"),
   },
   async ({ projectId, status, priority, q }) => {
     try {
@@ -126,11 +139,32 @@ server.tool(
 
 server.tool(
   "get_bug",
-  "获取报障详情（含时间线与可执行动作）",
+  "获取报障详情（含时间线与可执行动作）。docx/txt 正文在 attachments[].text，文档内图片在 media，图片随结果返回。正文写「见附件」时以附件为准，没读完不要标不属实。",
   { bugId: z.number().int().positive() },
   async ({ bugId }) => {
     try {
-      return textResult(await api(`/api/bugs/${bugId}`));
+      const detail = await api(`/api/bugs/${bugId}`);
+      const { detail: enriched, images } = await enrichBugDetail(
+        detail as {
+          bug?: { id?: number };
+          attachments?: { id: number; filename: string }[];
+          events?: { attachments?: { id: number; filename: string }[] }[];
+        },
+        { root: agentFilesRoot(), download: downloadAttachment }
+      );
+      return {
+        content: [
+          { type: "text" as const, text: JSON.stringify(enriched, null, 2) },
+          ...images.flatMap((img) => [
+            { type: "text" as const, text: img.label },
+            {
+              type: "image" as const,
+              data: img.data,
+              mimeType: img.mimeType,
+            },
+          ]),
+        ],
+      };
     } catch (e) {
       return errResult(e);
     }
@@ -190,10 +224,15 @@ server.tool(
 
 server.tool(
   "submit_fix",
-  "提交修复说明：修复中 → 待确认（管理员级 Key，note 必填）",
+  "提交修复说明：修复中 → 待确认（管理员级 Key，note 必填）。说明写给报障人，用界面上能看到的话，不要写文件名、函数名或接口。",
   {
     bugId: z.number().int().positive(),
-    note: z.string().min(1).describe("修复说明（必填）"),
+    note: z
+      .string()
+      .min(1)
+      .describe(
+        "给报障人的修复说明（必填）。分三段：原来的问题、现在的表现、请这样重测。用界面上的名称写他会看到什么，不要写文件名、函数名、接口或实现细节。"
+      ),
   },
   async ({ bugId, note }) => {
     try {
@@ -206,14 +245,59 @@ server.tool(
 
 server.tool(
   "mark_invalid",
-  "标为不属实（管理员级 Key，note 必填）",
+  "标为不属实（管理员级 Key，note 必填）。改产品、现象不存在、符合现有做法或重复时使用。报障里写明已经和产品经理或 Marshal 沟通确认的不要调用，应按确认过的需求改。没有确认的改产品，说明写现在的做法，并请报障人找产品经理。正文或附件还没读时不要调用。",
   {
     bugId: z.number().int().positive(),
-    note: z.string().min(1).describe("不属实原因（必填）"),
+    note: z
+      .string()
+      .min(1)
+      .describe(
+        "给报障人的不属实原因（必填）。写清实际做了什么、实际看到什么、为什么和报障对不上。不要写文件名、函数名、接口或实现细节。重复时写另一张单的编号和标题。"
+      ),
   },
   async ({ bugId, note }) => {
     try {
       return textResult(await transition("mark_invalid", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "reopen_invalid",
+  "撤回不属实：不属实 → 待处理（管理员级 Key，note 必填）。用于收回判错的不属实，不能代替报障人提异议。",
+  {
+    bugId: z.number().int().positive(),
+    note: z
+      .string()
+      .min(1)
+      .describe("撤回原因（必填）。写清上次漏看或判错的是哪一处，不要只写「重新处理」。"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("reopen_invalid", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "withdraw_fix",
+  "撤回修复提交：待确认 → 修复中（管理员级 Key，note 必填）。修复说明交早或还要继续改时使用。不能用来确认已修复。",
+  {
+    bugId: z.number().int().positive(),
+    note: z
+      .string()
+      .min(1)
+      .describe(
+        "撤回原因（必填）。写清为什么先收回，以及报障人能看到的哪一点还要再改。"
+      ),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("withdraw_fix", bugId, note));
     } catch (e) {
       return errResult(e);
     }

@@ -35,6 +35,7 @@ export default async function ProjectLayout({
       <ProjectHeader
         projectId={project.id}
         name={project.name}
+        code={project.code}
         description={project.description}
         isAdmin={isAdminRole(identity.role)}
         canDelete={isSuperAdminRole(identity.role)}

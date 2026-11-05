@@ -4,11 +4,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityMark } from "@/components/PriorityMark";
 import { isAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
+import { formatDateTime } from "@/lib/time";
 import {
   bugActions,
   getAttachments,
   getBug,
   getBugEvents,
+  getBugHandlerLabel,
   getProject,
   listProjects,
   resolveActorLabel,
@@ -44,108 +46,110 @@ export default async function BugDetailPage({
         />
       }
     >
-      <Link
-        href={`/projects/${project.id}/bugs`}
-        className="bb-muted"
-        style={{ fontSize: "0.9rem" }}
-      >
+      <Link href={`/projects/${project.id}/bugs`} className="bb-crumb">
         ← {project.name} / 报障
       </Link>
 
-      <div className="bb-bug-title" style={{ marginTop: "0.55rem" }}>
+      <div className="bb-bug-title">
         <div className="bb-bug-title-marks">
           <PriorityMark priority={bug.priority} />
           <StatusBadge status={bug.status} />
         </div>
         <h1>{bug.title}</h1>
       </div>
-      <p className="bb-muted" style={{ margin: "0.4rem 0 1rem" }}>
-        创建人 {resolveActorLabel(bug.reporter_type, bug.reporter_id)} ·{" "}
-        {new Date(bug.created_at).toLocaleString("zh-CN")} · 更新{" "}
-        {new Date(bug.updated_at).toLocaleString("zh-CN")}
+      <p className="bb-muted bb-bug-meta">
+        <span className="bb-bug-id">{bug.public_id}</span>
+        {" · "}
+        提交人 {resolveActorLabel(bug.reporter_type, bug.reporter_id)}
+        {" · "}
+        处理人 {getBugHandlerLabel(bug) || "—"}
+        {" · "}
+        创建 {formatDateTime(bug.created_at)}
+        {" · "}
+        更新 {formatDateTime(bug.updated_at)}
       </p>
 
-      <div className="bb-card bb-section-card">
-        <h2>描述</h2>
-        <p style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-          {bug.body || "（无描述）"}
-        </p>
-      </div>
+      <div className="bb-bug-layout">
+        <aside className="bb-bug-aside">
+          <div className="bb-card bb-section-card">
+            <h2>下一步</h2>
+            <BugActions
+              bugId={bug.id}
+              actions={actions}
+              isAdmin={isAdminRole(identity.role)}
+              currentPriority={bug.priority}
+            />
+          </div>
+        </aside>
 
-      <div className="bb-card bb-section-card">
-        <h2>附件</h2>
-        {attachments.length === 0 ? (
-          <p className="bb-muted" style={{ margin: 0 }}>
-            无附件
-          </p>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
-            {attachments.map((a) => (
-              <li key={a.id}>
-                <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer">
-                  {a.filename}
-                </a>{" "}
-                <span className="bb-muted">
-                  ({Math.round(a.size / 1024)} KB)
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+        <div className="bb-bug-main">
+          <div className="bb-card bb-section-card">
+            <h2>描述</h2>
+            <p className="bb-prose bb-measure">{bug.body || "（无描述）"}</p>
+          </div>
 
-      <div className="bb-card bb-section-card">
-        <h2>下一步</h2>
-        <BugActions
-          bugId={bug.id}
-          actions={actions}
-          isAdmin={isAdminRole(identity.role)}
-          currentPriority={bug.priority}
-        />
-      </div>
+          <div className="bb-card bb-section-card">
+            <h2>附件</h2>
+            {attachments.length === 0 ? (
+              <p className="bb-muted" style={{ margin: 0 }}>
+                无附件
+              </p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                {attachments.map((a) => (
+                  <li key={a.id}>
+                    <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer">
+                      {a.filename}
+                    </a>{" "}
+                    <span className="bb-muted">
+                      ({Math.round(a.size / 1024)} KB)
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-      <div className="bb-card bb-section-card">
-        <h2>状态时间线</h2>
-        <ul className="bb-timeline">
-          {events.map((e) => {
-            const eventAtt = getAttachments("status_event", e.id);
-            return (
-              <li key={e.id}>
-                <div>
-                  <strong>
-                    {e.from_status
-                      ? `${STATUS_LABEL[e.from_status]} → ${STATUS_LABEL[e.to_status]}`
-                      : STATUS_LABEL[e.to_status]}
-                  </strong>{" "}
-                  <span className="bb-muted">
-                    · {resolveActorLabel(e.actor_type, e.actor_id)} ·{" "}
-                    {new Date(e.created_at).toLocaleString("zh-CN")}
-                  </span>
-                </div>
-                {e.note ? (
-                  <p style={{ margin: "0.25rem 0 0", whiteSpace: "pre-wrap" }}>
-                    {e.note}
-                  </p>
-                ) : null}
-                {eventAtt.length > 0 ? (
-                  <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1rem" }}>
-                    {eventAtt.map((a) => (
-                      <li key={a.id}>
-                        <a
-                          href={`/api/attachments/${a.id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {a.filename}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+          <div className="bb-card bb-section-card">
+            <h2>状态时间线</h2>
+            <ul className="bb-timeline">
+              {events.map((e) => {
+                const eventAtt = getAttachments("status_event", e.id);
+                return (
+                  <li key={e.id}>
+                    <div>
+                      <strong>
+                        {e.from_status
+                          ? `${STATUS_LABEL[e.from_status]} → ${STATUS_LABEL[e.to_status]}`
+                          : STATUS_LABEL[e.to_status]}
+                      </strong>{" "}
+                      <span className="bb-muted">
+                        · {resolveActorLabel(e.actor_type, e.actor_id)} ·{" "}
+                        {formatDateTime(e.created_at)}
+                      </span>
+                    </div>
+                    {e.note ? <p className="bb-prose bb-measure">{e.note}</p> : null}
+                    {eventAtt.length > 0 ? (
+                      <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1rem" }}>
+                        {eventAtt.map((a) => (
+                          <li key={a.id}>
+                            <a
+                              href={`/api/attachments/${a.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {a.filename}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

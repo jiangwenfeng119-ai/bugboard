@@ -36,7 +36,7 @@ export function AppShell({
           <BrandMark />
           Bugboard
         </Link>
-        <div style={{ flex: 1 }}>{projectSwitcher}</div>
+        <div className="bb-top-switch">{projectSwitcher}</div>
         <nav className="bb-top-nav">
           {isAdminRole(role) ? (
             <Link href="/admin" className="bb-btn bb-btn-ghost">

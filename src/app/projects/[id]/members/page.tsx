@@ -18,8 +18,8 @@ export default async function MembersPage({
   const users = listUsers(identity);
 
   return (
-    <div className="bb-card" style={{ padding: "1rem" }}>
-      <h2 style={{ marginTop: 0, fontSize: "1.05rem" }}>项目成员</h2>
+    <div className="bb-card bb-section-card">
+      <h2>项目成员</h2>
       <MembersManager
         projectId={Number(id)}
         members={members}

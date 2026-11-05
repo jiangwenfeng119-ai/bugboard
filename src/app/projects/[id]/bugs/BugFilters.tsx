@@ -38,7 +38,7 @@ export function BugFilters({
   }
 
   return (
-    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+    <div className="bb-bugs-filters">
       <select
         className="bb-select"
         style={{ width: "auto" }}
@@ -66,9 +66,8 @@ export function BugFilters({
         <option value="p3">P3</option>
       </select>
       <input
-        className="bb-input"
-        style={{ width: 200 }}
-        placeholder="搜索标题"
+        className="bb-input bb-filter-q"
+        placeholder="搜索标题或 ID"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
