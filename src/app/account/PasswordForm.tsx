@@ -70,7 +70,7 @@ export function PasswordForm() {
           minLength={6}
           required
         />
-        <p className="bb-muted" style={{ margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
+        <p className="bb-field-hint" style={{ margin: "0.35rem 0 0" }}>
           至少 6 位
         </p>
       </div>

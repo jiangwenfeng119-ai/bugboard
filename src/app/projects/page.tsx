@@ -74,9 +74,9 @@ export default async function ProjectsPage() {
                     </span>
                   </div>
                   <h2 className="bb-project-name">{p.name}</h2>
-                  <p className="bb-muted bb-project-desc">
-                    {p.description || "暂无项目说明"}
-                  </p>
+                  {p.description ? (
+                    <p className="bb-muted bb-project-desc">{p.description}</p>
+                  ) : null}
                 </Link>
                 <div className="bb-project-card-foot">
                   <code className="bb-slug">{p.slug}</code>

@@ -85,7 +85,7 @@ server.tool(
 
 server.tool(
   "get_project_stats",
-  "获取项目汇总与趋势",
+  "获取项目汇总与趋势。含每日新建、各状态流入，以及按提报人、按处理人的每日计数",
   {
     projectId: z.number().int().positive().describe("项目 ID"),
     days: z

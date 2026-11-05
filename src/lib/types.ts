@@ -76,6 +76,27 @@ export type BugRow = {
 
 export type AnalyticsRange = "all" | 7 | 30 | 90;
 
+export type AnalyticsTrendGrain = "day" | "week" | "month";
+
+export type AnalyticsTrendPoint = {
+  key: string;
+  label: string;
+  hint: string;
+  count: number;
+};
+
+export type AnalyticsTrend = {
+  grain: AnalyticsTrendGrain;
+  points: AnalyticsTrendPoint[];
+};
+
+/** Daily counts aligned to the project trend window, one row per person. */
+export type DayCountSeries = {
+  key: string;
+  label: string;
+  counts: number[];
+};
+
 export type StatusCounts = Record<BugStatus, number>;
 
 export type ReporterPresence = "active" | "disabled" | "revoked" | "missing";
@@ -105,6 +126,7 @@ export type ReporterAnalytics = {
     adopted: number;
     submitters: number;
   };
+  trend: AnalyticsTrend;
 };
 
 export type StatusEventRow = {
@@ -137,6 +159,7 @@ export type ApiKeyRow = {
   role: Role;
   created_by_user_id: number;
   last_used_at: string | null;
+  use_count: number;
   disabled_at: string | null;
   revoked_at: string | null;
   created_at: string;

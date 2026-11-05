@@ -86,7 +86,7 @@ export default async function AdminPage({
       ) : null}
 
       {tab === "keys" ? (
-        <section className="bb-card bb-section-card">
+        <section className="bb-card bb-section-card bb-keys-panel">
           <h2>API Key</h2>
           <ApiKeysAdmin
             keys={listApiKeys(identity).map((k) => {

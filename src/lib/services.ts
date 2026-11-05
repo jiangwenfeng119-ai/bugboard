@@ -1,5 +1,6 @@
 import fs from "fs";
 import { getDb, isSetupComplete, nowIso } from "./db";
+import { buildAnalyticsTrend } from "./analytics-trend";
 import { recentShanghaiDateKeys, shanghaiDaySql, shanghaiDayStartIso } from "./time";
 import {
   actorFromIdentity,
@@ -24,6 +25,7 @@ import type {
   Identity,
   Priority,
   ProjectRow,
+  DayCountSeries,
   ReporterAnalytics,
   ReporterPresence,
   ReporterProjectStat,
@@ -915,14 +917,101 @@ export function projectStats(
     inflow[row.day][row.to_status] = row.c;
   }
 
+  const reporterRows = getDb()
+    .prepare(
+      `SELECT ${shanghaiDaySql("b.created_at")} AS day,
+              b.reporter_type AS actor_type,
+              b.reporter_id AS actor_id,
+              MAX(CASE
+                WHEN b.reporter_type = 'user' THEN COALESCE(u.username, '用户#' || b.reporter_id)
+                ELSE COALESCE('Key:' || k.name, 'Key#' || b.reporter_id)
+              END) AS label,
+              COUNT(*) AS c
+       FROM bugs b
+       LEFT JOIN users u ON b.reporter_type = 'user' AND u.id = b.reporter_id
+       LEFT JOIN api_keys k ON b.reporter_type = 'api_key' AND k.id = b.reporter_id
+       WHERE b.project_id = ? AND b.created_at >= ?
+       GROUP BY day, b.reporter_type, b.reporter_id`
+    )
+    .all(projectId, sinceIso) as ActorDayRow[];
+
+  const actorRows = getDb()
+    .prepare(
+      `SELECT ${shanghaiDaySql("e.created_at")} AS day,
+              e.actor_type AS actor_type,
+              e.actor_id AS actor_id,
+              MAX(CASE
+                WHEN e.actor_type = 'user' THEN COALESCE(u.username, '用户#' || e.actor_id)
+                ELSE COALESCE('Key:' || k.name, 'Key#' || e.actor_id)
+              END) AS label,
+              COUNT(*) AS c
+       FROM bug_status_events e
+       JOIN bugs b ON b.id = e.bug_id
+       LEFT JOIN users u ON e.actor_type = 'user' AND u.id = e.actor_id
+       LEFT JOIN api_keys k ON e.actor_type = 'api_key' AND k.id = e.actor_id
+       WHERE b.project_id = ? AND e.created_at >= ? AND e.from_status IS NOT NULL
+       GROUP BY day, e.actor_type, e.actor_id`
+    )
+    .all(projectId, sinceIso) as ActorDayRow[];
+
   return {
     total,
     byStatus,
     labels: STATUS_LABEL,
     created,
     inflow: daysList.map((day) => ({ day, ...inflow[day] })),
+    createdByReporter: personSeries(reporterRows, daysList),
+    movedByActor: personSeries(actorRows, daysList),
     days,
   };
+}
+
+type ActorDayRow = {
+  day: string;
+  actor_type: "user" | "api_key";
+  actor_id: number;
+  label: string;
+  c: number;
+};
+
+const PERSON_SERIES_CAP = 6;
+
+function personSeries(rows: ActorDayRow[], daysList: string[]): DayCountSeries[] {
+  const dayIndex = new Map(daysList.map((day, index) => [day, index]));
+  const people = new Map<
+    string,
+    { label: string; total: number; counts: number[] }
+  >();
+  for (const row of rows) {
+    const index = dayIndex.get(row.day);
+    if (index === undefined) continue;
+    const key = `${row.actor_type}:${row.actor_id}`;
+    let person = people.get(key);
+    if (!person) {
+      person = { label: row.label, total: 0, counts: daysList.map(() => 0) };
+      people.set(key, person);
+    }
+    person.counts[index] += row.c;
+    person.total += row.c;
+  }
+
+  const ranked = [...people.entries()].sort(
+    (a, b) => b[1].total - a[1].total || a[1].label.localeCompare(b[1].label, "zh")
+  );
+  const head = ranked.slice(0, PERSON_SERIES_CAP);
+  const tail = ranked.slice(PERSON_SERIES_CAP);
+  const series: DayCountSeries[] = head.map(([key, person]) => ({
+    key,
+    label: person.label,
+    counts: person.counts,
+  }));
+  if (tail.length) {
+    const counts = daysList.map((_, index) =>
+      tail.reduce((sum, [, person]) => sum + person.counts[index], 0)
+    );
+    series.push({ key: "other", label: "其他", counts });
+  }
+  return series;
 }
 
 const BUG_STATUSES: BugStatus[] = [
@@ -1110,6 +1199,17 @@ export function reporterAnalytics(
         b.total - a.total || a.name.localeCompare(b.name, "zh")
     );
 
+  const trendRows = getDb()
+    .prepare(
+      `SELECT ${shanghaiDaySql("b.created_at")} AS day, COUNT(*) AS c
+       FROM bugs b
+       JOIN projects p ON p.id = b.project_id
+       WHERE (? IS NULL OR b.created_at >= ?)
+       GROUP BY day
+       ORDER BY day`
+    )
+    .all(since, since) as { day: string | null; c: number }[];
+
   return {
     range,
     reporters,
@@ -1119,6 +1219,10 @@ export function reporterAnalytics(
       adopted: countAdopted(totals),
       submitters: reporters.filter((row) => row.total > 0).length,
     },
+    trend: buildAnalyticsTrend(
+      range,
+      trendRows.flatMap((row) => (row.day ? [{ day: row.day, count: row.c }] : []))
+    ),
   };
 }
 
@@ -1126,7 +1230,7 @@ export function listApiKeys(identity: Identity) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   return getDb()
     .prepare(
-      `SELECT id, name, key_prefix, role, created_by_user_id, last_used_at, disabled_at, revoked_at, created_at
+      `SELECT id, name, key_prefix, role, created_by_user_id, last_used_at, use_count, disabled_at, revoked_at, created_at
        FROM api_keys ORDER BY id DESC`
     )
     .all() as Omit<ApiKeyRow, "key_hash">[];
@@ -1135,7 +1239,7 @@ export function listApiKeys(identity: Identity) {
 function getApiKeyOrThrow(keyId: number) {
   const row = getDb()
     .prepare(
-      `SELECT id, name, key_prefix, role, created_by_user_id, last_used_at, disabled_at, revoked_at, created_at
+      `SELECT id, name, key_prefix, role, created_by_user_id, last_used_at, use_count, disabled_at, revoked_at, created_at
        FROM api_keys WHERE id = ?`
     )
     .get(keyId) as Omit<ApiKeyRow, "key_hash"> | undefined;

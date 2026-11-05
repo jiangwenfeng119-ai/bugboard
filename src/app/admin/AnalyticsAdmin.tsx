@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { IconArrowRight } from "@/components/Icons";
 import { StatIcon } from "@/components/StatIcon";
 import { STATUS_LABEL, type BugStatus, type ReporterAnalytics, type ReporterStat } from "@/lib/types";
+import { AnalyticsCharts } from "./AnalyticsCharts";
 
 type SortKey = "name" | "total" | "adopted" | "confirmed" | "invalid" | "pending" | "rate";
 type KindFilter = "all" | "user" | "api_key";
@@ -115,7 +116,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
         </div>
       </div>
 
-      <div className="bb-stat-grid" style={{ marginBottom: "1rem" }}>
+      <div className="bb-stat-grid bb-analytics-stats">
         {summary.map((item) => (
           <div key={item.key} className={`bb-stat bb-stat-${item.key} is-static`}>
             <span className="bb-stat-icon" aria-hidden>
@@ -126,6 +127,8 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
           </div>
         ))}
       </div>
+
+      <AnalyticsCharts stats={stats} />
 
       <section className="bb-card bb-section-card">
         <h2>按报障人</h2>

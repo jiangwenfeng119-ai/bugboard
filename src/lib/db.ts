@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   role TEXT NOT NULL CHECK(role IN ('user','admin')),
   created_by_user_id INTEGER NOT NULL,
   last_used_at TEXT,
+  use_count INTEGER NOT NULL DEFAULT 0,
   disabled_at TEXT,
   revoked_at TEXT,
   created_at TEXT NOT NULL,
@@ -147,6 +148,14 @@ function migrateSchema(db: Database.Database) {
   }[];
   if (!cols.some((c) => c.name === "disabled_at")) {
     db.exec("ALTER TABLE api_keys ADD COLUMN disabled_at TEXT");
+  }
+  if (!cols.some((c) => c.name === "use_count")) {
+    db.exec(
+      "ALTER TABLE api_keys ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0"
+    );
+    db.exec(
+      "UPDATE api_keys SET use_count = 1 WHERE last_used_at IS NOT NULL"
+    );
   }
   ensureSuperAdminRole(db);
   ensureProjectCodes(db);

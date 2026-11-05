@@ -106,7 +106,9 @@ export function resolveApiKeyIdentity(bearer: string | null): Identity | null {
     | undefined;
   if (!row) return null;
   getDb()
-    .prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
+    .prepare(
+      "UPDATE api_keys SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?"
+    )
     .run(nowIso(), row.id);
   const projectIds = (
     getDb()

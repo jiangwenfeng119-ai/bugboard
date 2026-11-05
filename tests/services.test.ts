@@ -187,6 +187,103 @@ describe("services integration", () => {
     expect(stats.created.find((row) => row.day === utcDay)?.count ?? 0).toBe(0);
   });
 
+  it("splits daily trends by reporter and by the person who moved the bug", async () => {
+    const services = await import("../src/lib/services");
+    const { getDb } = await import("../src/lib/db");
+    const admin = await services.setupAdmin("admin", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const user = await services.createUser(adminId, {
+      username: "qa",
+      password: "secret1",
+      role: "user",
+    });
+    const qaId = {
+      kind: "user" as const,
+      userId: user.id,
+      role: "user" as const,
+      username: user.username,
+    };
+    const project = services.createProject(adminId, {
+      name: "趋势",
+      description: "",
+    });
+    services.addMember(adminId, project.id, user.id);
+    const filed = services.createBug(qaId, {
+      projectId: project.id,
+      title: "登录失败",
+    });
+    services.createBug(qaId, { projectId: project.id, title: "再次登录失败" });
+    services.createBug(adminId, { projectId: project.id, title: "管理员发现的" });
+    services.createBug(adminId, { projectId: project.id, title: "管理员第二张" });
+    services.createBug(adminId, { projectId: project.id, title: "管理员第三张" });
+    const key = services.createApiKey(adminId, {
+      name: "agent-qa",
+      role: "user",
+      projectIds: [project.id],
+    });
+    const keyId = {
+      kind: "api_key" as const,
+      apiKeyId: key.id,
+      role: "user" as const,
+      name: "agent-qa",
+      projectIds: [project.id],
+    };
+    services.createBug(keyId, { projectId: project.id, title: "代理提的" });
+    services.createBug(keyId, { projectId: project.id, title: "代理第二张" });
+    services.transitionBug(adminId, filed.id, "start_fix");
+
+    const now = new Date().toISOString();
+    const insertUser = getDb().prepare(
+      `INSERT INTO users (username, password_hash, role, active, created_at, updated_at)
+       VALUES (?, 'x', 'user', 1, ?, ?)`
+    );
+    const insertBug = getDb().prepare(
+      `INSERT INTO bugs (project_id, public_id, title, body, priority, status, reporter_type, reporter_id, created_at, updated_at)
+       VALUES (?, ?, ?, '', 'p2', 'pending', 'user', ?, ?, ?)`
+    );
+    for (let i = 1; i <= 5; i++) {
+      const info = insertUser.run(`extra-${i}`, now, now);
+      insertBug.run(
+        project.id,
+        `EX-${i}`,
+        `额外 ${i}`,
+        Number(info.lastInsertRowid),
+        now,
+        now
+      );
+    }
+
+    const stats = services.projectStats(adminId, project.id, 7);
+    const today = stats.created.find((row) => row.count > 0)?.day;
+    expect(today).toBeTruthy();
+    const at = (series: { label: string; counts: number[] }[], label: string) =>
+      series.find((row) => row.label === label)?.counts[stats.created.findIndex((row) => row.day === today)] ?? 0;
+
+    expect(at(stats.createdByReporter, "admin")).toBe(3);
+    expect(at(stats.createdByReporter, "qa")).toBe(2);
+    expect(at(stats.createdByReporter, "Key:agent-qa")).toBe(2);
+    expect(stats.createdByReporter).toHaveLength(7);
+    const other = stats.createdByReporter.find((row) => row.key === "other");
+    expect(other?.label).toBe("其他");
+    expect(other?.counts.reduce((sum, value) => sum + value, 0)).toBe(2);
+    expect(
+      stats.createdByReporter.reduce(
+        (sum, row) => sum + row.counts.reduce((inner, value) => inner + value, 0),
+        0
+      )
+    ).toBe(3 + 2 + 2 + 5);
+
+    expect(stats.movedByActor.map((row) => row.label)).toEqual(["admin"]);
+    expect(at(stats.movedByActor, "admin")).toBe(1);
+    const inflowToday = stats.inflow.find((row) => row.day === today);
+    expect(inflowToday?.fixing).toBe(1);
+  });
+
   it("lets an admin rename a project and rewrite its description", async () => {
     const services = await import("../src/lib/services");
     const admin = await services.setupAdmin("admin-edit", "secret1");
@@ -456,6 +553,13 @@ describe("services integration", () => {
     expect(resolveApiKeyIdentity(`Bearer ${created.rawKey}`)?.apiKeyId).toBe(
       created.id
     );
+    expect(
+      services.listApiKeys(adminId).find((k) => k.id === created.id)?.use_count
+    ).toBe(1);
+    resolveApiKeyIdentity(`Bearer ${created.rawKey}`);
+    expect(
+      services.listApiKeys(adminId).find((k) => k.id === created.id)?.use_count
+    ).toBe(2);
 
     services.updateApiKey(adminId, created.id, {
       name: "agent-renamed",
@@ -475,6 +579,9 @@ describe("services integration", () => {
 
     services.updateApiKey(adminId, created.id, { disabled: true });
     expect(resolveApiKeyIdentity(`Bearer ${created.rawKey}`)).toBeNull();
+    expect(
+      services.listApiKeys(adminId).find((k) => k.id === created.id)?.use_count
+    ).toBe(2);
     expect(() =>
       services.updateApiKey(adminId, created.id, { regenerate: true })
     ).toThrow(/禁用/);
@@ -1048,6 +1155,11 @@ describe("services integration", () => {
     const recentQa = recent.reporters.find((row) => row.reporterId === qa.id);
     expect(recentQa).toMatchObject({ total: 5, pending: 1 });
     expect(recent.totals.total).toBe(6);
+    expect(recent.trend.grain).toBe("day");
+    expect(recent.trend.points).toHaveLength(30);
+    expect(recent.trend.points.reduce((sum, point) => sum + point.count, 0)).toBe(6);
+    expect(all.trend.grain).toBe("day");
+    expect(all.trend.points.reduce((sum, point) => sum + point.count, 0)).toBe(7);
 
     services.deleteUser(adminId, qa.id);
     const afterDelete = services.reporterAnalytics(adminId, "all");

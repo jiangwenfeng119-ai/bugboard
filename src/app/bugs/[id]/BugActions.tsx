@@ -164,7 +164,7 @@ export function BugActions({
 
       {active ? (
         <form onSubmit={submitNoted} style={{ marginTop: "1rem" }}>
-          <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>
+          <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.875rem", fontWeight: 600, letterSpacing: 0 }}>
             {ACTION_LABEL[active]}
           </h3>
           <div className="bb-field">
