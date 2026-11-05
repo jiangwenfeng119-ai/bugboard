@@ -3,6 +3,8 @@
  * Bugboard MCP server (stdio) for Cursor agents.
  * Env: BUGBOARD_BASE_URL, BUGBOARD_API_KEY
  */
+import fs from "fs";
+import path from "path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -70,7 +72,7 @@ const server = new McpServer({
 
 server.tool(
   "list_projects",
-  "列出当前 Key 可见的项目",
+  "列出当前 Key 可见的项目。每条含项目资料：product_manager、experience_officer、github_url、default_branch、tech_stack、design_url、docs_url、dev_url、test_url、prod_url、verify_env、agent_notes，以及 documents（设计稿和需求文档附件）",
   {},
   async () => {
     try {
@@ -343,6 +345,92 @@ server.tool(
   async ({ bugId, note }) => {
     try {
       return textResult(await transition("dispute_invalid", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+const docFields = {
+  github_url: z.string().optional().describe("GitHub 代码仓地址。传空字符串可清空。"),
+  default_branch: z.string().optional().describe("默认分支，例如 main"),
+  tech_stack: z.string().optional().describe("技术栈，例如 Next.js、Go"),
+  design_url: z.string().optional().describe("设计稿链接"),
+  docs_url: z.string().optional().describe("需求文档链接"),
+} as const;
+
+server.tool(
+  "update_project_docs",
+  "写入项目的代码与文档（仅管理员级 Key）：github_url、default_branch、tech_stack、design_url、docs_url。只改传入的字段。修报障时不要调用，只有用户让你补项目资料时才用。",
+  {
+    projectId: z.number().int().positive(),
+    ...docFields,
+  },
+  async ({ projectId, ...fields }) => {
+    try {
+      const patch: Record<string, string> = {};
+      for (const [key, value] of Object.entries(fields)) {
+        if (typeof value === "string") patch[key] = value;
+      }
+      if (Object.keys(patch).length === 0) {
+        throw new Error("没有要写入的字段");
+      }
+      return textResult(
+        await api(`/api/projects/${projectId}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "upload_project_document",
+  "给项目的设计稿或需求文档上传附件（仅管理员级 Key）。path 是本机文件路径。用户能在项目详情里打开这些文件。修报障时不要调用。",
+  {
+    projectId: z.number().int().positive(),
+    kind: z.enum(["design", "docs"]).describe("design 是设计稿，docs 是需求文档"),
+    path: z.string().min(1).describe("要上传的本机文件绝对路径"),
+  },
+  async ({ projectId, kind, path: filePath }) => {
+    try {
+      const abs = path.resolve(filePath);
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+        throw new Error("找不到这个文件");
+      }
+      const buf = fs.readFileSync(abs);
+      const form = new FormData();
+      form.set("kind", kind);
+      form.append("files", new Blob([new Uint8Array(buf)]), path.basename(abs));
+      return textResult(
+        await api(`/api/projects/${projectId}/documents`, {
+          method: "POST",
+          body: form,
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "remove_project_document",
+  "删除项目资料里的一份设计稿或需求文档附件（仅管理员级 Key）。documentId 来自 list_projects 的 documents。修报障时不要调用。",
+  {
+    projectId: z.number().int().positive(),
+    documentId: z.number().int().positive(),
+  },
+  async ({ projectId, documentId }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/documents/${documentId}`, {
+          method: "DELETE",
+        })
+      );
     } catch (e) {
       return errResult(e);
     }

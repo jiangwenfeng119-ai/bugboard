@@ -143,9 +143,10 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
               className="bb-textarea"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="复现步骤、期望结果、实际结果"
-              rows={3}
+              placeholder={"## 环境\n\n## 复现步骤\n1. \n\n## 期望\n\n## 实际"}
+              rows={7}
             />
+            <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
           </div>
 
           <div className="bb-field">

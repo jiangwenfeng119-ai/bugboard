@@ -23,7 +23,7 @@ const NOTE_ACTIONS = new Set<TransitionAction>([
 
 const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
   submit_fix:
-    "写给报障人：原来的问题、现在的表现、请这样重测。用界面上的说法，不要写文件名或实现细节。",
+    "写给报障人，用 Markdown 分成三段：## 原来的问题、## 现在的表现、## 请这样重测。重测步骤用 1. 2. 。用界面上的说法，不要写文件名或实现细节。",
   mark_invalid:
     "写给报障人：实际做了什么、看到了什么、为什么和报障对不上。改产品时写明现在的做法，并请报障人去和产品经理沟通。",
   reopen_invalid: "写清上次漏看或判错的是哪一处。",
@@ -174,6 +174,7 @@ export function BugActions({
                 {NOTE_HINT[active]}
               </p>
             ) : null}
+            <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
             <textarea
               className="bb-textarea"
               value={note}

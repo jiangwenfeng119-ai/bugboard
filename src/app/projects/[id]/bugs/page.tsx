@@ -199,7 +199,7 @@ export default async function BugsPage({
                     </td>
                     <td className="bb-ellipsis bb-title-cell">
                       <Link href={`/bugs/${b.id}`} title={b.title}>
-                        <strong>{b.title}</strong>
+                        {b.title}
                       </Link>
                     </td>
                     <td>

@@ -18,6 +18,7 @@ import {
 import { STATUS_LABEL } from "@/lib/types";
 import { BugActions } from "./BugActions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
+import { Prose } from "@/components/Prose";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +86,7 @@ export default async function BugDetailPage({
         <div className="bb-bug-main">
           <div className="bb-card bb-section-card">
             <h2>描述</h2>
-            <p className="bb-prose bb-measure">{bug.body || "（无描述）"}</p>
+            <Prose text={bug.body} empty="（无描述）" />
           </div>
 
           <div className="bb-card bb-section-card">
@@ -128,7 +129,7 @@ export default async function BugDetailPage({
                         {formatDateTime(e.created_at)}
                       </span>
                     </div>
-                    {e.note ? <p className="bb-prose bb-measure">{e.note}</p> : null}
+                    {e.note ? <Prose text={e.note} /> : null}
                     {eventAtt.length > 0 ? (
                       <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1rem" }}>
                         {eventAtt.map((a) => (

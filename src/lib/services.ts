@@ -34,6 +34,7 @@ import type {
   UserRow,
 } from "./types";
 import { STATUS_LABEL } from "./types";
+import { applyProfilePatch, profileFromRow, type ProjectProfile } from "./project-profile";
 import { allocateProjectCode, assertUsableCode, nextPublicId } from "./ticket-id";
 import { absoluteAttachmentPath } from "./uploads";
 
@@ -160,9 +161,11 @@ export function deleteProject(identity: Identity, projectId: number) {
               SELECT e.id FROM bug_status_events e
               JOIN bugs b ON b.id = e.bug_id
               WHERE b.project_id = ?
-            ))`
+            ))
+         UNION ALL
+         SELECT storage_path FROM project_documents WHERE project_id = ?`
       )
-      .all(projectId, projectId) as { storage_path: string }[];
+      .all(projectId, projectId, projectId) as { storage_path: string }[];
     db.prepare(
       `DELETE FROM attachments
        WHERE (owner_type = 'bug' AND owner_id IN (SELECT id FROM bugs WHERE project_id = ?))
@@ -197,22 +200,49 @@ export function getProject(identity: Identity, projectId: number) {
 export function updateProject(
   identity: Identity,
   projectId: number,
-  data: { name: string; description?: string; code?: string }
+  data: { name?: string; description?: string; code?: string } & Partial<ProjectProfile>
 ) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   const existing = getProject(identity, projectId);
-  const name = data.name.trim();
+  const name = (data.name === undefined ? existing.name : data.name).trim();
   if (!name) throw new Error("项目名称必填");
   const description = (data.description ?? existing.description).trim();
   const code =
     data.code === undefined
       ? existing.code
       : assertUsableCode(data.code, takenProjectCodes(projectId));
+  const profile = applyProfilePatch(profileFromRow(existing), data);
   getDb()
     .prepare(
-      `UPDATE projects SET name = ?, code = ?, description = ?, updated_at = ? WHERE id = ?`
+      `UPDATE projects SET
+        name = ?, code = ?, description = ?,
+        product_manager = ?, experience_officer = ?,
+        github_url = ?, default_branch = ?, tech_stack = ?,
+        design_url = ?, docs_url = ?,
+        dev_url = ?, test_url = ?, prod_url = ?,
+        verify_env = ?, agent_notes = ?,
+        updated_at = ?
+      WHERE id = ?`
     )
-    .run(name, code, description, nowIso(), projectId);
+    .run(
+      name,
+      code,
+      description,
+      profile.product_manager,
+      profile.experience_officer,
+      profile.github_url,
+      profile.default_branch,
+      profile.tech_stack,
+      profile.design_url,
+      profile.docs_url,
+      profile.dev_url,
+      profile.test_url,
+      profile.prod_url,
+      profile.verify_env,
+      profile.agent_notes,
+      nowIso(),
+      projectId
+    );
   return getProject(identity, projectId);
 }
 

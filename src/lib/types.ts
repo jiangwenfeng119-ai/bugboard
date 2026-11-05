@@ -1,3 +1,5 @@
+import type { ProjectProfile } from "./project-profile";
+
 export type Role = "user" | "admin" | "superadmin";
 export type ActorType = "user" | "api_key";
 export type Priority = "p1" | "p2" | "p3";
@@ -56,7 +58,7 @@ export type ProjectRow = {
   description: string;
   created_at: string;
   updated_at: string;
-};
+} & ProjectProfile;
 
 export type BugRow = {
   id: number;

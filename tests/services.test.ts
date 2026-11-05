@@ -239,6 +239,176 @@ describe("services integration", () => {
     ).toThrow(/项目名称必填/);
   });
 
+  it("stores the project profile people and agents both read", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-profile", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const user = await services.createUser(adminId, {
+      username: "member-profile",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, { name: "资料", description: "旧说明" });
+    const member = {
+      kind: "user" as const,
+      userId: user.id,
+      role: "user" as const,
+      username: user.username,
+    };
+
+    expect(project.product_manager).toBe("");
+    expect(project.github_url).toBe("");
+    expect(() =>
+      services.updateProject(member, project.id, {
+        name: project.name,
+        product_manager: "越权",
+      })
+    ).toThrow(/需要管理员/);
+
+    const updated = services.updateProject(adminId, project.id, {
+      name: project.name,
+      product_manager: "  周产品  ",
+      experience_officer: "体验官甲",
+      github_url: "https://github.com/acme/soc",
+      default_branch: "main",
+      tech_stack: "Next.js",
+      design_url: "https://www.figma.com/file/abc",
+      docs_url: "https://example.com/prd",
+      dev_url: "https://dev.example.com",
+      test_url: "https://test.example.com",
+      prod_url: "https://example.com",
+      verify_env: "test",
+      agent_notes: "  用测试环境验收  ",
+    });
+    expect(updated.product_manager).toBe("周产品");
+    expect(updated.experience_officer).toBe("体验官甲");
+    expect(updated.github_url).toBe("https://github.com/acme/soc");
+    expect(updated.default_branch).toBe("main");
+    expect(updated.tech_stack).toBe("Next.js");
+    expect(updated.design_url).toBe("https://www.figma.com/file/abc");
+    expect(updated.docs_url).toBe("https://example.com/prd");
+    expect(updated.dev_url).toBe("https://dev.example.com");
+    expect(updated.test_url).toBe("https://test.example.com");
+    expect(updated.prod_url).toBe("https://example.com");
+    expect(updated.verify_env).toBe("test");
+    expect(updated.agent_notes).toBe("用测试环境验收");
+    expect(updated.description).toBe("旧说明");
+
+    const kept = services.updateProject(adminId, project.id, { name: "改名" });
+    expect(kept.name).toBe("改名");
+    expect(kept.github_url).toBe("https://github.com/acme/soc");
+    expect(kept.product_manager).toBe("周产品");
+
+    const cleared = services.updateProject(adminId, project.id, {
+      name: "改名",
+      product_manager: "   ",
+    });
+    expect(cleared.product_manager).toBe("");
+    expect(cleared.test_url).toBe("https://test.example.com");
+
+    expect(() =>
+      services.updateProject(adminId, project.id, {
+        name: "改名",
+        verify_env: "staging",
+      })
+    ).toThrow(/默认验收环境无效/);
+    expect(() =>
+      services.updateProject(adminId, project.id, {
+        name: "改名",
+        agent_notes: "字".repeat(2001),
+      })
+    ).toThrow(/不能超过 2000/);
+
+    const partial = services.updateProject(adminId, project.id, {
+      github_url: "https://github.com/acme/soc",
+      default_branch: "main",
+    });
+    expect(partial.name).toBe("改名");
+    expect(partial.github_url).toBe("https://github.com/acme/soc");
+    expect(partial.default_branch).toBe("main");
+    expect(partial.test_url).toBe("https://test.example.com");
+  });
+
+  it("stores design and requirement files members can open", async () => {
+    const services = await import("../src/lib/services");
+    const docs = await import("../src/lib/project-documents");
+    const admin = await services.setupAdmin("admin-docs", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const user = await services.createUser(adminId, {
+      username: "member-docs",
+      password: "secret1",
+      role: "user",
+    });
+    const outsiderUser = await services.createUser(adminId, {
+      username: "outsider-docs",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, { name: "文档项目" });
+    services.addMember(adminId, project.id, user.id);
+    const member = {
+      kind: "user" as const,
+      userId: user.id,
+      role: "user" as const,
+      username: user.username,
+    };
+    const outsider = {
+      kind: "user" as const,
+      userId: outsiderUser.id,
+      role: "user" as const,
+      username: outsiderUser.username,
+    };
+
+    expect(() =>
+      docs.addProjectDocuments(member, project.id, "design", [
+        { filename: "a.pdf", mime: "application/pdf", buffer: Buffer.from("%PDF") },
+      ])
+    ).toThrow(/需要管理员/);
+
+    const saved = docs.addProjectDocuments(adminId, project.id, "docs", [
+      {
+        filename: "需求说明.txt",
+        mime: "text/plain",
+        buffer: Buffer.from("验收看这一份"),
+      },
+    ]);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].kind).toBe("docs");
+    expect(saved[0].filename).toBe("需求说明.txt");
+    expect(saved[0]).not.toHaveProperty("storage_path");
+
+    const opened = docs.readProjectDocument(member, project.id, saved[0].id);
+    expect(fs.readFileSync(opened.absolutePath, "utf8")).toBe("验收看这一份");
+    expect(() => docs.readProjectDocument(outsider, project.id, saved[0].id)).toThrow(/无权/);
+    expect(() =>
+      docs.addProjectDocuments(adminId, project.id, "notes", [
+        { filename: "a.txt", mime: "text/plain", buffer: Buffer.from("x") },
+      ])
+    ).toThrow(/文档类型无效/);
+
+    expect(docs.deleteProjectDocument(adminId, project.id, saved[0].id)).toEqual([]);
+    expect(fs.existsSync(opened.absolutePath)).toBe(false);
+
+    const design = docs.addProjectDocuments(adminId, project.id, "design", [
+      { filename: "稿.pdf", mime: "application/pdf", buffer: Buffer.from("%PDF") },
+    ]);
+    const designFile = docs.readProjectDocument(adminId, project.id, design[0].id);
+    const superId = { ...adminId, role: "superadmin" as const };
+    services.deleteProject(superId, project.id);
+    expect(fs.existsSync(designFile.absolutePath)).toBe(false);
+    expect(() => docs.listProjectDocuments(adminId, project.id)).toThrow(/不存在/);
+  });
+
   it("blocks user from accessing unassigned project", async () => {
     const services = await import("../src/lib/services");
     const admin = await services.setupAdmin("admin2", "secret1");

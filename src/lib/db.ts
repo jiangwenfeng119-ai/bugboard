@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { dbPath, ensureDataDirs } from "./paths";
+import { PROFILE_FIELDS } from "./project-profile";
 import { allocateProjectCode, nextPublicId } from "./ticket-id";
 
 let _db: Database.Database | null = null;
@@ -26,6 +27,18 @@ CREATE TABLE IF NOT EXISTS projects (
   slug TEXT NOT NULL UNIQUE,
   code TEXT NOT NULL UNIQUE,
   description TEXT NOT NULL DEFAULT '',
+  product_manager TEXT NOT NULL DEFAULT '',
+  experience_officer TEXT NOT NULL DEFAULT '',
+  github_url TEXT NOT NULL DEFAULT '',
+  default_branch TEXT NOT NULL DEFAULT '',
+  tech_stack TEXT NOT NULL DEFAULT '',
+  design_url TEXT NOT NULL DEFAULT '',
+  docs_url TEXT NOT NULL DEFAULT '',
+  dev_url TEXT NOT NULL DEFAULT '',
+  test_url TEXT NOT NULL DEFAULT '',
+  prod_url TEXT NOT NULL DEFAULT '',
+  verify_env TEXT NOT NULL DEFAULT '',
+  agent_notes TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -98,7 +111,20 @@ CREATE TABLE IF NOT EXISTS api_key_projects (
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS project_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('design','docs')),
+  filename TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  storage_path TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_bugs_project ON bugs(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_documents_project ON project_documents(project_id, kind);
 CREATE INDEX IF NOT EXISTS idx_bugs_status ON bugs(status);
 CREATE INDEX IF NOT EXISTS idx_events_bug ON bug_status_events(bug_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id);
@@ -124,7 +150,19 @@ function migrateSchema(db: Database.Database) {
   }
   ensureSuperAdminRole(db);
   ensureProjectCodes(db);
+  ensureProjectProfile(db);
   ensurePublicIds(db);
+}
+
+function ensureProjectProfile(db: Database.Database) {
+  const existing = new Set(columnNames(db, "projects"));
+  for (const field of PROFILE_FIELDS) {
+    if (existing.has(field.key)) continue;
+    if (!/^[a-z_]+$/.test(field.key)) continue;
+    db.exec(
+      `ALTER TABLE projects ADD COLUMN ${field.key} TEXT NOT NULL DEFAULT ''`
+    );
+  }
 }
 
 function columnNames(db: Database.Database, table: string) {

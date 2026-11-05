@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/AppShell";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
+import { listProjectDocuments } from "@/lib/project-documents";
+import { profileFromRow } from "@/lib/project-profile";
 import { getProject, listProjects } from "@/lib/services";
 import { ProjectHeader } from "./ProjectHeader";
 import { ProjectTabs } from "./ProjectTabs";
@@ -37,6 +39,8 @@ export default async function ProjectLayout({
         name={project.name}
         code={project.code}
         description={project.description}
+        profile={profileFromRow(project)}
+        documents={listProjectDocuments(identity, project.id)}
         isAdmin={isAdminRole(identity.role)}
         canDelete={isSuperAdminRole(identity.role)}
       />
