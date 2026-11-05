@@ -878,6 +878,12 @@ describe("services integration", () => {
       "界面错位",
     ]);
     expect(services.listBugs(adminId, project.id)[0].reporter_label).toBe("李四");
+    expect(
+      titles(services.listBugs(adminId, project.id, { reporter: `user:${li.id}` }))
+    ).toEqual(["登录失败"]);
+    expect(
+      services.listProjectReporters(adminId, project.id).map((row) => row.reporter_label)
+    ).toEqual(["张三", "李四"]);
     expect(titles(services.listBugs(adminId, project.id, { sort: "nope" }))).toEqual([
       "登录失败",
       "文案错误",

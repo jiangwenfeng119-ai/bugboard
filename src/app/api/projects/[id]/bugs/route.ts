@@ -17,6 +17,7 @@ export async function GET(
       status: (sp.get("status") as BugStatus) || undefined,
       priority: (sp.get("priority") as Priority) || undefined,
       q: sp.get("q") || undefined,
+      reporter: sp.get("reporter") || undefined,
       sort: sp.get("sort"),
       dir: sp.get("dir"),
     });

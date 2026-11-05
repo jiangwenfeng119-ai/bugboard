@@ -7,6 +7,8 @@ export function BugFilters({
   projectId,
   status,
   priority,
+  reporter,
+  reporters,
   q,
   sort,
   dir,
@@ -14,6 +16,8 @@ export function BugFilters({
   projectId: number;
   status: string;
   priority: string;
+  reporter: string;
+  reporters: { value: string; label: string }[];
   q: string;
   sort: string;
   dir: string;
@@ -21,13 +25,15 @@ export function BugFilters({
   const router = useRouter();
   const [query, setQuery] = useState(q);
 
-  function push(next: { status?: string; priority?: string; q?: string }) {
+  function push(next: { status?: string; priority?: string; reporter?: string; q?: string }) {
     const sp = new URLSearchParams();
     const s = next.status ?? status;
     const p = next.priority ?? priority;
+    const r = next.reporter ?? reporter;
     const qq = next.q ?? query;
     if (s) sp.set("status", s);
     if (p) sp.set("priority", p);
+    if (r) sp.set("reporter", r);
     if (qq) sp.set("q", qq);
     if (!(sort === "updated" && dir === "desc")) {
       if (sort) sp.set("sort", sort);
@@ -64,6 +70,20 @@ export function BugFilters({
         <option value="p1">P1</option>
         <option value="p2">P2</option>
         <option value="p3">P3</option>
+      </select>
+      <select
+        className="bb-select"
+        style={{ width: "auto", maxWidth: "14rem" }}
+        value={reporter}
+        onChange={(e) => push({ reporter: e.target.value })}
+        aria-label="提交人筛选"
+      >
+        <option value="">全部提交人</option>
+        {reporters.map((row) => (
+          <option key={row.value} value={row.value}>
+            {row.label}
+          </option>
+        ))}
       </select>
       <input
         className="bb-input bb-filter-q"

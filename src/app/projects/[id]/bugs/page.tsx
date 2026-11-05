@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/session-guard";
 import { isSuperAdminRole } from "@/lib/roles";
-import { listBugs, resolveBugSort, type BugSortKey } from "@/lib/services";
+import { listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityMark } from "@/components/PriorityMark";
 import { EmptyState } from "@/components/EmptyState";
@@ -10,6 +10,7 @@ import { formatDateTime, formatDateTimeShort } from "@/lib/time";
 import { BugFilters } from "./BugFilters";
 import { DeleteBugButton } from "./DeleteBugButton";
 import { NewBugPanel } from "./NewBugPanel";
+import { HoverTip } from "@/components/HoverTip";
 
 export const dynamic = "force-dynamic";
 
@@ -31,13 +32,14 @@ function defaultSortDir(key: BugSortKey): "asc" | "desc" {
 
 function listHref(
   projectId: string,
-  filters: { status?: string; priority?: string; q?: string },
+  filters: { status?: string; priority?: string; reporter?: string; q?: string },
   sort: BugSortKey,
   dir: "asc" | "desc"
 ) {
   const sp = new URLSearchParams();
   if (filters.status) sp.set("status", filters.status);
   if (filters.priority) sp.set("priority", filters.priority);
+  if (filters.reporter) sp.set("reporter", filters.reporter);
   if (filters.q) sp.set("q", filters.q);
   if (!(sort === "updated" && dir === "desc")) {
     sp.set("sort", sort);
@@ -79,6 +81,7 @@ export default async function BugsPage({
   searchParams: Promise<{
     status?: string;
     priority?: string;
+    reporter?: string;
     q?: string;
     sort?: string;
     dir?: string;
@@ -89,9 +92,11 @@ export default async function BugsPage({
   const { id } = await params;
   const sp = await searchParams;
   const order = resolveBugSort(sp.sort, sp.dir);
+  const reporters = listProjectReporters(identity, Number(id));
   const bugs = listBugs(identity, Number(id), {
     status: sp.status as BugStatus | undefined,
     priority: sp.priority as Priority | undefined,
+    reporter: sp.reporter,
     q: sp.q,
     sort: order.sort,
     dir: order.dir,
@@ -104,6 +109,11 @@ export default async function BugsPage({
           projectId={Number(id)}
           status={sp.status || ""}
           priority={sp.priority || ""}
+          reporter={sp.reporter || ""}
+          reporters={reporters.map((row) => ({
+            value: `${row.reporter_type}:${row.reporter_id}`,
+            label: row.reporter_label,
+          }))}
           q={sp.q || ""}
           sort={order.sort}
           dir={order.dir}
@@ -151,7 +161,7 @@ export default async function BugsPage({
                     : defaultSortDir(col.key);
                   const href = listHref(
                     id,
-                    { status: sp.status, priority: sp.priority, q: sp.q },
+                    { status: sp.status, priority: sp.priority, reporter: sp.reporter, q: sp.q },
                     col.key,
                     nextDir
                   );
@@ -190,32 +200,42 @@ export default async function BugsPage({
                   <tr key={b.id}>
                     <td className="bb-num">{index + 1}</td>
                     <td className="bb-nowrap">
-                      <Link href={`/bugs/${b.id}`} className="bb-bug-id" title={b.public_id}>
-                        {b.public_id}
-                      </Link>
+                      <HoverTip text={b.public_id}>
+                        <Link href={`/bugs/${b.id}`} className="bb-bug-id">
+                          {b.public_id}
+                        </Link>
+                      </HoverTip>
                     </td>
                     <td>
                       <PriorityMark priority={b.priority} />
                     </td>
-                    <td className="bb-ellipsis bb-title-cell">
-                      <Link href={`/bugs/${b.id}`} title={b.title}>
-                        {b.title}
-                      </Link>
+                    <td className="bb-title-cell">
+                      <HoverTip text={b.title}>
+                        <Link href={`/bugs/${b.id}`}>{b.title}</Link>
+                      </HoverTip>
                     </td>
                     <td>
                       <StatusBadge status={b.status} />
                     </td>
-                    <td className="bb-ellipsis" title={b.reporter_label}>
-                      {b.reporter_label}
+                    <td>
+                      <HoverTip text={b.reporter_label}>{b.reporter_label}</HoverTip>
                     </td>
-                    <td className="bb-ellipsis" title={b.handler_label || "暂无处理人"}>
-                      {b.handler_label || <span className="bb-muted">—</span>}
+                    <td>
+                      {b.handler_label ? (
+                        <HoverTip text={b.handler_label}>{b.handler_label}</HoverTip>
+                      ) : (
+                        <span className="bb-muted">—</span>
+                      )}
                     </td>
-                    <td className="bb-muted bb-nowrap" title={createdFull}>
-                      {createdShort}
+                    <td className="bb-muted bb-nowrap">
+                      <HoverTip text={createdFull} always>
+                        {createdShort}
+                      </HoverTip>
                     </td>
-                    <td className="bb-muted bb-nowrap" title={updatedFull}>
-                      {updatedShort}
+                    <td className="bb-muted bb-nowrap">
+                      <HoverTip text={updatedFull} always>
+                        {updatedShort}
+                      </HoverTip>
                     </td>
                     {canDelete ? (
                       <td className="bb-remove-cell">

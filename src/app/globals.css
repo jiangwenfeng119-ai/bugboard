@@ -26,7 +26,7 @@
   --shadow: 0 1px 2px rgba(21, 32, 51, 0.05), 0 10px 28px rgba(21, 32, 51, 0.07);
   --shadow-hover: 0 2px 4px rgba(21, 32, 51, 0.06), 0 16px 36px rgba(21, 32, 51, 0.1);
   --radius: 14px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font: "IBM Plex Sans Variable", "Noto Sans SC Variable", "PingFang SC", "Segoe UI", sans-serif;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --bb-topbar-h: 4.5rem;
   --bb-gutter: clamp(1.15rem, 2vw, 2.25rem);
@@ -285,7 +285,7 @@ body.bb-sheet-open .bb-main {
 .bb-project-heading h1 {
   margin: 0;
   letter-spacing: 0;
-  font-size: clamp(1.45rem, 1.2rem + 0.55vw, 1.7rem);
+  font-size: 1.25rem;
   font-weight: 600;
   line-height: 1.25;
   text-wrap: balance;
@@ -724,7 +724,7 @@ legend.bb-label + * {
 }
 
 .bb-priority {
-  font-weight: 700;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 .bb-priority-p1 { color: var(--priority-p1); }
@@ -781,7 +781,7 @@ legend.bb-label + * {
 
 .bb-bug-table {
   table-layout: fixed;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -868,7 +868,7 @@ legend.bb-label + * {
 }
 
 .bb-table th {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0;
   color: var(--ink-muted);
@@ -876,7 +876,7 @@ legend.bb-label + * {
 }
 
 .bb-bug-table td.bb-title-cell {
-  font-size: 0.9375rem;
+  font-size: 0.75rem;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.45;
@@ -889,13 +889,14 @@ legend.bb-label + * {
 
 .bb-num {
   font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem;
   color: var(--ink-muted);
 }
 
 .bb-bug-id {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  font-size: 0.8125rem;
+  font-weight: 400;
+  font-size: 0.6875rem;
   letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
@@ -1210,7 +1211,7 @@ a.bb-bug-id:hover {
 .bb-bug-title h1 {
   margin: 0.4rem 0 0;
   letter-spacing: 0;
-  font-size: clamp(1.4rem, 1.15rem + 0.5vw, 1.65rem);
+  font-size: 1.25rem;
   font-weight: 600;
   line-height: 1.35;
   text-wrap: balance;
@@ -2003,8 +2004,8 @@ a.bb-bug-id:hover {
 .bb-prose {
   max-width: 40em;
   margin: 0;
-  font-size: 1.0625rem;
-  line-height: 1.75;
+  font-size: 0.875rem;
+  line-height: 1.85;
   text-wrap: pretty;
   color: var(--ink);
 }
@@ -2023,8 +2024,8 @@ a.bb-bug-id:hover {
 }
 
 .bb-prose h3 {
-  margin: 1.35rem 0 0.4rem;
-  font-size: 1.0625rem;
+  margin: 1.15rem 0 0.3rem;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.4;
@@ -2109,14 +2110,56 @@ a.bb-bug-id:hover {
 
 .bb-timeline .bb-prose {
   margin-top: 0.4rem;
-  font-size: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.85;
+}
+
+.bb-bug-table td.bb-muted {
+  font-size: 0.6875rem;
 }
 
 .bb-bug-meta {
   margin: 0.45rem 0 1.15rem;
   max-width: none;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.bb-cell-clip {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-cell-clip a {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-hover-tip {
+  position: fixed;
+  z-index: 70;
+  max-width: min(28rem, calc(100vw - 1rem));
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 400;
   line-height: 1.5;
+  letter-spacing: 0;
+  box-shadow: 0 8px 24px rgba(21, 32, 51, 0.18);
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
+.bb-hover-tip.is-above {
+  transform: translateY(-100%);
 }
 
 .bb-bug-layout {
@@ -2209,11 +2252,19 @@ a.bb-bug-id:hover {
 .bb-prompt-grid {
   display: grid;
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .bb-prompt-grid > .bb-section-card {
   margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.bb-prompt-grid .bb-prompt-text {
+  flex: 1 1 auto;
+  min-height: min(32rem, 62vh);
 }
 
 @media (min-width: 1100px) {

@@ -585,6 +585,7 @@ export type BugFilters = {
   status?: BugStatus;
   priority?: Priority;
   q?: string;
+  reporter?: string;
   sort?: string | null;
   dir?: string | null;
 };
@@ -636,6 +637,34 @@ export function resolveBugSort(
   };
 }
 
+function parseReporterFilter(raw?: string) {
+  if (!raw) return null;
+  const [type, idText] = raw.split(":");
+  if ((type !== "user" && type !== "api_key") || !/^\d+$/.test(idText || "")) return null;
+  return { type, id: Number(idText) };
+}
+
+export function listProjectReporters(identity: Identity, projectId: number) {
+  getProject(identity, projectId);
+  return getDb()
+    .prepare(
+      `SELECT b.reporter_type AS reporter_type,
+              b.reporter_id AS reporter_id,
+              ${REPORTER_LABEL_SQL} AS reporter_label
+       FROM bugs b
+       LEFT JOIN users u ON b.reporter_type = 'user' AND u.id = b.reporter_id
+       LEFT JOIN api_keys k ON b.reporter_type = 'api_key' AND k.id = b.reporter_id
+       WHERE b.project_id = ?
+       GROUP BY b.reporter_type, b.reporter_id
+       ORDER BY reporter_label COLLATE NOCASE`
+    )
+    .all(projectId) as {
+    reporter_type: "user" | "api_key";
+    reporter_id: number;
+    reporter_label: string;
+  }[];
+}
+
 export function listBugs(
   identity: Identity,
   projectId: number,
@@ -656,6 +685,11 @@ export function listBugs(
     where.push("(b.title LIKE ? OR b.public_id LIKE ?)");
     const term = `%${filters.q.trim()}%`;
     params.push(term, term);
+  }
+  const reporter = parseReporterFilter(filters.reporter);
+  if (reporter) {
+    where.push("b.reporter_type = ? AND b.reporter_id = ?");
+    params.push(reporter.type, reporter.id);
   }
   const order = resolveBugSort(filters.sort, filters.dir);
   const sqlDir = order.dir === "asc" ? "ASC" : "DESC";
