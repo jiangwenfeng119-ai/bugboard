@@ -13,7 +13,10 @@ export async function GET(req: NextRequest) {
     return json({
       projects: projects.map((p) => ({
         ...p,
-        openCount: openCounts[p.id] || 0,
+        openCount: openCounts[p.id]?.open || 0,
+        pendingCount: openCounts[p.id]?.pending || 0,
+        awaitingConfirmCount: openCounts[p.id]?.awaitingConfirm || 0,
+        needsInfoCount: openCounts[p.id]?.needsInfo || 0,
         documents: documents[p.id] || [],
       })),
     });

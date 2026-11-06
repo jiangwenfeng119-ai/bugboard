@@ -21,6 +21,7 @@ const ALLOWED_EXT = new Set([
   ".docx",
   ".xlsx",
   ".txt",
+  ".md",
   ".zip",
   ".mp3",
   ".wav",

@@ -78,7 +78,7 @@ export function AgentPromptsAdmin() {
           给 Agent 的提示词
         </h2>
         <p className="bb-muted bb-prompt-lead">
-          「API Key」页的「复制给 Agent」负责把 MCP 配进 Cursor。这里是配好之后的工作说明，按角色整段复制。
+          「API Key」页点「复制给 Agent」，再选本机或远端，把 MCP 配进客户端。这里是配好之后的工作说明，按角色整段复制。
           先填写目标项目，复制时会写进提示词；留空则保留待填的那一行，贴到对话里再补。
         </p>
         <label className="bb-field">

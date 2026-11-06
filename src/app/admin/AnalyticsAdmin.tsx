@@ -8,7 +8,15 @@ import { StatIcon } from "@/components/StatIcon";
 import { STATUS_LABEL, type BugStatus, type ReporterAnalytics, type ReporterStat } from "@/lib/types";
 import { AnalyticsCharts } from "./AnalyticsCharts";
 
-type SortKey = "name" | "total" | "adopted" | "confirmed" | "invalid" | "pending" | "rate";
+type SortKey =
+  | "name"
+  | "total"
+  | "adopted"
+  | "confirmed"
+  | "invalid"
+  | "needs_info"
+  | "pending"
+  | "rate";
 type KindFilter = "all" | "user" | "api_key";
 
 const PRESENCE_LABEL: Record<ReporterStat["presence"], string | null> = {
@@ -58,6 +66,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
     { key: "confirmed", label: "已确认修复", value: stats.totals.confirmed },
     { key: "awaiting_confirm", label: "待确认", value: stats.totals.awaiting_confirm },
     { key: "invalid", label: "不属实", value: stats.totals.invalid },
+    { key: "needs_info", label: "待补充", value: stats.totals.needs_info },
     { key: "pending", label: "待处理", value: stats.totals.pending },
   ];
 
@@ -187,6 +196,15 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
                     align="end"
                   />
                   <SortableTh
+                    label="待补充"
+                    sortKey="needs_info"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    align="end"
+                    hint="在等报障人补材料，不算已采纳"
+                  />
+                  <SortableTh
                     label="待处理"
                     sortKey="pending"
                     active={sortKey}
@@ -225,7 +243,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
           </div>
         )}
         <p className="bb-muted bb-analytics-note">
-          已采纳指当前停在「修复中」「待确认」或「已确认」：管理员接过单，而且现在没有标成不属实。打回或异议回到待处理的不算。已确认是原报障人确认修复，也就是被采纳并走完闭环，已包含在已采纳里。按报障创建时间落入所选区间，状态取当前状态。
+          已采纳指当前停在「修复中」「待确认」或「已确认」：管理员接过单，而且现在没有标成不属实。打回或异议回到待处理的不算。待补充是在等报障人补材料，不算已采纳。已确认是原报障人确认修复，也就是被采纳并走完闭环，已包含在已采纳里。按报障创建时间落入所选区间，状态取当前状态。
         </p>
       </section>
     </div>
@@ -299,6 +317,7 @@ function ReporterRows({
         <Num value={row.adopted} />
         <Num value={row.confirmed} tone="ok" />
         <Num value={row.invalid} />
+        <Num value={row.needs_info} />
         <Num value={row.pending} />
         <td className={`bb-num${row.total === 0 ? " is-zero" : ""}`}>
           {rateLabel(row.confirmed, row.total)}
@@ -306,7 +325,7 @@ function ReporterRows({
       </tr>
       {open ? (
         <tr className="bb-analytics-detail">
-          <td colSpan={8}>
+          <td colSpan={9}>
             <table className="bb-table bb-subtable">
               <thead>
                 <tr>
@@ -317,6 +336,7 @@ function ReporterRows({
                   <th className="bb-num">{STATUS_LABEL.fixing}</th>
                   <th className="bb-num">{STATUS_LABEL.awaiting_confirm}</th>
                   <th className="bb-num">{STATUS_LABEL.invalid}</th>
+                  <th className="bb-num">{STATUS_LABEL.needs_info}</th>
                   <th className="bb-num">{STATUS_LABEL.pending}</th>
                 </tr>
               </thead>
@@ -332,6 +352,7 @@ function ReporterRows({
                     <Num value={project.fixing} />
                     <Num value={project.awaiting_confirm} />
                     <Num value={project.invalid} />
+                    <Num value={project.needs_info} />
                     <Num value={project.pending} />
                   </tr>
                 ))}

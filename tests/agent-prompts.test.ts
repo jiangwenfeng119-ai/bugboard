@@ -24,6 +24,8 @@ describe("agent prompts", () => {
     expect(USER_AGENT_PROMPT).toContain("confirm_fix");
     expect(USER_AGENT_PROMPT).toContain("reject_fix");
     expect(USER_AGENT_PROMPT).toContain("dispute_invalid");
+    expect(USER_AGENT_PROMPT).toContain("provide_info");
+    expect(USER_AGENT_PROMPT).toContain("needs_info");
     expect(USER_AGENT_PROMPT).toContain("awaiting_confirm");
   });
 
@@ -33,6 +35,10 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("mark_invalid");
     expect(ADMIN_AGENT_PROMPT).toContain("reopen_invalid");
     expect(ADMIN_AGENT_PROMPT).toContain("withdraw_fix");
+    expect(ADMIN_AGENT_PROMPT).toContain("request_info");
+    expect(ADMIN_AGENT_PROMPT).toContain("待补充");
+    expect(ADMIN_AGENT_PROMPT).toContain("不要 request_info");
+    expect(ADMIN_AGENT_PROMPT).toContain("只有报障人能提供");
     expect(ADMIN_AGENT_PROMPT).toContain("待确认");
   });
 
@@ -65,6 +71,11 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("agent_notes");
     expect(ADMIN_AGENT_PROMPT).toContain("verify_env");
     expect(ADMIN_AGENT_PROMPT).toContain("update_project_docs");
+    expect(ADMIN_AGENT_PROMPT).toMatch(
+      /update_project_docs：[\s\S]*description[\s\S]*product_manager[\s\S]*experience_officer[\s\S]*dev_url[\s\S]*test_url[\s\S]*prod_url[\s\S]*verify_env[\s\S]*agent_notes/
+    );
+    expect(ADMIN_AGENT_PROMPT).toContain("项目列表卡片");
+    expect(ADMIN_AGENT_PROMPT).toContain(".md");
     expect(ADMIN_AGENT_PROMPT).toContain("upload_project_document");
     expect(USER_AGENT_PROMPT).toContain("upload_project_document");
     expect(USER_AGENT_PROMPT).toContain("本角色不调用");

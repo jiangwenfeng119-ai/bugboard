@@ -4,6 +4,7 @@ import {
   IconCheck,
   IconClock,
   IconInbox,
+  IconMessage,
   IconWrench,
 } from "./Icons";
 import type { BugStatus } from "@/lib/types";
@@ -21,6 +22,8 @@ export function StatIcon({
       return <IconAlert {...common} />;
     case "fixing":
       return <IconWrench {...common} />;
+    case "needs_info":
+      return <IconMessage {...common} />;
     case "awaiting_confirm":
       return <IconClock {...common} />;
     case "confirmed":

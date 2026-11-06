@@ -6,6 +6,8 @@ export { isAdminRole };
 export type TransitionAction =
   | "start_fix"
   | "mark_invalid"
+  | "request_info"
+  | "provide_info"
   | "submit_fix"
   | "confirm_fix"
   | "reject_fix"
@@ -34,6 +36,20 @@ export const TRANSITIONS: TransitionSpec[] = [
     to: "invalid",
     action: "mark_invalid",
     who: "admin",
+    noteRequired: true,
+  },
+  {
+    from: ["pending", "fixing"],
+    to: "needs_info",
+    action: "request_info",
+    who: "admin",
+    noteRequired: true,
+  },
+  {
+    from: ["needs_info"],
+    to: "pending",
+    action: "provide_info",
+    who: "reporter",
     noteRequired: true,
   },
   {
@@ -140,6 +156,8 @@ export function validateTransition(params: {
 export const ACTION_LABEL: Record<TransitionAction, string> = {
   start_fix: "接单（开始修复）",
   mark_invalid: "标为不属实",
+  request_info: "要求补充",
+  provide_info: "补充材料",
   submit_fix: "提交修复说明",
   confirm_fix: "确认已修复",
   reject_fix: "仍有问题",

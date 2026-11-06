@@ -1241,4 +1241,141 @@ describe("services integration", () => {
     const after = services.createBug(qaId, { projectId: soc.id, title: "新单" });
     expect(after.public_id).toBe(`SEC${day}001`);
   });
+
+  it("counts pending work for admins and own confirmations for reporters", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-counts", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const qa = await services.createUser(adminId, {
+      username: "qa-counts",
+      password: "secret1",
+      role: "user",
+    });
+    const other = await services.createUser(adminId, {
+      username: "other-counts",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, {
+      name: "计数",
+      description: "",
+    });
+    services.addMember(adminId, project.id, qa.id);
+    services.addMember(adminId, project.id, other.id);
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+    const otherId = {
+      kind: "user" as const,
+      userId: other.id,
+      role: "user" as const,
+      username: other.username,
+    };
+
+    services.createBug(qaId, { projectId: project.id, title: "新提交" });
+    const returned = services.createBug(qaId, {
+      projectId: project.id,
+      title: "打回后继续处理",
+    });
+    services.transitionBug(adminId, returned.id, "start_fix");
+    services.transitionBug(adminId, returned.id, "submit_fix", "先改了一版");
+    services.transitionBug(qaId, returned.id, "reject_fix", "还有一处没好");
+
+    const fixing = services.createBug(otherId, {
+      projectId: project.id,
+      title: "已经接单",
+    });
+    services.transitionBug(adminId, fixing.id, "start_fix");
+
+    const qaConfirm = services.createBug(qaId, {
+      projectId: project.id,
+      title: "等 QA 确认",
+    });
+    services.transitionBug(adminId, qaConfirm.id, "start_fix");
+    services.transitionBug(adminId, qaConfirm.id, "submit_fix", "已改");
+
+    const otherConfirm = services.createBug(otherId, {
+      projectId: project.id,
+      title: "等另一人确认",
+    });
+    services.transitionBug(adminId, otherConfirm.id, "start_fix");
+    services.transitionBug(adminId, otherConfirm.id, "submit_fix", "已改");
+
+    const done = services.createBug(qaId, { projectId: project.id, title: "已确认" });
+    services.transitionBug(adminId, done.id, "start_fix");
+    services.transitionBug(adminId, done.id, "submit_fix", "已改");
+    services.transitionBug(qaId, done.id, "confirm_fix");
+
+    const key = services.createApiKey(adminId, {
+      name: "qa-key",
+      role: "user",
+      projectIds: [project.id],
+    });
+    const keyId = {
+      kind: "api_key" as const,
+      apiKeyId: key.id,
+      role: "user" as const,
+      name: "qa-key",
+      projectIds: [project.id],
+    };
+    const keyConfirm = services.createBug(keyId, {
+      projectId: project.id,
+      title: "等 Key 确认",
+    });
+    services.transitionBug(adminId, keyConfirm.id, "start_fix");
+    services.transitionBug(adminId, keyConfirm.id, "submit_fix", "已改");
+
+    const needsInfo = services.createBug(qaId, {
+      projectId: project.id,
+      title: "缺崩溃记录",
+    });
+    services.transitionBug(
+      adminId,
+      needsInfo.id,
+      "request_info",
+      "只在这一台手机上闪退，还缺崩溃记录"
+    );
+    expect(services.getBug(adminId, needsInfo.id).status).toBe("needs_info");
+    services.transitionBug(qaId, needsInfo.id, "provide_info", "补上了崩溃记录");
+    expect(services.getBug(adminId, needsInfo.id).status).toBe("pending");
+    services.transitionBug(
+      adminId,
+      needsInfo.id,
+      "request_info",
+      "记录对不上这台手机，还要同型号再试一次"
+    );
+
+    expect(services.openBugCountsByProject(adminId)[project.id]).toEqual({
+      pending: 2,
+      awaitingConfirm: 3,
+      needsInfo: 1,
+      open: 7,
+    });
+    expect(services.openBugCountsByProject(qaId)[project.id]).toEqual({
+      pending: 2,
+      awaitingConfirm: 1,
+      needsInfo: 1,
+      open: 7,
+    });
+    expect(services.openBugCountsByProject(otherId)[project.id]).toEqual({
+      pending: 2,
+      awaitingConfirm: 1,
+      needsInfo: 0,
+      open: 7,
+    });
+    expect(services.openBugCountsByProject(keyId)[project.id]).toEqual({
+      pending: 2,
+      awaitingConfirm: 1,
+      needsInfo: 0,
+      open: 7,
+    });
+  });
 });

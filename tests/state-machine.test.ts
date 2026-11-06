@@ -124,6 +124,65 @@ describe("state machine", () => {
     expect(confirmed.ok).toBe(false);
   });
 
+  it("lets an admin ask for missing reporter material and only the reporter send it back", () => {
+    expect(allowedActions(admin, "pending", "user", 2)).toContain("request_info");
+    expect(allowedActions(admin, "fixing", "user", 2)).toContain("request_info");
+    expect(allowedActions(reporter, "pending", "user", 2)).not.toContain(
+      "request_info"
+    );
+    expect(allowedActions(reporter, "needs_info", "user", 2)).toEqual([
+      "provide_info",
+    ]);
+    expect(allowedActions(other, "needs_info", "user", 2)).not.toContain(
+      "provide_info"
+    );
+    expect(allowedActions(admin, "needs_info", "user", 2)).not.toContain(
+      "provide_info"
+    );
+
+    const missing = validateTransition({
+      action: "request_info",
+      from: "pending",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: " ",
+    });
+    expect(missing.ok).toBe(false);
+
+    const asked = validateTransition({
+      action: "request_info",
+      from: "fixing",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "闪退只出现在这一台手机上，还缺崩溃记录",
+    });
+    expect(asked.ok).toBe(true);
+    if (asked.ok) expect(asked.to).toBe("needs_info");
+
+    const supplied = validateTransition({
+      action: "provide_info",
+      from: "needs_info",
+      identity: reporter,
+      reporterType: "user",
+      reporterId: 2,
+      note: "补上了同型号闪退时的崩溃记录",
+    });
+    expect(supplied.ok).toBe(true);
+    if (supplied.ok) expect(supplied.to).toBe("pending");
+
+    const tooSoon = validateTransition({
+      action: "request_info",
+      from: "awaiting_confirm",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "还缺步骤",
+    });
+    expect(tooSoon.ok).toBe(false);
+  });
+
   it("requires note for mark_invalid", () => {
     const bad = validateTransition({
       action: "mark_invalid",

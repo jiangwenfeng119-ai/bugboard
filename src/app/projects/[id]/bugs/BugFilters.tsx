@@ -55,6 +55,7 @@ export function BugFilters({
         <option value="">全部状态</option>
         <option value="pending">待处理</option>
         <option value="fixing">修复中</option>
+        <option value="needs_info">待补充</option>
         <option value="awaiting_confirm">待确认</option>
         <option value="confirmed">已确认</option>
         <option value="invalid">不属实</option>

@@ -4,11 +4,57 @@ import { EmptyState } from "@/components/EmptyState";
 import { IconArrowRight, IconFolder } from "@/components/Icons";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
-import { listProjects, openBugCountsByProject } from "@/lib/services";
+import {
+  listProjects,
+  openBugCountsByProject,
+  type ProjectAttentionCounts,
+} from "@/lib/services";
+import type { Role } from "@/lib/types";
 import { CreateProjectForm } from "./CreateProjectForm";
 import { DeleteProjectButton } from "./DeleteProjectButton";
 
 export const dynamic = "force-dynamic";
+
+function attentionChips(
+  projectId: number,
+  counts: ProjectAttentionCounts,
+  viewer: { role: Role; userId: number }
+) {
+  const admin = isAdminRole(viewer.role);
+  const confirm = {
+    key: "awaiting",
+    count: counts.awaitingConfirm,
+    label: "待确认",
+    title: admin ? "整个项目里等待确认的报障" : "你提交的、等待你确认的报障",
+    href: admin
+      ? `/projects/${projectId}/bugs?status=awaiting_confirm`
+      : `/projects/${projectId}/bugs?status=awaiting_confirm&reporter=user:${viewer.userId}`,
+    tone: "awaiting",
+  };
+  const supplement = {
+    key: "needs",
+    count: counts.needsInfo,
+    label: "待补充",
+    title: admin ? "整个项目里等待补充材料的报障" : "你提交的、还要补材料的报障",
+    href: admin
+      ? `/projects/${projectId}/bugs?status=needs_info`
+      : `/projects/${projectId}/bugs?status=needs_info&reporter=user:${viewer.userId}`,
+    tone: "needs",
+  };
+  if (!admin) return [supplement, confirm];
+  return [
+    {
+      key: "pending",
+      count: counts.pending,
+      label: "待处理",
+      title: "新提交和打回后需要继续处理的报障",
+      href: `/projects/${projectId}/bugs?status=pending`,
+      tone: "pending",
+    },
+    supplement,
+    confirm,
+  ];
+}
 
 export default async function ProjectsPage() {
   const identity = await requireUser();
@@ -48,7 +94,13 @@ export default async function ProjectsPage() {
       ) : (
         <div className="bb-project-grid">
           {projects.map((p) => {
-            const open = openCounts[p.id] || 0;
+            const counts = openCounts[p.id] ?? {
+              pending: 0,
+              awaitingConfirm: 0,
+              needsInfo: 0,
+              open: 0,
+            };
+            const bugsHref = `/projects/${p.id}/bugs`;
             return (
               <div
                 key={p.id}
@@ -61,18 +113,24 @@ export default async function ProjectsPage() {
                     compact
                   />
                 ) : null}
-                <Link href={`/projects/${p.id}/bugs`} className="bb-project-card-link">
-                  <div className="bb-project-card-top">
-                    <span className="bb-project-icon" aria-hidden>
-                      <IconFolder size={20} />
-                    </span>
-                    <span
-                      className={`bb-open-chip${open > 0 ? " is-hot" : ""}`}
-                      title="处理中的报障"
-                    >
-                      {open} 处理中
-                    </span>
+                <div className="bb-project-card-top">
+                  <Link href={bugsHref} className="bb-project-icon" aria-label={`打开${p.name}`}>
+                    <IconFolder size={20} />
+                  </Link>
+                  <div className="bb-open-chips">
+                    {attentionChips(p.id, counts, identity).map((chip) => (
+                      <Link
+                        key={chip.key}
+                        href={chip.href}
+                        className={`bb-open-chip${chip.count > 0 ? ` is-hot is-${chip.tone}` : ""}`}
+                        title={chip.title}
+                      >
+                        {chip.count} {chip.label}
+                      </Link>
+                    ))}
                   </div>
+                </div>
+                <Link href={bugsHref} className="bb-project-card-link">
                   <h2 className="bb-project-name">{p.name}</h2>
                   {p.description ? (
                     <p className="bb-muted bb-project-desc">{p.description}</p>

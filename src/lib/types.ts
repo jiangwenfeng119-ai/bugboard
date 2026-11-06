@@ -6,6 +6,7 @@ export type Priority = "p1" | "p2" | "p3";
 export type BugStatus =
   | "pending"
   | "fixing"
+  | "needs_info"
   | "awaiting_confirm"
   | "confirmed"
   | "invalid";
@@ -13,6 +14,7 @@ export type BugStatus =
 export const STATUS_LABEL: Record<BugStatus, string> = {
   pending: "待处理",
   fixing: "修复中",
+  needs_info: "待补充",
   awaiting_confirm: "待确认",
   confirmed: "已确认",
   invalid: "不属实",

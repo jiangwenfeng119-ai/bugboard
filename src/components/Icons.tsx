@@ -148,6 +148,19 @@ export function IconSearch({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconMessage({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path
+        d="M3.2 3.6h9.6a1 1 0 0 1 1 1v5.2a1 1 0 0 1-1 1H7.2L4.2 13v-2.2h-1a1 1 0 0 1-1-1V4.6a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconAlert({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>

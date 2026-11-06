@@ -17,6 +17,7 @@
   --focus: #1f6feb;
   --status-pending: #b45309;
   --status-fixing: #1f6feb;
+  --status-needs: #0f766e;
   --status-awaiting: #5b4bb5;
   --status-confirmed: #1b7f4a;
   --status-invalid: #6b7280;
@@ -826,6 +827,11 @@ legend.bb-label + * {
   color: var(--status-fixing);
   background: color-mix(in srgb, var(--status-fixing) 12%, white);
   border-color: color-mix(in srgb, var(--status-fixing) 25%, white);
+}
+.bb-badge-needs_info {
+  color: var(--status-needs);
+  background: color-mix(in srgb, var(--status-needs) 12%, white);
+  border-color: color-mix(in srgb, var(--status-needs) 25%, white);
 }
 .bb-badge-awaiting_confirm {
   color: var(--status-awaiting);
@@ -1660,6 +1666,51 @@ a.bb-bug-id:hover {
   background: color-mix(in srgb, var(--danger) 8%, white);
 }
 
+.bb-key-copy-pop {
+  position: fixed;
+  z-index: 36;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 9.5rem;
+  padding: 0.3rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-hover);
+  animation: bb-fade 120ms var(--ease-out);
+}
+
+.bb-key-copy-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bb-key-copy-item:hover {
+  background: var(--surface-2);
+}
+
+.bb-key-copy-item.is-copied {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 8%, white);
+}
+
+.bb-key-copy-item.is-partial {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, white);
+}
+
 .bb-key-action-pop {
   position: fixed;
   z-index: 36;
@@ -2078,21 +2129,31 @@ a.bb-bug-id:hover {
 
 .bb-project-card-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.6rem;
   margin-bottom: 0.75rem;
 }
 
+.bb-open-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
 .bb-project-icon {
   display: inline-grid;
   place-items: center;
+  flex-shrink: 0;
   width: 2.35rem;
   height: 2.35rem;
   border-radius: 12px;
   color: #fff;
   background: linear-gradient(145deg, var(--accent), var(--accent-strong));
   box-shadow: 0 8px 16px rgba(31, 111, 235, 0.25);
+  text-decoration: none;
 }
 
 .bb-open-chip {
@@ -2103,12 +2164,26 @@ a.bb-bug-id:hover {
   color: var(--ink-muted);
   background: var(--surface-2);
   border: 1px solid var(--line);
+  white-space: nowrap;
+  text-decoration: none;
 }
 
-.bb-open-chip.is-hot {
+.bb-open-chip.is-hot.is-pending {
   color: var(--status-pending);
   background: color-mix(in srgb, var(--status-pending) 12%, white);
   border-color: color-mix(in srgb, var(--status-pending) 22%, white);
+}
+
+.bb-open-chip.is-hot.is-needs {
+  color: var(--status-needs);
+  background: color-mix(in srgb, var(--status-needs) 12%, white);
+  border-color: color-mix(in srgb, var(--status-needs) 22%, white);
+}
+
+.bb-open-chip.is-hot.is-awaiting {
+  color: var(--status-awaiting);
+  background: color-mix(in srgb, var(--status-awaiting) 12%, white);
+  border-color: color-mix(in srgb, var(--status-awaiting) 22%, white);
 }
 
 .bb-project-name {
@@ -2190,6 +2265,10 @@ a.bb-bug-id:hover {
 .bb-stat-fixing .bb-stat-icon {
   color: var(--status-fixing);
   background: color-mix(in srgb, var(--status-fixing) 12%, white);
+}
+.bb-stat-needs_info .bb-stat-icon {
+  color: var(--status-needs);
+  background: color-mix(in srgb, var(--status-needs) 12%, white);
 }
 .bb-stat-awaiting_confirm .bb-stat-icon {
   color: var(--status-awaiting);

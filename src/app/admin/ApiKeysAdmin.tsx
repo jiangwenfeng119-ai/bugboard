@@ -28,7 +28,8 @@ import {
 } from "@/components/Icons";
 import { formatDateTime } from "@/lib/time";
 import {
-  buildMcpHandoff,
+  buildLocalMcpHandoff,
+  buildRemoteMcpHandoff,
   resolveBugboardBaseUrl,
 } from "@/lib/mcp-handoff";
 
@@ -297,6 +298,171 @@ function KeyRowActions({
   );
 }
 
+const COPY_TARGETS = [
+  {
+    target: "local" as const,
+    label: "本机 Agent",
+    detail:
+      "在运行 Agent 的机器上启动本地进程，把命令写进它的 MCP 配置。适合只支持本地命令的客户端。",
+  },
+  {
+    target: "remote" as const,
+    label: "远端 Agent",
+    detail:
+      "把公网 MCP 地址和 Key 交给 Agent。支持远程 MCP 的客户端都能装，不用克隆仓库。",
+  },
+];
+
+function copyDetail(
+  target: "local" | "remote",
+  partial: boolean,
+  copied: boolean
+) {
+  const item = COPY_TARGETS.find((entry) => entry.target === target)!;
+  const lead = copied ? `已复制给${item.label}。` : `复制给${item.label}。`;
+  const missing = partial ? "这次不含完整 Key。" : "";
+  return `${lead}${item.detail}${missing}`;
+}
+
+function CopyAgentMenu({
+  open,
+  onOpenChange,
+  copied,
+  partial,
+  trigger,
+  onCopy,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  copied: "local" | "remote" | null;
+  partial: boolean;
+  trigger: "icon" | "button";
+  onCopy: (target: "local" | "remote") => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const [box, setBox] = useState<{
+    top: number;
+    left: number;
+    align: "left" | "right";
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setBox(null);
+      return;
+    }
+    function place() {
+      const el = buttonRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const menuGuess = 168;
+      const alignLeft = rect.left - menuGuess > 8;
+      setBox({
+        top: rect.top + rect.height / 2,
+        left: alignLeft ? rect.left - 6 : rect.right + 6,
+        align: alignLeft ? "left" : "right",
+      });
+    }
+    place();
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      onOpenChange(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      onOpenChange(false);
+      buttonRef.current?.focus();
+    }
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onOpenChange]);
+
+  const parentTip = copied
+    ? copyDetail(copied, partial, true)
+    : "复制给 Agent。点开后选择本机或远端。";
+  const iconClass = copied
+    ? partial
+      ? "bb-icon-btn is-partial"
+      : "bb-icon-btn is-copied"
+    : "bb-icon-btn";
+
+  return (
+    <div className="bb-key-actions" ref={rootRef}>
+      <TipButton
+        buttonRef={buttonRef}
+        label={parentTip}
+        className={trigger === "icon" ? iconClass : "bb-btn"}
+        pressed={open}
+        controls={menuId}
+        expanded={open}
+        popup
+        onClick={() => onOpenChange(!open)}
+      >
+        {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
+        {trigger === "button" ? (copied ? "已复制" : "复制给 Agent") : null}
+      </TipButton>
+      {open && box
+        ? createPortal(
+            <div
+              ref={menuRef}
+              id={menuId}
+              className="bb-key-copy-pop"
+              role="group"
+              aria-label="复制给 Agent"
+              style={{
+                top: box.top,
+                left: box.left,
+                transform:
+                  box.align === "left"
+                    ? "translate(-100%, -50%)"
+                    : "translate(0, -50%)",
+              }}
+            >
+              {COPY_TARGETS.map((item) => (
+                <TipButton
+                  key={item.target}
+                  label={copyDetail(item.target, partial, copied === item.target)}
+                  className={
+                    copied === item.target
+                      ? partial
+                        ? "bb-key-copy-item is-partial"
+                        : "bb-key-copy-item is-copied"
+                      : "bb-key-copy-item"
+                  }
+                  onClick={() => {
+                    onOpenChange(false);
+                    onCopy(item.target);
+                  }}
+                >
+                  {copied === item.target ? (
+                    <IconCheck size={15} />
+                  ) : (
+                    <IconCopy size={15} />
+                  )}
+                  {item.label}
+                </TipButton>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
+    </div>
+  );
+}
+
 type Reveal = {
   id: number;
   rawKey: string;
@@ -334,6 +500,7 @@ export function ApiKeysAdmin({
   const [loading, setLoading] = useState(false);
 
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [openCopyId, setOpenCopyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<"user" | "admin">("user");
@@ -350,20 +517,27 @@ export function ApiKeysAdmin({
     return ids.map((id) => projectNameById.get(id) || `#${id}`);
   }
 
-  function handoffFor(k: KeyRow, rawKey: string | null) {
+  function handoffFor(
+    k: KeyRow,
+    rawKey: string | null,
+    target: "local" | "remote"
+  ) {
     const origin =
       typeof window === "undefined" ? "" : window.location.origin;
-    return buildMcpHandoff({
+    const input = {
       baseUrl: resolveBugboardBaseUrl(origin, configuredBaseUrl),
       keyId: k.id,
       keyName: k.name,
-      role: k.role === "admin" ? "admin" : "user",
+      role: (k.role === "admin" ? "admin" : "user") as "admin" | "user",
       projectNames: projectNamesFor(k.role, k.projectIds),
       keyPrefix: k.key_prefix,
       rawKey,
       mcpScriptPath,
       status: keyStatus(k),
-    });
+    };
+    return target === "local"
+      ? buildLocalMcpHandoff(input)
+      : buildRemoteMcpHandoff(input);
   }
 
   function markCopied(token: string, note = "") {
@@ -565,12 +739,24 @@ export function ApiKeysAdmin({
           <div className="bb-key-reveal-row">
             <pre>{reveal.rawKey}</pre>
             <div className="bb-key-reveal-actions">
-              <button
-                type="button"
-                className="bb-btn"
-                onClick={() =>
+              <CopyAgentMenu
+                open={openCopyId === "reveal"}
+                onOpenChange={(next) => {
+                  setOpenCopyId(next ? "reveal" : null);
+                  if (next) setOpenMenuId(null);
+                }}
+                copied={
+                  copiedToken === "reveal-local"
+                    ? "local"
+                    : copiedToken === "reveal-remote"
+                      ? "remote"
+                      : null
+                }
+                partial={false}
+                trigger="button"
+                onCopy={(target) =>
                   copyHandoff(
-                    "reveal",
+                    `reveal-${target}`,
                     handoffFor(
                       {
                         id: reveal.id,
@@ -584,18 +770,12 @@ export function ApiKeysAdmin({
                         created_at: "",
                         projectIds: reveal.projectIds,
                       },
-                      reveal.rawKey
+                      reveal.rawKey,
+                      target
                     )
                   )
                 }
-              >
-                {copiedToken === "reveal" ? (
-                  <IconCheck size={15} />
-                ) : (
-                  <IconCopy size={15} />
-                )}
-                {copiedToken === "reveal" ? "已复制" : "复制给 Agent"}
-              </button>
+              />
               <button
                 type="button"
                 className="bb-btn bb-btn-ghost"
@@ -606,7 +786,7 @@ export function ApiKeysAdmin({
             </div>
           </div>
           <p className="bb-key-note">
-            复制内容包含服务地址、Key 和 MCP 配置，可直接粘贴给 Agent。
+            点「复制给 Agent」后选择本机或远端。鼠标停在选项上可以看区别。
           </p>
         </div>
       ) : null}
@@ -681,16 +861,14 @@ export function ApiKeysAdmin({
             {keys.map((k) => {
               const status = keyStatus(k);
               const isEditing = editingId === k.id;
-              const copied = copiedToken === `row-${k.id}`;
               const hasSecret = Boolean(secrets[k.id]);
               const projectsLabel = boundProjectLabel(k);
-              const copyLabel = copied
-                ? hasSecret
-                  ? "已复制给 Agent"
-                  : "已复制，不含完整 Key"
-                : hasSecret
-                  ? "复制给 Agent"
-                  : "复制给 Agent（不含完整 Key）";
+              const copiedTarget =
+                copiedToken === `row-${k.id}-local`
+                  ? "local"
+                  : copiedToken === `row-${k.id}-remote`
+                    ? "remote"
+                    : null;
               return (
                 <Fragment key={k.id}>
                   <tr>
@@ -700,31 +878,27 @@ export function ApiKeysAdmin({
                     <td>
                       <div className="bb-key-prefix">
                         <code className="bb-key-code">{k.key_prefix}…</code>
-                        <TipButton
-                          label={copyLabel}
-                          className={
-                            copied
-                              ? hasSecret
-                                ? "bb-icon-btn is-copied"
-                                : "bb-icon-btn is-partial"
-                              : "bb-icon-btn"
-                          }
-                          onClick={() =>
+                        <CopyAgentMenu
+                          open={openCopyId === `row-${k.id}`}
+                          onOpenChange={(next) => {
+                            setOpenCopyId(next ? `row-${k.id}` : null);
+                            if (next) setOpenMenuId(null);
+                          }}
+                          copied={copiedTarget}
+                          partial={!hasSecret}
+                          trigger="icon"
+                          onCopy={(target) => {
+                            const label =
+                              target === "local" ? "本机 Agent" : "远端 Agent";
                             copyHandoff(
-                              `row-${k.id}`,
-                              handoffFor(k, secrets[k.id] ?? null),
+                              `row-${k.id}-${target}`,
+                              handoffFor(k, secrets[k.id] ?? null, target),
                               hasSecret
                                 ? ""
-                                : "已复制。这次不含完整 Key，明文只在创建或重新生成后保留在本页。"
-                            )
-                          }
-                        >
-                          {copied ? (
-                            <IconCheck size={15} />
-                          ) : (
-                            <IconCopy size={15} />
-                          )}
-                        </TipButton>
+                                : `已复制给${label}。这次不含完整 Key，明文只在创建或重新生成后保留在本页。`
+                            );
+                          }}
+                        />
                       </div>
                     </td>
                     <td className="bb-key-token">
@@ -743,9 +917,10 @@ export function ApiKeysAdmin({
                     <td className="bb-key-actions-cell">
                       <KeyRowActions
                         open={openMenuId === k.id}
-                        onOpenChange={(next) =>
-                          setOpenMenuId(next ? k.id : null)
-                        }
+                        onOpenChange={(next) => {
+                          setOpenMenuId(next ? k.id : null);
+                          if (next) setOpenCopyId(null);
+                        }}
                         actions={[
                           ...(status !== "revoked"
                             ? [

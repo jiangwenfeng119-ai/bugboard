@@ -1,6 +1,11 @@
-# Cursor MCP 接入（标准协议）
+# MCP 接入（标准协议）
 
-Bugboard 通过 `mcp/server.ts` 暴露 **官方 MCP stdio** 工具，供 Cursor 作为「提报 Agent」与「修复 Agent」使用。
+Bugboard 提供两种接法，管理后台「API Key」页可以分别复制：
+
+- **远端 Agent**：`https://<服务地址>/mcp`，Streamable HTTP。请求头 `Authorization: Bearer <API Key>`。任何支持远程 MCP 的客户端都能装，不需要本机仓库。
+- **本机 Agent**：`npx tsx mcp/server.ts` 的 stdio 进程，用环境变量 `BUGBOARD_BASE_URL` 和 `BUGBOARD_API_KEY` 调用 REST。适合只支持本地命令的客户端。
+
+Cursor 把配置写在项目 `.cursor/mcp.json`。其他客户端使用各自的 `mcpServers` 配置；远程连接如果要求传输类型，使用 `"type": "http"`。
 
 ## 1. 在管理后台创建两个 API Key
 
@@ -56,14 +61,15 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 | `get_project_stats` | ✓ | ✓ |
 | `list_bugs` / `get_bug` | ✓ | ✓ |
 | `create_bug` | ✓ | ✓ |
-| `confirm_fix` / `reject_fix` / `dispute_invalid` | 仅自己提的单 | 仅自己提的单 |
-| `start_fix` / `submit_fix` / `mark_invalid` | | ✓ |
+| `confirm_fix` / `reject_fix` / `dispute_invalid` / `provide_info` | 仅自己提的单 | 仅自己提的单 |
+| `start_fix` / `submit_fix` / `mark_invalid` / `request_info` | | ✓ |
 
 ## 4. 推荐闭环
 
 1. **bugboard-qa**：`create_bug` → 得到 `bugId`
 2. **bugboard-fixer**：`start_fix` → `submit_fix`（必填 note）
 3. **bugboard-qa**：`confirm_fix`，或 `reject_fix` 打回
+4. 材料只在报障人手里时，**bugboard-fixer** 用 `request_info` 把单退到待补充；原报障人补上后用 `provide_info` 回到待处理
 
 本地脚本验证（不依赖 Cursor UI）：
 

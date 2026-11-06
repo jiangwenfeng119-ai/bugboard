@@ -14,6 +14,7 @@ const GRAIN_LABEL = { day: "按日", week: "按周", month: "按月" } as const;
 const STATUS_ORDER: BugStatus[] = [
   "pending",
   "fixing",
+  "needs_info",
   "awaiting_confirm",
   "confirmed",
   "invalid",
@@ -22,6 +23,7 @@ const STATUS_ORDER: BugStatus[] = [
 const STATUS_COLOR: Record<BugStatus, string> = {
   pending: "var(--status-pending)",
   fixing: "var(--status-fixing)",
+  needs_info: "var(--status-needs)",
   awaiting_confirm: "var(--status-awaiting)",
   confirmed: "var(--status-confirmed)",
   invalid: "var(--status-invalid)",

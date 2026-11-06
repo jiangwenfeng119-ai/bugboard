@@ -14,6 +14,8 @@ import type { Priority } from "@/lib/types";
 
 const NOTE_ACTIONS = new Set<TransitionAction>([
   "mark_invalid",
+  "request_info",
+  "provide_info",
   "submit_fix",
   "reject_fix",
   "dispute_invalid",
@@ -26,6 +28,9 @@ const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
     "写给报障人，用 Markdown 分成三段：## 原来的问题、## 现在的表现、## 请这样重测。重测步骤用 1. 2. 。用界面上的说法，不要写文件名或实现细节。",
   mark_invalid:
     "写给报障人：实际做了什么、看到了什么、为什么和报障对不上。改产品时写明现在的做法，并请报障人去和产品经理沟通。",
+  request_info:
+    "写清已经查过什么，以及还缺报障人哪一份材料。缺的应是账号、机型、崩溃记录或操作记录。",
+  provide_info: "写上补了什么。可以同时附上截图或记录。",
   reopen_invalid: "写清上次漏看或判错的是哪一处。",
   withdraw_fix: "写清为什么先收回这次修复说明，还有哪一点要再改。",
 };

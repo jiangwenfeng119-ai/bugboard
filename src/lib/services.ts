@@ -10,6 +10,7 @@ import {
   verifyPassword,
 } from "./auth";
 import { canAccessProject, listAccessibleProjectIds, requireAdmin } from "./permissions";
+import { isAdminRole } from "./roles";
 import {
   ACTION_LABEL,
   allowedActions,
@@ -615,10 +616,11 @@ const BUG_ORDER_SQL: Record<BugSortKey, string> = {
   status: `CASE b.status
     WHEN 'pending' THEN 0
     WHEN 'fixing' THEN 1
-    WHEN 'awaiting_confirm' THEN 2
-    WHEN 'confirmed' THEN 3
-    WHEN 'invalid' THEN 4
-    ELSE 5 END`,
+    WHEN 'needs_info' THEN 2
+    WHEN 'awaiting_confirm' THEN 3
+    WHEN 'confirmed' THEN 4
+    WHEN 'invalid' THEN 5
+    ELSE 6 END`,
   reporter: `(${REPORTER_LABEL_SQL}) COLLATE NOCASE`,
   handler: `COALESCE(${HANDLER_LABEL_SQL}, '') COLLATE NOCASE`,
   created: "b.created_at",
@@ -704,7 +706,7 @@ export function listBugs(
        LEFT JOIN bug_status_events h ON h.id = (
          SELECT e.id FROM bug_status_events e
          WHERE e.bug_id = b.id
-           AND e.to_status IN ('fixing', 'awaiting_confirm', 'invalid')
+           AND e.to_status IN ('fixing', 'needs_info', 'awaiting_confirm', 'invalid')
          ORDER BY e.id DESC
          LIMIT 1
        )
@@ -862,6 +864,7 @@ export function projectStats(
   const byStatus: Record<BugStatus, number> = {
     pending: 0,
     fixing: 0,
+    needs_info: 0,
     awaiting_confirm: 0,
     confirmed: 0,
     invalid: 0,
@@ -907,6 +910,7 @@ export function projectStats(
     inflow[day] = {
       pending: 0,
       fixing: 0,
+      needs_info: 0,
       awaiting_confirm: 0,
       confirmed: 0,
       invalid: 0,
@@ -1017,6 +1021,7 @@ function personSeries(rows: ActorDayRow[], daysList: string[]): DayCountSeries[]
 const BUG_STATUSES: BugStatus[] = [
   "pending",
   "fixing",
+  "needs_info",
   "awaiting_confirm",
   "confirmed",
   "invalid",
@@ -1026,6 +1031,7 @@ function emptyStatusCounts(): StatusCounts {
   return {
     pending: 0,
     fixing: 0,
+    needs_info: 0,
     awaiting_confirm: 0,
     confirmed: 0,
     invalid: 0,
@@ -1040,6 +1046,7 @@ function countTotal(counts: StatusCounts) {
   return (
     counts.pending +
     counts.fixing +
+    counts.needs_info +
     counts.awaiting_confirm +
     counts.confirmed +
     counts.invalid
@@ -1408,7 +1415,7 @@ export function getBugHandlerLabel(bug: Pick<BugRow, "id" | "status">) {
   const event = getDb()
     .prepare(
       `SELECT actor_type, actor_id FROM bug_status_events
-       WHERE bug_id = ? AND to_status IN ('fixing', 'awaiting_confirm', 'invalid')
+       WHERE bug_id = ? AND to_status IN ('fixing', 'needs_info', 'awaiting_confirm', 'invalid')
        ORDER BY id DESC
        LIMIT 1`
     )
@@ -1433,18 +1440,74 @@ export function resolveActorLabel(
   return k ? `Key:${k.name}` : `Key#${actorId}`;
 }
 
+export type ProjectAttentionCounts = {
+  pending: number;
+  awaitingConfirm: number;
+  needsInfo: number;
+  open: number;
+};
+
+function emptyAttentionCounts(): ProjectAttentionCounts {
+  return { pending: 0, awaitingConfirm: 0, needsInfo: 0, open: 0 };
+}
+
 export function openBugCountsByProject(identity: Identity) {
   const projects = listProjects(identity);
-  const result: Record<number, number> = {};
-  for (const p of projects) {
-    const row = getDb()
-      .prepare(
-        `SELECT COUNT(*) AS c FROM bugs
-         WHERE project_id = ? AND status IN ('pending','fixing','awaiting_confirm')`
-      )
-      .get(p.id) as { c: number };
-    result[p.id] = row.c;
+  const result: Record<number, ProjectAttentionCounts> = {};
+  for (const project of projects) result[project.id] = emptyAttentionCounts();
+  if (projects.length === 0) return result;
+
+  const ids = projects.map((project) => project.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = getDb()
+    .prepare(
+      `SELECT project_id, status, COUNT(*) AS c
+       FROM bugs
+       WHERE project_id IN (${placeholders})
+         AND status IN ('pending', 'fixing', 'needs_info', 'awaiting_confirm')
+       GROUP BY project_id, status`
+    )
+    .all(...ids) as { project_id: number; status: BugStatus; c: number }[];
+
+  for (const row of rows) {
+    const counts = result[row.project_id];
+    if (!counts) continue;
+    counts.open += row.c;
+    if (row.status === "pending") counts.pending = row.c;
+    if (isAdminRole(identity.role) && row.status === "awaiting_confirm") {
+      counts.awaitingConfirm = row.c;
+    }
+    if (isAdminRole(identity.role) && row.status === "needs_info") {
+      counts.needsInfo = row.c;
+    }
   }
+
+  if (!isAdminRole(identity.role)) {
+    const reporterType = identity.kind === "user" ? "user" : "api_key";
+    const reporterId = identity.kind === "user" ? identity.userId : identity.apiKeyId;
+    const own = getDb()
+      .prepare(
+        `SELECT project_id, status, COUNT(*) AS c
+         FROM bugs
+         WHERE project_id IN (${placeholders})
+           AND status IN ('awaiting_confirm', 'needs_info')
+           AND reporter_type = ?
+           AND reporter_id = ?
+         GROUP BY project_id, status`
+      )
+      .all(...ids, reporterType, reporterId) as {
+      project_id: number;
+      status: BugStatus;
+      c: number;
+    }[];
+    for (const row of own) {
+      const counts = result[row.project_id];
+      if (!counts) continue;
+      if (row.status === "awaiting_confirm") counts.awaitingConfirm = row.c;
+      if (row.status === "needs_info") counts.needsInfo = row.c;
+    }
+  }
+
   return result;
 }
 

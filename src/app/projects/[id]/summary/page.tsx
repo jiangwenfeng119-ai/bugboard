@@ -12,6 +12,7 @@ import { DaysSwitcher } from "../DaysSwitcher";
 const STATUS_COLOR: Record<BugStatus, string> = {
   pending: "var(--status-pending)",
   fixing: "var(--status-fixing)",
+  needs_info: "var(--status-needs)",
   awaiting_confirm: "var(--status-awaiting)",
   confirmed: "var(--status-confirmed)",
   invalid: "var(--status-invalid)",

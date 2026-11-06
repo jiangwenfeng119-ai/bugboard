@@ -601,7 +601,7 @@ function DocumentFiles({
             type="file"
             multiple
             hidden
-            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.xlsx,.txt,.zip,.mp4,.webm,.mov,.mp3,.wav,.ogg,.m4a"
+            accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.docx,.xlsx,.txt,.md,.zip,.mp4,.webm,.mov,.mp3,.wav,.ogg,.m4a"
             onChange={(event) => {
               const picked = event.target.files ? Array.from(event.target.files) : [];
               if (picked.length > 0) onAdd(picked);
