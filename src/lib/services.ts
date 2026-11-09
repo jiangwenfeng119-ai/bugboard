@@ -1,7 +1,9 @@
 import fs from "fs";
 import { getDb, isSetupComplete, nowIso } from "./db";
 import { buildAnalyticsTrend } from "./analytics-trend";
-import { recentShanghaiDateKeys, shanghaiDaySql, shanghaiDayStartIso } from "./time";
+import { scheduleAgentWake, shouldWakeOnAction, type DispatchReason } from "./dispatch";
+import { BUG_BODY_MAX, BUG_TITLE_MAX } from "./limits";
+import { recentShanghaiDateKeys, shanghaiDaySql, shanghaiDayStartIso, shanghaiYymmdd } from "./time";
 import {
   actorFromIdentity,
   generateApiKey,
@@ -9,7 +11,10 @@ import {
   hashPassword,
   verifyPassword,
 } from "./auth";
+import { captureFilePathsForProject } from "./captures";
+import { parseBugEvidence, type BugEvidenceInput } from "./evidence";
 import { canAccessProject, listAccessibleProjectIds, requireAdmin } from "./permissions";
+import { claimStagedUploads } from "./staged";
 import { isAdminRole } from "./roles";
 import {
   ACTION_LABEL,
@@ -169,6 +174,7 @@ export function deleteProject(identity: Identity, projectId: number) {
          SELECT storage_path FROM project_documents WHERE project_id = ?`
       )
       .all(projectId, projectId, projectId) as { storage_path: string }[];
+    files.push(...captureFilePathsForProject(projectId));
     db.prepare(
       `DELETE FROM attachments
        WHERE (owner_type = 'bug' AND owner_id IN (SELECT id FROM bugs WHERE project_id = ?))
@@ -518,26 +524,33 @@ export function createBug(
     title: string;
     body?: string;
     priority?: Priority;
+    evidence?: BugEvidenceInput;
   }
 ) {
   getProject(identity, data.projectId);
   const title = data.title.trim();
   if (!title) throw new Error("标题必填");
+  if (title.length > BUG_TITLE_MAX) throw new Error(`标题不能超过 ${BUG_TITLE_MAX} 字`);
+  const body = data.body?.trim() || "";
+  if (body.length > BUG_BODY_MAX) throw new Error(`描述不能超过 ${BUG_BODY_MAX} 字`);
   const priority = parsePriority(data.priority);
+  const evidence = data.evidence ? parseBugEvidence(data.evidence) : null;
   const t = nowIso();
   const reporter =
     identity.kind === "user"
       ? { type: "user" as const, id: identity.userId }
       : { type: "api_key" as const, id: identity.apiKeyId };
-  const bugId = getDb().transaction(() => {
+  const insert = getDb().transaction(() => {
     const project = getDb()
       .prepare("SELECT code FROM projects WHERE id = ?")
       .get(data.projectId) as { code: string } | undefined;
     if (!project?.code) throw new Error("项目缺少缩写");
+    const ymd = shanghaiYymmdd(t);
+    if (!ymd) throw new Error("创建时间无效");
     const existing = (
       getDb()
-        .prepare("SELECT public_id FROM bugs WHERE public_id IS NOT NULL")
-        .all() as { public_id: string }[]
+        .prepare("SELECT public_id FROM bugs WHERE public_id GLOB ?")
+        .all(`${project.code}${ymd}*`) as { public_id: string }[]
     ).map((row) => row.public_id);
     const publicId = nextPublicId(project.code, t, existing);
     const info = getDb()
@@ -549,7 +562,7 @@ export function createBug(
         data.projectId,
         publicId,
         title,
-        data.body?.trim() || "",
+        body,
         priority,
         reporter.type,
         reporter.id,
@@ -563,12 +576,51 @@ export function createBug(
          VALUES (?, NULL, 'pending', ?, ?, ?, ?)`
       )
       .run(id, reporter.type, reporter.id, "创建报障", t);
+    if (evidence) {
+      getDb()
+        .prepare(
+          `UPDATE bugs
+           SET quote = ?, steps_json = ?, evidence_sec = ?, strokes_json = ?, confidence = ?,
+               open_question = ?, source_url = ?, capture_session_id = ?
+           WHERE id = ?`
+        )
+        .run(
+          evidence.quote,
+          JSON.stringify(evidence.steps),
+          evidence.evidenceSec,
+          JSON.stringify(evidence.strokes),
+          evidence.confidence,
+          evidence.openQuestion,
+          evidence.sourceUrl,
+          evidence.captureSessionId,
+          id
+        );
+      if (evidence.attachmentIds.length) {
+        claimStagedUploads(getDb(), identity, data.projectId, id, evidence.attachmentIds);
+      }
+    }
     getDb()
       .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
       .run(t, data.projectId);
     return id;
-  })();
-  return getBug(identity, bugId);
+  });
+  let bugId = 0;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      bugId = insert.immediate();
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!/UNIQUE/i.test(message) || attempt === 2) throw error;
+    }
+  }
+  const bug = getBug(identity, bugId);
+  try {
+    scheduleAgentWake(bug, "created");
+  } catch (error) {
+    console.error("dispatch schedule failed", error instanceof Error ? error.message : error);
+  }
+  return bug;
 }
 
 export const BUG_SORT_KEYS = [
@@ -641,6 +693,10 @@ export function resolveBugSort(
   };
 }
 
+function likeContains(raw: string) {
+  return `%${raw.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
 function parseReporterFilter(raw?: string) {
   if (!raw) return null;
   const [type, idText] = raw.split(":");
@@ -686,8 +742,8 @@ export function listBugs(
     params.push(filters.priority);
   }
   if (filters.q?.trim()) {
-    where.push("(b.title LIKE ? OR b.public_id LIKE ?)");
-    const term = `%${filters.q.trim()}%`;
+    where.push("(b.title LIKE ? ESCAPE '\\' OR b.public_id LIKE ? ESCAPE '\\')");
+    const term = likeContains(filters.q.trim());
     params.push(term, term);
   }
   const reporter = parseReporterFilter(filters.reporter);
@@ -838,7 +894,15 @@ export function transitionBug(
     return Number(info.lastInsertRowid);
   });
   const eventId = tx();
-  return { bug: getBug(identity, bugId), eventId };
+  const updated = getBug(identity, bugId);
+  if (shouldWakeOnAction(action, updated.status)) {
+    try {
+      scheduleAgentWake(updated, action as DispatchReason);
+    } catch (error) {
+      console.error("dispatch schedule failed", error instanceof Error ? error.message : error);
+    }
+  }
+  return { bug: updated, eventId };
 }
 
 export function bugActions(identity: Identity, bug: BugRow) {

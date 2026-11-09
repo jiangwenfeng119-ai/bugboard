@@ -7,6 +7,9 @@ import {
   AttachmentComposer,
   type PendingFile,
 } from "@/components/AttachmentComposer";
+import { CaptureTools } from "@/components/CaptureTools";
+import { BUG_BODY_MAX, BUG_TITLE_MAX } from "@/lib/limits";
+import type { Stroke } from "@/lib/strokes";
 import { PRIORITY_HINT, PRIORITY_LABEL, type Priority } from "@/lib/types";
 
 const PRIORITIES = Object.keys(PRIORITY_LABEL) as Priority[];
@@ -21,6 +24,11 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
   const [body, setBody] = useState("");
   const [priority, setPriority] = useState<Priority>("p2");
   const [files, setFiles] = useState<PendingFile[]>([]);
+  const [quote, setQuote] = useState("");
+  const [steps, setSteps] = useState<string[]>([]);
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [confidence, setConfidence] = useState("");
+  const [openQuestion, setOpenQuestion] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +46,28 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
     setTitle("");
     setBody("");
     setPriority("p2");
+    setQuote("");
+    setSteps([]);
+    setStrokes([]);
+    setConfidence("");
+    setOpenQuestion("");
     setError("");
+  }
+
+  function addCapturedFile(file: File) {
+    setFiles((prev) => {
+      if (prev.length >= 20 || file.size > 50 * 1024 * 1024) return prev;
+      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      return [...prev, { id: `${Date.now()}-${file.name}`, file, previewUrl }];
+    });
+  }
+
+  function applySpoken(text: string) {
+    const clean = text.trim();
+    if (!clean) return;
+    setQuote(clean);
+    setTitle((current) => current.trim() || Array.from(clean).slice(0, 42).join(""));
+    setBody((current) => current.trim() || clean);
   }
 
   function closePanel() {
@@ -70,6 +99,11 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
       form.set("title", title);
       form.set("body", body);
       form.set("priority", priority);
+      form.set("quote", quote);
+      form.set("steps", JSON.stringify(steps));
+      form.set("strokes", JSON.stringify(strokes));
+      form.set("confidence", confidence);
+      form.set("openQuestion", openQuestion);
       for (const f of files) form.append("files", f.file, f.file.name);
       const res = await fetch(`/api/projects/${projectId}/bugs`, {
         method: "POST",
@@ -129,6 +163,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="一句话说明哪里不对"
+              maxLength={BUG_TITLE_MAX}
               autoFocus
               required
             />
@@ -144,6 +179,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder={"## 环境\n\n## 复现步骤\n1. \n\n## 期望\n\n## 实际"}
+              maxLength={BUG_BODY_MAX}
               rows={7}
             />
             <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
@@ -177,6 +213,19 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
               })}
             </div>
           </div>
+
+          <CaptureTools
+            projectId={projectId}
+            onSnap={({ file, note, strokes: marks }) => {
+              addCapturedFile(file);
+              setStrokes(marks);
+              applySpoken(note);
+            }}
+            onVoice={({ file, text }) => {
+              addCapturedFile(file);
+              applySpoken(text);
+            }}
+          />
 
           <div className="bb-field bb-attach-field">
             <div className="bb-label">附件</div>

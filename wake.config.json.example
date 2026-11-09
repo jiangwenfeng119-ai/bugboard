@@ -1,0 +1,9 @@
+{
+  "listen": "127.0.0.1:3099",
+  "agent": "cursor",
+  "applyEdits": false,
+  "secrets": ["把项目叫醒设置里的密钥贴在这里"],
+  "projects": {
+    "SOC": "/绝对路径/目标代码仓"
+  }
+}

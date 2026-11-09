@@ -179,14 +179,43 @@ server.tool(
 
 server.tool(
   "create_bug",
-  "在项目中创建报障（测试 Agent / 用户级 Key）",
+  "在项目中创建报障（测试 Agent / 用户级 Key）。截图先 stage_attachment，再把返回的 id 放进 attachmentIds。一条只写一个故障。",
   {
     projectId: z.number().int().positive(),
     title: z.string().min(1),
     body: z.string().optional(),
     priority: z.enum(["p1", "p2", "p3"]).optional().describe("默认 p2"),
+    quote: z.string().optional().describe("报障人原话"),
+    steps: z.array(z.string()).optional().describe("复现步骤"),
+    evidenceSec: z.number().optional().describe("走查录像里的时间点，秒"),
+    strokes: z
+      .array(
+        z.object({
+          tool: z.enum(["free", "rect", "ellipse"]),
+          points: z.array(z.object({ x: z.number(), y: z.number() })),
+        })
+      )
+      .optional()
+      .describe("圈选，坐标相对整张图，0 到 1"),
+    openQuestion: z.string().optional().describe("还没确认的问题"),
+    sourceUrl: z.string().optional().describe("页面地址"),
+    confidence: z.enum(["low", "ok"]).optional(),
+    attachmentIds: z.array(z.number().int().positive()).optional().describe("stage_attachment 返回的 id"),
   },
-  async ({ projectId, title, body, priority }) => {
+  async ({
+    projectId,
+    title,
+    body,
+    priority,
+    quote,
+    steps,
+    evidenceSec,
+    strokes,
+    openQuestion,
+    sourceUrl,
+    confidence,
+    attachmentIds,
+  }) => {
     try {
       return textResult(
         await api(`/api/projects/${projectId}/bugs`, {
@@ -195,7 +224,101 @@ server.tool(
             title,
             body,
             priority: priority || "p2",
+            quote,
+            steps,
+            evidenceSec,
+            strokes,
+            openQuestion,
+            sourceUrl,
+            confidence,
+            attachmentIds,
           }),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "stage_attachment",
+  "上传一张截图或附件，返回 id。随后在 create_bug 的 attachmentIds 里引用。只能引用自己上传的文件。单文件不超过 8MB。",
+  {
+    projectId: z.number().int().positive(),
+    filename: z.string().min(1),
+    dataBase64: z.string().min(1).describe("文件内容的 base64，不要带 data: 前缀"),
+  },
+  async ({ projectId, filename, dataBase64 }) => {
+    try {
+      const cleaned = dataBase64.replace(/^data:[^;]+;base64,/, "");
+      const buf = Buffer.from(cleaned, "base64");
+      if (!buf.length || buf.length > 8 * 1024 * 1024) throw new Error("附件大小无效");
+      const form = new FormData();
+      form.append("file", new Blob([new Uint8Array(buf)]), filename);
+      return textResult(
+        await api(`/api/projects/${projectId}/uploads`, { method: "POST", body: form })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "list_captures",
+  "列出项目里的走查。status=review 的还在等人看，不要把它当成已入库的报障。",
+  { projectId: z.number().int().positive() },
+  async ({ projectId }) => {
+    try {
+      return textResult(await api(`/api/projects/${projectId}/captures`));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "get_capture",
+  "读取一次走查的转写和草稿。草稿里的 quote 是原话，steps 是步骤，frameUrl 要带着登录态打开。人还没在网页里点完成之前，不要创建报障。",
+  {
+    projectId: z.number().int().positive(),
+    sessionId: z.number().int().positive(),
+  },
+  async ({ projectId, sessionId }) => {
+    try {
+      return textResult(await api(`/api/projects/${projectId}/captures/${sessionId}`));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "update_capture_drafts",
+  "修改走查草稿的标题、正文、原话和步骤。status 仍由网页上的人决定。不要把草稿直接建成报障。",
+  {
+    projectId: z.number().int().positive(),
+    sessionId: z.number().int().positive(),
+    drafts: z.array(
+      z.object({
+        id: z.number().int().positive(),
+        title: z.string(),
+        body: z.string().optional(),
+        quote: z.string().optional(),
+        steps: z.array(z.string()).optional(),
+        question: z.string().optional(),
+        status: z.enum(["draft", "kept", "discarded", "merged"]),
+        mergedIntoId: z.number().int().positive().optional(),
+      })
+    ),
+  },
+  async ({ projectId, sessionId, drafts }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/captures/${sessionId}`, {
+          method: "PUT",
+          body: JSON.stringify({ drafts }),
         })
       );
     } catch (e) {

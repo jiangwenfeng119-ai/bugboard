@@ -16,11 +16,70 @@ import {
   resolveActorLabel,
 } from "@/lib/services";
 import { STATUS_LABEL } from "@/lib/types";
+import { WakeBugButton } from "@/components/AgentDispatch";
+import { latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
 import { BugActions } from "./BugActions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
 import { Prose } from "@/components/Prose";
+import type { BugRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+function readList(raw: string) {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function isImageName(filename: string) {
+  return /\.(png|jpe?g|gif|webp)$/i.test(filename);
+}
+
+function EvidenceCard({ bug }: { bug: BugRow }) {
+  const steps = readList(bug.steps_json || "[]");
+  const has =
+    bug.quote ||
+    steps.length ||
+    bug.open_question ||
+    bug.source_url ||
+    bug.evidence_sec != null ||
+    bug.confidence === "low";
+  if (!has) return null;
+  return (
+    <div className="bb-card bb-section-card">
+      <h2>证据</h2>
+      {bug.confidence === "low" && bug.open_question ? (
+        <p className="bb-cap-question">{bug.open_question}</p>
+      ) : null}
+      {bug.quote ? <p>{bug.quote}</p> : null}
+      {bug.evidence_sec != null ? (
+        <p className="bb-muted">录像时间点 {bug.evidence_sec}s</p>
+      ) : null}
+      {bug.source_url ? (
+        <p>
+          <a href={bug.source_url} target="_blank" rel="noreferrer">
+            {bug.source_url}
+          </a>
+        </p>
+      ) : null}
+      {steps.length ? (
+        <ol>
+          {steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      ) : null}
+      {bug.capture_session_id ? (
+        <p className="bb-muted">
+          <Link href={`/projects/${bug.project_id}/captures/${bug.capture_session_id}`}>来自走查</Link>
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export default async function BugDetailPage({
   params,
@@ -35,6 +94,9 @@ export default async function BugDetailPage({
   const events = getBugEvents(identity, bug.id);
   const attachments = getAttachments("bug", bug.id);
   const actions = bugActions(identity, bug);
+  const isAdmin = isAdminRole(identity.role);
+  const wakeLatest = isAdmin ? latestDispatch(bug.id) : null;
+  const wakeEnabled = isAdmin && projectWakeEnabled(bug.project_id);
 
   return (
     <AppShell
@@ -77,13 +139,25 @@ export default async function BugDetailPage({
             <BugActions
               bugId={bug.id}
               actions={actions}
-              isAdmin={isAdminRole(identity.role)}
+              isAdmin={isAdmin}
               currentPriority={bug.priority}
             />
           </div>
+          {wakeEnabled || wakeLatest ? (
+            <div className="bb-card bb-section-card">
+              <h2>叫醒</h2>
+              <WakeBugButton
+                bugId={bug.id}
+                canWake={wakeEnabled && bug.status === "pending"}
+                initial={wakeLatest}
+              />
+            </div>
+          ) : null}
         </aside>
 
         <div className="bb-bug-main">
+          <EvidenceCard bug={bug} />
+
           <div className="bb-card bb-section-card">
             <h2>描述</h2>
             <Prose text={bug.body} empty="（无描述）" />
@@ -99,6 +173,11 @@ export default async function BugDetailPage({
               <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
                 {attachments.map((a) => (
                   <li key={a.id}>
+                    {isImageName(a.filename) ? (
+                      // 附件地址由本系统签发。
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="bb-evidence-img" src={`/api/attachments/${a.id}`} alt={a.filename} />
+                    ) : null}
                     <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer">
                       {a.filename}
                     </a>{" "}

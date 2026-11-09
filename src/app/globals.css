@@ -3373,3 +3373,270 @@ a.bb-bug-id:hover {
   from { stroke-dashoffset: 1; }
   to { stroke-dashoffset: 0; }
 }
+
+.bb-dispatch-lead {
+  margin: -0.35rem 0 0.9rem;
+}
+
+.bb-dispatch-secret {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bb-dispatch-secret .bb-input {
+  flex: 1 1 16rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.bb-dispatch-cursor {
+  margin: 0.2rem 0 0.35rem;
+  white-space: normal;
+}
+
+.bb-dispatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.bb-dispatch-log {
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.bb-dispatch-log li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+}
+
+.bb-wake {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.bb-wake p {
+  margin: 0;
+}
+
+.bb-bugs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bb-cap-tools {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.bb-cap-row,
+.bb-cap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.bb-cap-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(21, 32, 51, 0.46);
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.bb-cap-stage {
+  width: min(1080px, 100%);
+  height: min(720px, calc(100vh - 2.5rem));
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-hover);
+}
+
+.bb-cap-canvas {
+  width: 100%;
+  height: 100%;
+  background: #101820;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.bb-cap-side {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  overflow: auto;
+}
+
+.bb-cap-side h2,
+.bb-widget-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.bb-cap-partial {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.bb-cap-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
+.bb-cap-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--danger);
+}
+
+.bb-cap-dot.is-paused {
+  background: var(--warning);
+}
+
+.bb-cap-meter {
+  width: 4.5rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.bb-cap-meter span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+.bb-cap-review {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.bb-cap-review-head,
+.bb-cap-review-grid {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.bb-cap-review-grid {
+  align-items: stretch;
+}
+
+.bb-cap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: min(100%, 18rem);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.bb-cap-list-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.bb-cap-list-btn.is-on {
+  border-color: var(--accent);
+}
+
+.bb-cap-state {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.bb-cap-state.is-kept {
+  color: var(--ok);
+}
+
+.bb-cap-question {
+  margin: 0;
+  color: var(--warning);
+}
+
+.bb-evidence-img {
+  display: block;
+  max-width: 100%;
+  margin: 0.4rem 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.bb-cap-sessions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.bb-cap-session {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+}
+
+.bb-widget-card {
+  width: min(640px, 100%);
+  padding: 1.1rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+@media (max-width: 800px) {
+  .bb-cap-stage {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-height: calc(100vh - 2rem);
+  }
+
+  .bb-cap-canvas {
+    height: 46vh;
+  }
+
+  .bb-cap-review-grid,
+  .bb-cap-review-head {
+    flex-direction: column;
+  }
+
+  .bb-cap-list {
+    width: 100%;
+  }
+}

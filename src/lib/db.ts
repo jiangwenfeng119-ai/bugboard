@@ -124,11 +124,37 @@ CREATE TABLE IF NOT EXISTS project_documents (
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS project_dispatch (
+  project_id INTEGER PRIMARY KEY,
+  webhook_url TEXT NOT NULL DEFAULT '',
+  webhook_secret TEXT NOT NULL DEFAULT '',
+  cursor_enabled INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS agent_dispatches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  bug_id INTEGER,
+  reason TEXT NOT NULL,
+  target TEXT NOT NULL,
+  status TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (bug_id) REFERENCES bugs(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_bugs_project ON bugs(project_id);
+CREATE INDEX IF NOT EXISTS idx_bugs_project_status ON bugs(project_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_project_documents_project ON project_documents(project_id, kind);
 CREATE INDEX IF NOT EXISTS idx_bugs_status ON bugs(status);
 CREATE INDEX IF NOT EXISTS idx_events_bug ON bug_status_events(bug_id);
+CREATE INDEX IF NOT EXISTS idx_events_bug_id ON bug_status_events(bug_id, id);
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS idx_dispatches_bug ON agent_dispatches(bug_id, id);
+CREATE INDEX IF NOT EXISTS idx_dispatches_project ON agent_dispatches(project_id, id);
 `;
 
 export function getDb() {
@@ -161,6 +187,97 @@ function migrateSchema(db: Database.Database) {
   ensureProjectCodes(db);
   ensureProjectProfile(db);
   ensurePublicIds(db);
+  ensureCaptureSchema(db);
+}
+
+function ensureCaptureSchema(db: Database.Database) {
+  const bugCols = new Set(columnNames(db, "bugs"));
+  const bugAdds: [string, string][] = [
+    ["quote", "TEXT NOT NULL DEFAULT ''"],
+    ["steps_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["evidence_sec", "REAL"],
+    ["strokes_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["confidence", "TEXT NOT NULL DEFAULT ''"],
+    ["open_question", "TEXT NOT NULL DEFAULT ''"],
+    ["source_url", "TEXT NOT NULL DEFAULT ''"],
+    ["capture_session_id", "INTEGER"],
+  ];
+  for (const [name, ddl] of bugAdds) {
+    if (!bugCols.has(name)) db.exec(`ALTER TABLE bugs ADD COLUMN ${name} ${ddl}`);
+  }
+
+  const projectCols = new Set(columnNames(db, "projects"));
+  if (!projectCols.has("widget_token")) {
+    db.exec("ALTER TABLE projects ADD COLUMN widget_token TEXT");
+  }
+  if (!projectCols.has("widget_owner_user_id")) {
+    db.exec("ALTER TABLE projects ADD COLUMN widget_owner_user_id INTEGER");
+  }
+  db.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_widget_token ON projects(widget_token) WHERE widget_token IS NOT NULL"
+  );
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS capture_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      author_type TEXT NOT NULL CHECK(author_type IN ('user','api_key')),
+      author_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('review','done')),
+      title TEXT NOT NULL DEFAULT '',
+      transcript_json TEXT NOT NULL DEFAULT '[]',
+      duration_sec REAL,
+      truncated INTEGER NOT NULL DEFAULT 0,
+      video_filename TEXT,
+      video_mime TEXT,
+      video_size INTEGER,
+      video_path TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS capture_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      sort_index INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      quote TEXT NOT NULL DEFAULT '',
+      steps_json TEXT NOT NULL DEFAULT '[]',
+      evidence_sec REAL,
+      confidence TEXT NOT NULL DEFAULT '',
+      question TEXT NOT NULL DEFAULT '',
+      strokes_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL CHECK(status IN ('draft','kept','discarded','merged')),
+      merged_into_id INTEGER,
+      bug_id INTEGER,
+      frame_filename TEXT,
+      frame_mime TEXT,
+      frame_size INTEGER,
+      frame_path TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES capture_sessions(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS staged_uploads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_type TEXT NOT NULL CHECK(actor_type IN ('user','api_key')),
+      actor_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      storage_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_captures_project ON capture_sessions(project_id, id);
+    CREATE INDEX IF NOT EXISTS idx_drafts_session ON capture_drafts(session_id, sort_index);
+    CREATE INDEX IF NOT EXISTS idx_staged_actor ON staged_uploads(actor_type, actor_id, project_id);
+  `);
 }
 
 function ensureProjectProfile(db: Database.Database) {

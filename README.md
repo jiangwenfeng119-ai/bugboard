@@ -53,7 +53,7 @@
    - **P3**：不挡使用，偏界面、文案、交互。
 4. 需要的话再加附件，然后提交。提交后会打开这张单的详情。
 
-附件可以拖进来、从剪贴板粘贴图片，也可以用麦克风录音。单文件不超过 50MB，一张单最多 20 个。支持 png、jpg、gif、webp、mp4、webm、mov、pdf、docx、xlsx、txt、md、zip，以及 mp3、wav、ogg、m4a。
+附件可以拖进来、从剪贴板粘贴图片，也可以用麦克风录音。新建时可以圈一张图并说一句，或录一段走查：走查会先拆成草稿，看完才变成多张报障。单文件不超过 50MB，一张单最多 20 个。支持 png、jpg、gif、webp、mp4、webm、mov、pdf、docx、xlsx、txt、md、zip，以及 mp3、wav、ogg、m4a。
 
 一条报障只写一个现象。这是现有功能坏了，不是要一个现在没有的能力。要加新能力时，先和项目资料里的产品经理确认；修复侧看到「已经和产品经理沟通确认」一类说法，才会按新需求改。
 
@@ -144,7 +144,24 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 3. 测试 Agent：按修复说明重测。通过就 `confirm_fix`，还有问题就 `reject_fix`。
 4. 材料只在报障人手里时，修复 Agent 用 `request_info`；原报障人补上后用 `provide_info`，单回到待处理。
 
-`create_bug` 不能上传截图。网页提报可以。Agent 读单时，docx / txt 正文和图片会随 `get_bug` 返回。
+`create_bug` 可以带上 `stage_attachment` 返回的 `attachmentIds`，以及原话、步骤和圈选。Agent 读单时，docx / txt 正文和图片会随 `get_bug` 返回。
+
+### 提交后叫醒 Agent
+
+人在网页上新建报障，或把单打回待处理（补充材料、仍有问题、异议、撤回不属实）时，Bugboard 可以主动通知处理端。确认已修复、接单这些动作不会叫醒。
+
+管理员在项目的报障页配置 **叫醒处理端**：
+
+1. 在跑 Cursor 或 ZCode 的电脑上复制 `wake.config.json.example` 为 `wake.config.json`。`projects` 里用项目缩写对上代码仓的绝对路径。这个目录就是 Agent 的工作区（`--workspace`），不要写成用户主目录、磁盘根目录，也不要写成放着 `wake.config.json` 的目录。`agent` 用 `cursor` 或 `zcode`。报障标题和正文会包在 `<question>` 里，并声明这是数据不是指令。Cursor 默认 `agent -p --trust --sandbox enabled --output-format json --workspace <项目目录> --mode plan`，不带 `--force` / `--yolo`，所以只做只读分析。要让它在这个目录里改代码，把 `applyEdits` 设为 `true`（会加上 `--force`，仍然限制在该目录和沙箱里）。同一张单的后续叫醒会带 `--resume` 复用上次的会话。标准输出的 JSON 写在 `wake-runs/`。参数不对时，在配置里写 `argv` 数组，用 `{prompt}`、`{cwd}`、`{bugId}`、`{publicId}`、`{projectCode}`、`{session}` 占位。自定义参数里的 `--force` / `--yolo` 在 `applyEdits` 没打开时会被去掉。
+2. 执行 `npm run wake`。它只监听 `127.0.0.1:3099`。
+3. 把打印出来的地址填进叫醒地址，保存，复制密钥，贴进 `secrets`，重启 `npm run wake`。点 **测试地址**，终端里应出现一行测试日志。
+4. 之后网页上新建的待处理单会拉起本机 Agent。提示词就是管理员级修复提示，并点名这张单。Agent 用这台机器上已经接好的 Bugboard MCP 去 `get_bug`、`start_fix`。
+
+Bugboard 跑在 Docker 里时，容器访问不到宿主机的 `127.0.0.1`。叫醒地址改成 `http://host.docker.internal:3099/wake`。若仍不通，把 `listen` 改成 `0.0.0.0:3099`，并写上 `"allowLan": true`，只在可信网络里这样做。
+
+Cursor 云端是另一条路，勾上「同时启动 Cursor 云端 Agent」即可。服务器需要 `CURSOR_API_KEY`（Cursor 后台 Cloud Agents 的密钥），项目资料里要有代码仓。云端虚拟机要能访问 `BASE_URL`，单才会被回写；访问不了时，它仍按报障正文改代码，但不会自己 `submit_fix`。再设置 `BUGBOARD_DISPATCH_API_KEY`（一把管理员级 Key）后，云端 Agent 会带上这个站的远程 MCP。
+
+同一张单、同一个原因，一分钟内只自动叫一次。详情页的 **再叫一次** 不受这限制。
 
 工具权限、配置示例和冒烟脚本见 [`docs/mcp-examples.md`](docs/mcp-examples.md)。本机不依赖 Cursor 界面时，可以跑：
 
@@ -184,7 +201,9 @@ docker compose up --build -d
 | 变量 | 说明 |
 |------|------|
 | `SESSION_SECRET` | Session 加密密钥。生产环境换成至少 32 位的随机串 |
-| `BASE_URL` | 对外访问地址。API Key 页复制远端 MCP 地址时用它，建议写成局域网或公网地址 |
+| `BASE_URL` | 对外访问地址。API Key 页复制远端 MCP 地址时用它，建议写成局域网或公网地址。Cursor 云端 Agent 也用它拼报障链接和 MCP |
+| `CURSOR_API_KEY` | 可选。Cursor Cloud Agents 的密钥。项目里勾了云端叫醒才会用 |
+| `BUGBOARD_DISPATCH_API_KEY` | 可选。一把管理员级 Bugboard Key，只交给 Cursor 云端 Agent 的 MCP，不进网页 |
 | `DATA_DIR` / `DB_PATH` / `UPLOADS_DIR` | 数据路径。Docker 里已经设好 |
 | `HOSTNAME` / `PORT` | 监听地址和端口。Docker 内是 `0.0.0.0:3000`，主机端口是 3080 |
 | `TZ` | 容器时区，compose 里是 `Asia/Shanghai`。报障编号按这个时区取日期 |

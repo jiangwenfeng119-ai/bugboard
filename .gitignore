@@ -50,3 +50,9 @@ next-env.d.ts
 # Cursor MCP secrets (keep example)
 .cursor/mcp.json
 !.cursor/mcp.json.example
+
+# local agent wake listener (keep example)
+wake.config.json
+!wake.config.json.example
+wake.sessions.json
+wake-runs/

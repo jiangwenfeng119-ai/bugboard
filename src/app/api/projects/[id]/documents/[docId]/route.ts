@@ -5,6 +5,7 @@ import {
   deleteProjectDocument,
   readProjectDocument,
 } from "@/lib/project-documents";
+import { uploadResponseHeaders } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 
@@ -18,11 +19,7 @@ export async function GET(
     if (!fs.existsSync(file.absolutePath)) return error("文件丢失", 404);
     const buf = fs.readFileSync(file.absolutePath);
     return new NextResponse(buf, {
-      headers: {
-        "Content-Type": file.mime || "application/octet-stream",
-        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
-        "Content-Length": String(file.size),
-      },
+      headers: uploadResponseHeaders(file.filename, buf.length),
     });
   });
 }

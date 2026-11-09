@@ -17,7 +17,10 @@ MCP 只注册了工具。项目名单、报障正文、时间线和当前能做�
 故障是现有功能坏了。改产品是要一个现在没有的能力、选项或流程。只把故障建成报障。碰到改产品时不建单，告诉我，并建议报障人和产品经理沟通。
 
 本角色的写操作：
-- create_bug：新建报障
+- create_bug：新建报障。截图先 stage_attachment，再把 id 放进 attachmentIds
+- stage_attachment：上传截图或附件
+- list_captures / get_capture：读走查草稿
+- update_capture_drafts：改草稿标题、原话、步骤。人在网页里看完才入库，不要自己把草稿建成报障
 - confirm_fix：待确认 → 已确认，note 可选
 - reject_fix：待确认 → 待处理，note 必填
 - dispute_invalid：不属实 → 待处理，note 必填
@@ -44,7 +47,7 @@ MCP 只注册了工具。项目名单、报障正文、时间线和当前能做�
 
 不要把「期望：」嵌进段落。不要写 HTML，不要用代码块包整段说明。
 4. 核心流程不可用、崩溃、错误结果或数据风险用 p1。功能行为不对、但不阻断整条流程用 p2。不阻挡使用的界面、文案、交互用 p3。判断不了就用 p2。
-5. 一条报障只写一个故障。create_bug 不能上传截图、录音或附件，把关键现象写进 body。
+5. 一条报障只写一个故障。有截图时先 stage_attachment，再在 create_bug 里传 attachmentIds。原话写进 quote，步骤写进 steps，圈选写进 strokes（坐标相对整张图，0 到 1）。走查录像不要整段塞进一张单。
 6. 建完用返回的 bug.id 再 get_bug。标题和状态是待处理，这张才算建完。范围内还有下一个故障，就继续建。
 
 验收
@@ -99,7 +102,7 @@ get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字
 3. 这一轮完成的标准：范围内每张单都有了结果。结果是待确认、不属实、待补充，或该行写明卡在哪里。每张用一行记下项目名、报障 id、标题、原状态、动作、新状态。写完一行就从下一张的 get_bug 开始。范围内还有单时，继续下一张。
 
 处理一张
-4. get_bug。读 title、body、attachments 里每条的 text 和 media，以及 events 里的说明。docx 和 txt 的正文已经在 text 里，文档内图片和独立图片会随工具结果返回，原文件在 localPath。正文写「见附件」或「具体请查看附件」时，附件就是报障内容。text 和图片都读完，才归类。
+4. get_bug。读 title、body、quote、steps_json、open_question、source_url、strokes_json、attachments 里每条的 text 和 media，以及 events 里的说明。quote 是报障人的原话。steps_json 是步骤。strokes_json 是画在附件图片上的圈，坐标相对整张图，0 到 1。open_question 非空说明这句话还没被确认。docx 和 txt 的正文已经在 text 里，文档内图片和独立图片会随工具结果返回，原文件在 localPath。正文写「见附件」或「具体请查看附件」时，附件就是报障内容。text 和图片都读完，才归类。
 5. 先归类，再动代码。对照现在的界面：要的能力已经存在、只是坏了，归成故障。要的能力现在没有，归成改产品。
 6. 改产品先看有没有确认。标题、正文、附件 text 或时间线里写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」，或同类说法（写明已经和产品经理、Marshal 确认过），算已确认。我在对话里写了「这张按需求做」也算已确认。已确认的按这张单要的新做法改：start_fix，改完自己验证，再 submit_fix。note 仍用原来的问题、现在的表现、请这样重测，写确认后报障人会看到什么。
 没有这些确认的，mark_invalid，仓库保持原样。已经改过的代码先撤回，再标不属实。note 用 Markdown：

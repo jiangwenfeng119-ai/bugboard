@@ -99,6 +99,67 @@ export function saveUploadedFile(params: {
     .get(info.lastInsertRowid) as AttachmentRow;
 }
 
+const INLINE_EXT = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".pdf",
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".m4a",
+]);
+
+const MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".txt": "text/plain; charset=utf-8",
+  ".md": "text/plain; charset=utf-8",
+  ".zip": "application/zip",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".m4a": "audio/mp4",
+};
+
+export function mimeForFilename(filename: string) {
+  const ext = path.extname(filename).toLowerCase();
+  return MIME_BY_EXT[ext] || "application/octet-stream";
+}
+
+/** 下载时按扩展名决定类型，不采用客户端上报的 Content-Type。 */
+export function uploadResponseHeaders(filename: string, byteLength: number) {
+  const ext = path.extname(filename).toLowerCase();
+  const mime = mimeForFilename(filename);
+  const disposition = INLINE_EXT.has(ext) ? "inline" : "attachment";
+  return {
+    "Content-Type": mime,
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    "Content-Length": String(byteLength),
+  };
+}
+
 export function absoluteAttachmentPath(storagePath: string) {
-  return path.join(uploadsRoot(), storagePath);
+  const root = path.resolve(uploadsRoot());
+  const abs = path.resolve(root, storagePath);
+  const rel = path.relative(root, abs);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error("附件路径无效");
+  }
+  return abs;
 }

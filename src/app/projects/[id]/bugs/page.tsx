@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { DispatchPanel } from "@/components/AgentDispatch";
+import { getDispatchSettings } from "@/lib/dispatch";
 import { requireUser } from "@/lib/session-guard";
-import { isSuperAdminRole } from "@/lib/roles";
+import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityMark } from "@/components/PriorityMark";
@@ -10,6 +12,7 @@ import { formatDateTime, formatDateTimeShort } from "@/lib/time";
 import { BugFilters } from "./BugFilters";
 import { DeleteBugButton } from "./DeleteBugButton";
 import { NewBugPanel } from "./NewBugPanel";
+import { WidgetSnippet } from "./WidgetSnippet";
 import { HoverTip } from "@/components/HoverTip";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +91,7 @@ export default async function BugsPage({
   }>;
 }) {
   const identity = await requireUser();
+  const isAdmin = isAdminRole(identity.role);
   const canDelete = isSuperAdminRole(identity.role);
   const { id } = await params;
   const sp = await searchParams;
@@ -118,8 +122,15 @@ export default async function BugsPage({
           sort={order.sort}
           dir={order.dir}
         />
-        <NewBugPanel projectId={Number(id)} />
+        <div className="bb-bugs-actions">
+          {isAdmin ? <WidgetSnippet projectId={Number(id)} /> : null}
+          <NewBugPanel projectId={Number(id)} />
+        </div>
       </div>
+
+      {isAdmin ? (
+        <DispatchPanel projectId={Number(id)} initial={getDispatchSettings(identity, Number(id))} />
+      ) : null}
 
       {bugs.length === 0 ? (
         <EmptyState

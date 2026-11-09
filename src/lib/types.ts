@@ -58,6 +58,8 @@ export type ProjectRow = {
   slug: string;
   code: string;
   description: string;
+  widget_token: string | null;
+  widget_owner_user_id: number | null;
   created_at: string;
   updated_at: string;
 } & ProjectProfile;
@@ -72,6 +74,14 @@ export type BugRow = {
   status: BugStatus;
   reporter_type: ActorType;
   reporter_id: number;
+  quote: string;
+  steps_json: string;
+  evidence_sec: number | null;
+  strokes_json: string;
+  confidence: string;
+  open_question: string;
+  source_url: string;
+  capture_session_id: number | null;
   created_at: string;
   updated_at: string;
 };

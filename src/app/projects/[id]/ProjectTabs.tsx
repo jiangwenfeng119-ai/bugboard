@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconChart, IconTicket, IconUsers } from "@/components/Icons";
+import { IconCapture, IconChart, IconTicket, IconUsers } from "@/components/Icons";
 
 export function ProjectTabs({
   projectId,
@@ -19,6 +19,12 @@ export function ProjectTabs({
       label: "报障",
       icon: <IconTicket size={15} />,
       match: (p: string) => p.startsWith(`${base}/bugs`),
+    },
+    {
+      href: `${base}/captures`,
+      label: "走查",
+      icon: <IconCapture size={15} />,
+      match: (p: string) => p.startsWith(`${base}/captures`),
     },
     {
       href: `${base}/summary`,

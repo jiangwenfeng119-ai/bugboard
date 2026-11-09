@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth, error } from "@/lib/http";
 import { getDb } from "@/lib/db";
 import { getBug } from "@/lib/services";
-import { absoluteAttachmentPath } from "@/lib/uploads";
+import { absoluteAttachmentPath, uploadResponseHeaders } from "@/lib/uploads";
 import type { AttachmentRow, StatusEventRow } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -35,11 +35,7 @@ export async function GET(
     if (!fs.existsSync(abs)) return error("文件丢失", 404);
     const buf = fs.readFileSync(abs);
     return new NextResponse(buf, {
-      headers: {
-        "Content-Type": att.mime || "application/octet-stream",
-        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(att.filename)}`,
-        "Content-Length": String(att.size),
-      },
+      headers: uploadResponseHeaders(att.filename, buf.length),
     });
   });
 }

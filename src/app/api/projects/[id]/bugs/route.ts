@@ -1,8 +1,25 @@
 import { NextRequest } from "next/server";
 import { withAuth, json } from "@/lib/http";
+import { parseBugEvidence, type BugEvidenceInput } from "@/lib/evidence";
 import { createBug, listBugs } from "@/lib/services";
 import type { BugStatus, Priority } from "@/lib/types";
 import { assertUploadsReady, saveUploadedFile } from "@/lib/uploads";
+
+function evidenceInput(source: Record<string, unknown>): BugEvidenceInput | undefined {
+  const keys = [
+    "quote",
+    "steps",
+    "evidenceSec",
+    "strokes",
+    "confidence",
+    "openQuestion",
+    "sourceUrl",
+    "captureSessionId",
+    "attachmentIds",
+  ];
+  if (!keys.some((key) => source[key] != null && source[key] !== "")) return undefined;
+  return source;
+}
 
 export const runtime = "nodejs";
 
@@ -35,6 +52,7 @@ export async function POST(
     let title: string;
     let bodyText: string | undefined;
     let priority: Priority | undefined;
+    let evidence: BugEvidenceInput | undefined;
     let files: { filename: string; mime: string; buffer: Buffer }[] = [];
 
     if (contentType.includes("multipart/form-data")) {
@@ -42,6 +60,22 @@ export async function POST(
       title = String(form.get("title") || "");
       bodyText = String(form.get("body") || "") || undefined;
       priority = (String(form.get("priority") || "p2") as Priority) || "p2";
+      const record: Record<string, unknown> = {};
+      for (const key of [
+        "quote",
+        "steps",
+        "evidenceSec",
+        "strokes",
+        "confidence",
+        "openQuestion",
+        "sourceUrl",
+        "captureSessionId",
+        "attachmentIds",
+      ]) {
+        const value = form.get(key);
+        if (typeof value === "string") record[key] = value;
+      }
+      evidence = evidenceInput(record);
       for (const item of form.getAll("files")) {
         if (!(item instanceof File)) continue;
         files.push({
@@ -55,14 +89,17 @@ export async function POST(
       title = body.title;
       bodyText = body.body;
       priority = body.priority;
+      evidence = evidenceInput(body);
     }
 
-    assertUploadsReady(files, 0);
+    const parsedEvidence = evidence ? parseBugEvidence(evidence) : undefined;
+    assertUploadsReady(files, parsedEvidence?.attachmentIds.length || 0);
     const bug = createBug(identity, {
       projectId: Number(id),
       title,
       body: bodyText,
       priority,
+      evidence,
     });
     for (const f of files) {
       saveUploadedFile({
