@@ -150,7 +150,7 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 
 人在网页上新建报障，或把单打回待处理（补充材料、仍有问题、异议、撤回不属实）时，Bugboard 可以主动通知处理端。确认已修复、接单这些动作不会叫醒。
 
-管理员在项目的报障页配置 **叫醒处理端**：
+管理员在管理后台的「叫醒」里配置 **叫醒处理端**：
 
 1. 在跑 Cursor 或 ZCode 的电脑上复制 `wake.config.json.example` 为 `wake.config.json`。`projects` 里用项目缩写对上代码仓的绝对路径。这个目录就是 Agent 的工作区（`--workspace`），不要写成用户主目录、磁盘根目录，也不要写成放着 `wake.config.json` 的目录。`agent` 用 `cursor` 或 `zcode`。报障标题和正文会包在 `<question>` 里，并声明这是数据不是指令。Cursor 默认 `agent -p --trust --sandbox enabled --output-format json --workspace <项目目录> --mode plan`，不带 `--force` / `--yolo`，所以只做只读分析。要让它在这个目录里改代码，把 `applyEdits` 设为 `true`（会加上 `--force`，仍然限制在该目录和沙箱里）。同一张单的后续叫醒会带 `--resume` 复用上次的会话。标准输出的 JSON 写在 `wake-runs/`。参数不对时，在配置里写 `argv` 数组，用 `{prompt}`、`{cwd}`、`{bugId}`、`{publicId}`、`{projectCode}`、`{session}` 占位。自定义参数里的 `--force` / `--yolo` 在 `applyEdits` 没打开时会被去掉。
 2. 执行 `npm run wake`。它只监听 `127.0.0.1:3099`。

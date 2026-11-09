@@ -44,9 +44,11 @@ function resultText(item: DispatchRecent) {
 export function DispatchPanel({
   projectId,
   initial,
+  projects,
 }: {
   projectId: number;
   initial: DispatchSettings;
+  projects?: { id: number; name: string }[];
 }) {
   const router = useRouter();
   const [settings, setSettings] = useState(initial);
@@ -131,6 +133,29 @@ export function DispatchPanel({
       <p className="bb-muted bb-dispatch-lead">
         有人新建报障，或把单打回待处理后，通知本机的 Cursor、ZCode 或其他 Agent 来处理这张单。
       </p>
+      {projects && projects.length > 1 ? (
+        <div className="bb-field">
+          <label className="bb-label" htmlFor="bb-dispatch-project">
+            项目
+          </label>
+          <select
+            id="bb-dispatch-project"
+            className="bb-select"
+            value={projectId}
+            onChange={(event) => {
+              router.push(`/admin?tab=wake&project=${event.target.value}`);
+            }}
+          >
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : projects?.length === 1 ? (
+        <p className="bb-field-hint">项目：{projects[0].name}</p>
+      ) : null}
       <div className="bb-field">
         <label className="bb-label" htmlFor="bb-dispatch-url">
           叫醒地址

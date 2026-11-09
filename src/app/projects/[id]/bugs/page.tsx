@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { DispatchPanel } from "@/components/AgentDispatch";
-import { getDispatchSettings } from "@/lib/dispatch";
 import { requireUser } from "@/lib/session-guard";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
@@ -127,10 +125,6 @@ export default async function BugsPage({
           <NewBugPanel projectId={Number(id)} />
         </div>
       </div>
-
-      {isAdmin ? (
-        <DispatchPanel projectId={Number(id)} initial={getDispatchSettings(identity, Number(id))} />
-      ) : null}
 
       {bugs.length === 0 ? (
         <EmptyState

@@ -170,6 +170,20 @@ export function IconMessage({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconBell({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path
+        d="M8 2.3a3.3 3.3 0 0 0-3.3 3.3v1.6c0 .55-.18 1.08-.52 1.52L3.3 10.2h9.4l-.88-1.48A2.5 2.5 0 0 1 11.3 7.2V5.6A3.3 3.3 0 0 0 8 2.3Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M6.7 12a1.4 1.4 0 0 0 2.6 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconAlert({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>

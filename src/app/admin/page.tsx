@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { IconChart, IconKey, IconPencil, IconUsers } from "@/components/Icons";
+import { DispatchPanel } from "@/components/AgentDispatch";
+import { IconBell, IconChart, IconKey, IconPencil, IconUsers } from "@/components/Icons";
+import { getDispatchSettings } from "@/lib/dispatch";
 import { requireAdminUser } from "@/lib/session-guard";
 import {
   listApiKeys,
@@ -22,6 +24,7 @@ export const dynamic = "force-dynamic";
 const TABS = [
   { id: "users", href: "/admin", label: "用户", icon: IconUsers },
   { id: "keys", href: "/admin?tab=keys", label: "API Key", icon: IconKey },
+  { id: "wake", href: "/admin?tab=wake", label: "叫醒", icon: IconBell },
   { id: "analytics", href: "/admin?tab=analytics", label: "数据分析", icon: IconChart },
   { id: "prompts", href: "/admin?tab=prompts", label: "提示词", icon: IconPencil },
 ] as const;
@@ -35,14 +38,18 @@ function localMcpScriptPath() {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; range?: string }>;
+  searchParams: Promise<{ tab?: string; range?: string; project?: string }>;
 }) {
   const identity = await requireAdminUser();
   const sp = await searchParams;
   const tab =
-    sp.tab === "keys" || sp.tab === "analytics" || sp.tab === "prompts"
+    sp.tab === "keys" || sp.tab === "analytics" || sp.tab === "prompts" || sp.tab === "wake"
       ? sp.tab
       : "users";
+  const projects = tab === "wake" ? listProjects(identity) : [];
+  const requestedProject = Number(sp.project);
+  const wakeProject =
+    projects.find((project) => project.id === requestedProject) ?? projects[0] ?? null;
 
   return (
     <AppShell username={identity.username} role={identity.role}>
@@ -109,6 +116,22 @@ export default async function AdminPage({
       ) : null}
 
       {tab === "prompts" ? <AgentPromptsAdmin /> : null}
+
+      {tab === "wake" ? (
+        wakeProject ? (
+          <DispatchPanel
+            key={wakeProject.id}
+            projectId={wakeProject.id}
+            projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+            initial={getDispatchSettings(identity, wakeProject.id)}
+          />
+        ) : (
+          <section className="bb-card bb-section-card">
+            <h2>叫醒处理端</h2>
+            <p className="bb-muted">还没有可配置的项目。</p>
+          </section>
+        )
+      ) : null}
     </AppShell>
   );
 }
