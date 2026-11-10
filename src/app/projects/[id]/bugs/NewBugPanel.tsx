@@ -216,6 +216,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
 
           <CaptureTools
             projectId={projectId}
+            draftPending={Boolean(title.trim() || body.trim() || files.length || quote.trim())}
             onSnap={({ file, note, strokes: marks }) => {
               addCapturedFile(file);
               setStrokes(marks);

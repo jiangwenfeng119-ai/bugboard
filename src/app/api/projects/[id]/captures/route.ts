@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import { createCaptureSession, listCaptureSessions } from "@/lib/captures";
+import { getDb } from "@/lib/db";
+import { glossaryPrompt } from "@/lib/glossary";
 import { withAuth, json } from "@/lib/http";
 import type { Stroke } from "@/lib/strokes";
 import { parseStrokes } from "@/lib/strokes";
+import { transcribeSpeech } from "@/lib/transcribe";
 import type { Segment } from "@/lib/transcript";
 
 export const runtime = "nodejs";
@@ -62,12 +65,16 @@ export async function POST(
             buffer: Buffer.from(await videoItem.arrayBuffer()),
           }
         : null;
+    let segments = transcript.map((segment) => ({
+      start: Number(segment.start) || 0,
+      end: Number(segment.end) || 0,
+      text: String(segment.text || ""),
+    }));
+    if (video && !segments.some((segment) => segment.text.trim())) {
+      segments = await serverTranscript(Number(id), video, segments);
+    }
     const session = createCaptureSession(identity, Number(id), {
-      transcript: transcript.map((segment) => ({
-        start: Number(segment.start) || 0,
-        end: Number(segment.end) || 0,
-        text: String(segment.text || ""),
-      })),
+      transcript: segments,
       durationSec: duration == null || duration === "" ? null : Number(duration),
       truncated: String(form.get("truncated") || "") === "1",
       video,
@@ -75,4 +82,33 @@ export async function POST(
     });
     return json({ session }, 201);
   });
+}
+
+async function serverTranscript(
+  projectId: number,
+  video: { filename: string; mime: string; buffer: Buffer },
+  segments: Segment[]
+) {
+  const project = getDb()
+    .prepare(
+      `SELECT name, description, tech_stack, product_manager, experience_officer, agent_notes
+       FROM projects WHERE id = ?`
+    )
+    .get(projectId) as
+    | {
+        name: string;
+        description: string;
+        tech_stack: string;
+        product_manager: string;
+        experience_officer: string;
+        agent_notes: string;
+      }
+    | undefined;
+  try {
+    const heard = await transcribeSpeech(video, glossaryPrompt(project || {}));
+    if (heard.available && heard.segments.length) return heard.segments;
+  } catch {
+    // 浏览器没听到时，服务端转写失败也不丢掉录像。
+  }
+  return segments;
 }

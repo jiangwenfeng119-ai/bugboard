@@ -8,7 +8,7 @@ import { BUG_TITLE_MAX } from "./limits";
 import { uploadsRoot } from "./paths";
 import { canAccessProject } from "./permissions";
 import type { Stroke } from "./strokes";
-import { splitTranscript, type FrameMark, type Segment } from "./transcript";
+import { splitTranscript, type DraftSeed, type FrameMark, type Segment } from "./transcript";
 import type { Identity } from "./types";
 import { absoluteAttachmentPath, assertAllowedUpload, saveUploadedFile } from "./uploads";
 
@@ -132,6 +132,33 @@ function loadSession(identity: Identity, sessionId: number) {
   return { row, drafts };
 }
 
+const UNHEARD_QUESTION = "没有识别到话。看录像，把现象写进标题后再留下。";
+
+/** Speech can fail while the recording is real. Keep one draft the person can write. */
+export function draftsFromCapture(
+  transcript: Segment[],
+  marks: FrameMark[],
+  source: { hasVideo: boolean; durationSec: number | null }
+): DraftSeed[] {
+  const seeds = splitTranscript(transcript, marks);
+  if (seeds.length || !source.hasVideo) return seeds;
+  return [
+    {
+      title: "这段走查",
+      body: "",
+      quote: "",
+      spoken: "",
+      steps: [],
+      evidenceSec: 0,
+      evidenceEnd: source.durationSec,
+      confidence: "low",
+      question: UNHEARD_QUESTION,
+      strokes: [],
+      frameIndex: null,
+    },
+  ];
+}
+
 function getProjectForCapture(identity: Identity, projectId: number) {
   const project = getDb().prepare("SELECT id FROM projects WHERE id = ?").get(projectId);
   if (!project) throw new Error("项目不存在");
@@ -160,7 +187,10 @@ export function createCaptureSession(
     note: frame.note,
     strokes: frame.strokes,
   }));
-  const seeds = splitTranscript(input.transcript, marks);
+  const seeds = draftsFromCapture(input.transcript, marks, {
+    hasVideo: Boolean(input.video?.buffer.length),
+    durationSec: input.durationSec ?? null,
+  });
   if (!seeds.length) throw new Error("没有整理出草稿");
   const actor = actorFromIdentity(identity);
   const t = nowIso();

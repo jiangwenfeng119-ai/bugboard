@@ -181,6 +181,28 @@ describe("capture sessions", () => {
     expect(committed.session.status).toBe("done");
     await expect(captures.commitCaptureSession(qa, session.id)).rejects.toThrow(/已经整理完/);
 
+    const silent = captures.createCaptureSession(qa, project.id, {
+      transcript: [],
+      durationSec: 12,
+      video: { filename: "走查.webm", mime: "video/webm", buffer: Buffer.from("webm") },
+    });
+    expect(silent.drafts).toHaveLength(1);
+    expect(silent.title).toBe("这段走查");
+    expect(silent.drafts[0].confidence).toBe("low");
+    expect(silent.drafts[0].question).toMatch(/没有识别到话/);
+    expect(silent.videoUrl).toBeTruthy();
+
+    const retracted = captures.createCaptureSession(qa, project.id, {
+      transcript: [{ start: 0, end: 1, text: "不对" }],
+      video: { filename: "走查.webm", mime: "video/webm", buffer: Buffer.from("webm2") },
+    });
+    expect(retracted.drafts).toHaveLength(1);
+    expect(() =>
+      captures.createCaptureSession(qa, project.id, {
+        transcript: [{ start: 0, end: 1, text: "不对" }],
+      })
+    ).toThrow(/没有整理出草稿/);
+
     const mine = staged.stageUpload(qa, project.id, {
       filename: "证据.png",
       buffer: Buffer.from("mine"),

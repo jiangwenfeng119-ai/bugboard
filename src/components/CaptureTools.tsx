@@ -10,18 +10,22 @@ import type { Segment } from "@/lib/transcript";
 const VIDEO_CAP = 48 * 1024 * 1024;
 
 type Speech = { stop: () => void };
+type SpeechMode = "voice" | "walk" | "note";
 
 export function CaptureTools({
   projectId,
+  draftPending,
   onSnap,
   onVoice,
 }: {
   projectId: number;
+  draftPending: boolean;
   onSnap: (item: { file: File; note: string; strokes: Stroke[] }) => void;
   onVoice: (item: { file: File; text: string }) => void;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [landed, setLanded] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [partial, setPartial] = useState("");
@@ -31,8 +35,14 @@ export function CaptureTools({
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [heard, setHeard] = useState(false);
+  const [speechNote, setSpeechNote] = useState("");
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const speechRef = useRef<Speech | null>(null);
+  const speechStop = useRef(false);
   const finalsRef = useRef("");
+  const partialRef = useRef("");
   const noteDirty = useRef(false);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -47,6 +57,8 @@ export function CaptureTools({
   const pausedMs = useRef(0);
   const pauseBegan = useRef(0);
   const shotsRef = useRef<{ t: number; note: string; strokes: Stroke[]; file: File }[]>([]);
+  const pendingRef = useRef<FormData | null>(null);
+  const busyRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +66,7 @@ export function CaptureTools({
     return () => {
       stopSpeech();
       stopMeter();
-      if (timerRef.current) window.clearInterval(timerRef.current);
+      stopClock();
       streamsRef.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
       void audioRef.current?.close();
       if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -64,9 +76,11 @@ export function CaptureTools({
   }, []);
 
   function stopSpeech() {
+    speechStop.current = true;
     speechRef.current?.stop();
     speechRef.current = null;
     setSpeaking(false);
+    partialRef.current = "";
     setPartial("");
   }
 
@@ -75,26 +89,88 @@ export function CaptureTools({
     meterRef.current = null;
   }
 
+  function stopClock() {
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = null;
+  }
+
+  function startClock() {
+    startedAt.current = performance.now();
+    pausedMs.current = 0;
+    pauseBegan.current = 0;
+    setSeconds(0);
+    stopClock();
+    timerRef.current = window.setInterval(() => setSeconds(Math.floor(elapsed())), 500);
+  }
+
   function elapsed() {
     const pausedExtra = pauseBegan.current ? performance.now() - pauseBegan.current : 0;
     return Math.max(0, (performance.now() - startedAt.current - pausedMs.current - pausedExtra) / 1000);
   }
 
-  function beginSpeech(onFinalExtra?: (text: string, at: number) => void) {
+  function releaseStreams() {
+    streamsRef.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+    streamsRef.current = [];
+    void audioRef.current?.close();
+    audioRef.current = null;
+  }
+
+  function consumePartial() {
+    const text = partialRef.current.trim();
+    partialRef.current = "";
+    setPartial("");
+    if (!text || finalsRef.current.endsWith(text)) return;
+    const at = elapsed();
+    segmentsRef.current.push({ start: segmentStart.current, end: at, text });
+    segmentStart.current = at;
+    finalsRef.current = `${finalsRef.current} ${text}`.trim();
+    if (!noteDirty.current) setNote(finalsRef.current);
+    setHeard(true);
+  }
+
+  function beginSpeech(mode: SpeechMode, onFinalExtra?: (text: string, at: number) => void) {
     finalsRef.current = "";
+    partialRef.current = "";
+    speechStop.current = false;
     const handle = startLiveSpeech({
-      onPartial: setPartial,
-      onFinal: (text) => {
-        if (!text) return;
-        finalsRef.current = `${finalsRef.current} ${text}`.trim();
-        if (!noteDirty.current) setNote(finalsRef.current);
-        onFinalExtra?.(text, elapsed());
-        setPartial("");
+      onPartial: (text) => {
+        partialRef.current = text;
+        setPartial(text);
+        if (text) setHeard(true);
       },
-      onEnd: () => setSpeaking(false),
+      onFinal: (text) => {
+        partialRef.current = "";
+        if (!text) return;
+        const duplicate = finalsRef.current.endsWith(text);
+        if (!duplicate) {
+          finalsRef.current = `${finalsRef.current} ${text}`.trim();
+          onFinalExtra?.(text, elapsed());
+        }
+        if (!noteDirty.current) setNote(finalsRef.current);
+        setPartial("");
+        setHeard(true);
+      },
+      onEnd: () => {
+        setSpeaking(false);
+        if (!speechStop.current && mode === "walk" && mediaRef.current) {
+          setSpeechNote("语音识别停了，录像仍会留下。");
+        }
+      },
     });
     if (!handle) {
-      setError(speechSupported() ? "语音识别没有启动" : "这个浏览器没有实时语音识别，仍可以录音后改字");
+      if (mode === "walk") {
+        setSpeechNote(
+          speechSupported()
+            ? "语音识别没有启动，录像仍会留下，完成后可以自己写。"
+            : "这个浏览器不会边录边转写，完成后可以自己写。"
+        );
+      } else {
+        setError(
+          speechSupported()
+            ? "语音识别没有启动。仍可以录音，停下来后自己改字。"
+            : "这个浏览器没有实时语音识别。仍可以录音，停下来后自己改字。"
+        );
+      }
       return;
     }
     speechRef.current = handle;
@@ -107,6 +183,7 @@ export function CaptureTools({
       return;
     }
     setError("");
+    setLanded("");
     noteDirty.current = false;
     finalsRef.current = "";
     setNote("");
@@ -116,6 +193,7 @@ export function CaptureTools({
 
   async function shareFrame() {
     setError("");
+    setLanded("");
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const video = document.createElement("video");
@@ -129,12 +207,14 @@ export function CaptureTools({
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
       if (!blob) throw new Error("没有截到画面");
       openImage(new File([blob], "共享画面.png", { type: "image/png" }));
-    } catch {
-      setError("没有共享到画面");
+    } catch (caught) {
+      if (pickerCancelled(caught)) return;
+      setError("没有共享到画面。再选一次窗口。");
     }
   }
 
   async function finishVoice(blob: Blob) {
+    consumePartial();
     const browserText = finalsRef.current.trim();
     let text = browserText;
     try {
@@ -150,11 +230,18 @@ export function CaptureTools({
       file: new File([blob], `录音-${Date.now()}.webm`, { type: blob.type || "audio/webm" }),
       text,
     });
+    setLanded(
+      text
+        ? `已写入这张单：${text}`
+        : "录音已放进附件。没有识别到文字，写在描述里即可。"
+    );
   }
 
   async function recordVoice() {
     setError("");
+    setLanded("");
     if (mediaRef.current) {
+      consumePartial();
       mediaRef.current.stop();
       stopSpeech();
       return;
@@ -172,26 +259,54 @@ export function CaptureTools({
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         mediaRef.current = null;
         setRecording(null);
+        stopClock();
         void finishVoice(blob);
       };
       mediaRef.current = recorder;
       recorder.start();
       setRecording("voice");
       noteDirty.current = false;
-      beginSpeech();
+      startClock();
+      beginSpeech("voice");
     } catch {
-      setError("无法访问麦克风");
+      releaseStreams();
+      setError("无法访问麦克风。允许麦克风后再说。");
     }
+  }
+
+  function requestWalk() {
+    setError("");
+    setLanded("");
+    if (draftPending) {
+      setConfirmLeave(true);
+      return;
+    }
+    void startWalk();
   }
 
   async function startWalk() {
     setError("");
+    setLanded("");
+    setConfirmLeave(false);
+    setSpeechNote("");
+    setHeard(false);
+    setHeld(false);
+    pendingRef.current = null;
     try {
       const display = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 15 },
         audio: true,
       });
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamsRef.current = [display];
+      let mic: MediaStream;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        display.getTracks().forEach((track) => track.stop());
+        streamsRef.current = [];
+        setError("无法访问麦克风。允许麦克风后再录。");
+        return;
+      }
       streamsRef.current = [display, mic];
       const audio = new AudioContext();
       audioRef.current = audio;
@@ -203,10 +318,7 @@ export function CaptureTools({
       const analyser = audio.createAnalyser();
       micSource.connect(analyser);
       analyser.fftSize = 256;
-      const mixed = new MediaStream([
-        ...display.getVideoTracks(),
-        ...dest.stream.getAudioTracks(),
-      ]);
+      const mixed = new MediaStream([...display.getVideoTracks(), ...dest.stream.getAudioTracks()]);
       const recorder = new MediaRecorder(mixed);
       chunksRef.current = [];
       bytesRef.current = 0;
@@ -219,15 +331,11 @@ export function CaptureTools({
         if (bytesRef.current >= VIDEO_CAP) void finishWalk(true);
       };
       mediaRef.current = recorder;
-      startedAt.current = performance.now();
-      pausedMs.current = 0;
-      pauseBegan.current = 0;
       segmentStart.current = 0;
       recorder.start(1000);
       setRecording("walk");
       setPaused(false);
-      setSeconds(0);
-      timerRef.current = window.setInterval(() => setSeconds(Math.floor(elapsed())), 500);
+      startClock();
       const data = new Uint8Array(analyser.fftSize);
       const tick = () => {
         analyser.getByteTimeDomainData(data);
@@ -241,15 +349,18 @@ export function CaptureTools({
       };
       tick();
       noteDirty.current = false;
-      beginSpeech((text, at) => {
+      beginSpeech("walk", (text, at) => {
         segmentsRef.current.push({ start: segmentStart.current, end: at, text });
         segmentStart.current = at;
       });
       display.getVideoTracks()[0]?.addEventListener("ended", () => {
         if (mediaRef.current?.state === "recording") void finishWalk(false);
       });
-    } catch {
-      setError("没有开始录屏");
+    } catch (caught) {
+      releaseStreams();
+      mediaRef.current = null;
+      if (pickerCancelled(caught)) return;
+      setError("没有开始录屏。再选一次要共享的画面。");
     }
   }
 
@@ -287,47 +398,73 @@ export function CaptureTools({
   }
 
   async function finishWalk(truncated: boolean) {
-    const recorder = mediaRef.current;
-    if (!recorder || busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    stopSpeech();
-    stopMeter();
-    if (timerRef.current) window.clearInterval(timerRef.current);
-    const blob = await new Promise<Blob>((resolve) => {
-      recorder.onstop = () => {
-        resolve(new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" }));
-      };
-      if (recorder.state !== "inactive") recorder.stop();
-      else resolve(new Blob(chunksRef.current, { type: "video/webm" }));
-    });
-    streamsRef.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
-    void audioRef.current?.close();
-    mediaRef.current = null;
-    setRecording(null);
-    const form = new FormData();
-    form.set("transcript", JSON.stringify(segmentsRef.current));
-    form.set("durationSec", String(elapsed()));
-    form.set("truncated", truncated || blob.size >= VIDEO_CAP ? "1" : "0");
-    if (blob.size && blob.size <= 50 * 1024 * 1024) {
-      form.set("video", new File([blob], "走查.webm", { type: blob.type || "video/webm" }));
+    setError("");
+    try {
+      if (!pendingRef.current) {
+        const recorder = mediaRef.current;
+        if (!recorder) return;
+        consumePartial();
+        stopSpeech();
+        stopMeter();
+        stopClock();
+        const blob = await new Promise<Blob>((resolve) => {
+          recorder.onstop = () => {
+            resolve(new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" }));
+          };
+          if (recorder.state !== "inactive") recorder.stop();
+          else resolve(new Blob(chunksRef.current, { type: "video/webm" }));
+        });
+        releaseStreams();
+        mediaRef.current = null;
+        setRecording(null);
+        const form = new FormData();
+        form.set("transcript", JSON.stringify(segmentsRef.current));
+        form.set("durationSec", String(elapsed()));
+        form.set("truncated", truncated || blob.size >= VIDEO_CAP ? "1" : "0");
+        if (blob.size && blob.size <= 50 * 1024 * 1024) {
+          form.set("video", new File([blob], "走查.webm", { type: blob.type || "video/webm" }));
+        }
+        form.set(
+          "frames",
+          JSON.stringify(shotsRef.current.map((shot) => ({ t: shot.t, note: shot.note, strokes: shot.strokes })))
+        );
+        shotsRef.current.forEach((shot, index) => form.set(`frame-${index}`, shot.file));
+        pendingRef.current = form;
+      }
+      const res = await fetch(`/api/projects/${projectId}/captures`, {
+        method: "POST",
+        body: pendingRef.current,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = (data as { error?: string }).error || "走查没有保存";
+        if (res.status >= 500) {
+          setHeld(true);
+          setError(`${message}。录像还在，可以再保存一次。`);
+          return;
+        }
+        pendingRef.current = null;
+        setHeld(false);
+        setError(message === "走查是空的" ? "这段是空的，没有留下。说一句或截一张后再录一次。" : message);
+        return;
+      }
+      pendingRef.current = null;
+      setHeld(false);
+      const sessionId = (data as { session?: { id: number } }).session?.id;
+      if (sessionId) router.push(`/projects/${projectId}/captures/${sessionId}`);
+    } catch {
+      setHeld(true);
+      setError("网络异常，录像还在。再保存一次。");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
-    form.set(
-      "frames",
-      JSON.stringify(
-        shotsRef.current.map((shot) => ({ t: shot.t, note: shot.note, strokes: shot.strokes }))
-      )
-    );
-    shotsRef.current.forEach((shot, index) => form.set(`frame-${index}`, shot.file));
-    const res = await fetch(`/api/projects/${projectId}/captures`, { method: "POST", body: form });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) {
-      setError((data as { error?: string }).error || "走查没有保存");
-      return;
-    }
-    const sessionId = (data as { session?: { id: number } }).session?.id;
-    if (sessionId) router.push(`/projects/${projectId}/captures/${sessionId}`);
   }
+
+  const hearing = speechNote || (heard || partial ? partial || "正在听写" : "还没听到话。截一张也会留下。");
 
   return (
     <div className="bb-cap-tools">
@@ -342,14 +479,23 @@ export function CaptureTools({
         <button type="button" className="bb-btn bb-btn-ghost" onClick={() => cameraRef.current?.click()} disabled={recording === "walk"}>
           拍照
         </button>
-        <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void recordVoice()} disabled={recording === "walk"}>
-          {recording === "voice" ? "停止并填入" : "说一句"}
-        </button>
-        <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void startWalk()} disabled={recording !== null}>
-          录一段走查
+        <button
+          type="button"
+          className="bb-btn bb-btn-ghost"
+          onClick={() => void recordVoice()}
+          disabled={recording === "walk"}
+          aria-pressed={recording === "voice"}
+        >
+          {recording === "voice" ? "停止" : "说一句"}
         </button>
       </div>
-      <p className="bb-field-hint">圈图和语音会写进这张单。走查会拆成草稿，看完才入库。</p>
+      <p className="bb-field-hint">圈图和语音写进这张单。</p>
+      {recording === "voice" ? (
+        <p className="bb-cap-status" role="status">
+          正在听 {formatClock(seconds)}。停止后写入这张单。
+        </p>
+      ) : null}
+      {landed ? <p className="bb-success">{landed}</p> : null}
       {error ? <p className="bb-error">{error}</p> : null}
       <input
         ref={fileRef}
@@ -384,7 +530,7 @@ export function CaptureTools({
             noteDirty.current = true;
             setNote(value);
           }}
-          onSpeak={() => (speaking ? stopSpeech() : beginSpeech())}
+          onSpeak={() => (speaking ? stopSpeech() : beginSpeech("note"))}
           onCancel={() => {
             stopSpeech();
             URL.revokeObjectURL(imageUrl);
@@ -396,6 +542,7 @@ export function CaptureTools({
               shotsRef.current.push({ t: elapsed(), note, strokes, file });
             } else {
               onSnap({ file, note, strokes });
+              setLanded(note.trim() ? `已写入这张单：${note.trim()}` : "这张图已放进附件。");
             }
             stopSpeech();
             URL.revokeObjectURL(imageUrl);
@@ -412,6 +559,7 @@ export function CaptureTools({
           <span className="bb-cap-meter" aria-hidden>
             <span style={{ width: `${Math.round(level * 100)}%` }} />
           </span>
+          <p>{hearing}</p>
           <button type="button" className="bb-btn bb-btn-ghost" onClick={togglePause}>
             {paused ? "继续" : "暂停"}
           </button>
@@ -422,9 +570,43 @@ export function CaptureTools({
             {busy ? "整理中…" : "完成"}
           </button>
         </div>
-      ) : null}
+      ) : held ? (
+        <div className="bb-cap-walk">
+          <p className="bb-field-hint">录像还在这页上，保存成功后才会去整理草稿。</p>
+          <div className="bb-cap-actions">
+            <button type="button" className="bb-btn" onClick={() => void finishWalk(false)} disabled={busy}>
+              {busy ? "整理中…" : "再保存一次"}
+            </button>
+          </div>
+        </div>
+      ) : confirmLeave ? (
+        <div className="bb-cap-walk">
+          <p className="bb-field-hint">走查会离开这张单，已写的标题、描述和附件不会带过去。</p>
+          <div className="bb-cap-actions">
+            <button type="button" className="bb-btn" onClick={() => void startWalk()}>
+              继续录
+            </button>
+            <button type="button" className="bb-btn bb-btn-ghost" onClick={() => setConfirmLeave(false)}>
+              留在这张单
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bb-cap-walk">
+          <p className="bb-field-hint">边说边录屏幕。录完离开这张单，拆成草稿，看完才入库。</p>
+          <div className="bb-cap-actions">
+            <button type="button" className="bb-btn bb-btn-secondary" onClick={requestWalk} disabled={recording !== null}>
+              录一段走查
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function pickerCancelled(error: unknown) {
+  return error instanceof DOMException && (error.name === "AbortError" || error.name === "NotAllowedError");
 }
 
 function formatClock(total: number) {
