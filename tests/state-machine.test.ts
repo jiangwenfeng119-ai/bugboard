@@ -95,6 +95,70 @@ describe("state machine", () => {
     if (good.ok) expect(good.to).toBe("pending");
   });
 
+  it("lets the reporter accept an invalid bug into a terminal state", () => {
+    expect(allowedActions(reporter, "invalid", "user", 2)).toContain(
+      "accept_invalid"
+    );
+    expect(allowedActions(admin, "invalid", "user", 2)).not.toContain(
+      "accept_invalid"
+    );
+    expect(allowedActions(other, "invalid", "user", 2)).not.toContain(
+      "accept_invalid"
+    );
+
+    const accepted = validateTransition({
+      action: "accept_invalid",
+      from: "invalid",
+      identity: reporter,
+      reporterType: "user",
+      reporterId: 2,
+    });
+    expect(accepted.ok).toBe(true);
+    if (accepted.ok) expect(accepted.to).toBe("acknowledged");
+
+    const denied = validateTransition({
+      action: "accept_invalid",
+      from: "invalid",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+    });
+    expect(denied.ok).toBe(false);
+
+    const wrongStatus = validateTransition({
+      action: "accept_invalid",
+      from: "pending",
+      identity: reporter,
+      reporterType: "user",
+      reporterId: 2,
+    });
+    expect(wrongStatus.ok).toBe(false);
+
+    expect(
+      allowedActions(reporter, "acknowledged", "user", 2)
+    ).toEqual([]);
+    expect(
+      validateTransition({
+        action: "dispute_invalid",
+        from: "acknowledged",
+        identity: reporter,
+        reporterType: "user",
+        reporterId: 2,
+        note: "还是有问题",
+      }).ok
+    ).toBe(false);
+    expect(
+      validateTransition({
+        action: "reopen_invalid",
+        from: "acknowledged",
+        identity: admin,
+        reporterType: "user",
+        reporterId: 2,
+        note: "判错了",
+      }).ok
+    ).toBe(false);
+  });
+
   it("lets an admin withdraw a submitted fix without confirming it", () => {
     expect(allowedActions(admin, "awaiting_confirm", "user", 2)).toEqual([
       "withdraw_fix",

@@ -3,6 +3,7 @@ import {
   IconBan,
   IconCheck,
   IconClock,
+  IconStamp,
   IconInbox,
   IconMessage,
   IconWrench,
@@ -28,6 +29,8 @@ export function StatIcon({
       return <IconClock {...common} />;
     case "confirmed":
       return <IconCheck {...common} />;
+    case "acknowledged":
+      return <IconStamp {...common} />;
     case "invalid":
       return <IconBan {...common} />;
   }

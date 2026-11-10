@@ -3,10 +3,15 @@ import os from "os";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import {
+  assertAgentCommand,
   assertWorkdir,
   buildLaunchArgv,
+  createWakeServer,
+  planAgentLaunches,
   readSession,
+  resolveAgents,
   sessionKey,
+  sessionKeyFor,
   signatureOk,
   sign,
   takeSessionId,
@@ -91,6 +96,83 @@ describe("wake agent launch", () => {
     fs.writeFileSync(path.join(root, "wake.config.json"), "{}");
     expect(() => assertWorkdir(root)).toThrow(/叫醒密钥/);
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("organizes a walkthrough with plan mode and tries the next local agent", () => {
+    const vars = {
+      prompt: "这一轮只整理走查。不要创建报障，不要改代码。",
+      cwd: "/work/counter",
+      bugId: "",
+      publicId: "",
+      projectCode: "SOC",
+    };
+    expect(sessionKeyFor("capture.needs_organize", "SOC", "9")).toBe("capture:SOC:9");
+    expect(sessionKeyFor("bug.needs_agent", "SOC", "9")).toBe("bug:SOC:9");
+    expect(resolveAgents(undefined, "cursor")).toEqual([{ kind: "cursor", command: "" }]);
+    expect(resolveAgents([], "cursor")).toEqual([]);
+
+    const launches = planAgentLaunches({
+      agents: [
+        { kind: "cursor", command: "" },
+        { kind: "zcode", command: "" },
+        { kind: "command", command: "my-agent" },
+      ],
+      job: "organize",
+      applyEdits: true,
+      sessionId: "sess_fix",
+      vars,
+    });
+    expect(launches).toHaveLength(3);
+    expect(launches[0].args).toContain("--mode");
+    expect(launches[0].args[launches[0].args.indexOf("--mode") + 1]).toBe("plan");
+    expect(launches[0].args).not.toContain("--force");
+    expect(launches[0].args).not.toContain("--resume");
+    expect(launches[0].args).not.toContain("sess_fix");
+    expect(launches[1].command).toBe("zcode");
+    expect(launches[1].args).not.toContain("--force");
+    expect(launches[2]).toEqual({ command: "my-agent", args: [vars.prompt] });
+    expect(() => assertAgentCommand("bash")).toThrow(/不能用这个命令/);
+    expect(() => assertAgentCommand("../agent")).toThrow(/命令无效/);
+  });
+
+  it("refuses to launch a shell when asked to organize a walkthrough", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wake-http-"));
+    const config = {
+      listen: "127.0.0.1:0",
+      agent: "cursor",
+      argv: null,
+      allowLan: false,
+      applyEdits: true,
+      secrets: ["whsec_test"],
+      cwd: "",
+      projects: { SOC: root },
+      sessionFile: path.join(root, "sessions.json"),
+      runDir: path.join(root, "runs"),
+    };
+    const server = createWakeServer(config);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const body = JSON.stringify({
+      event: "capture.needs_organize",
+      project: { code: "SOC", id: 1, name: "柜台" },
+      capture: { id: 3 },
+      prompt: "只整理走查。不要创建报障，不要修改代码。",
+      agents: [{ kind: "command", command: "bash" }],
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/wake`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Bugboard-Signature": `sha256=${sign("whsec_test", body)}`,
+      },
+      body,
+    });
+    const payload = (await res.json()) as { error?: string };
+    server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(res.status).toBe(400);
+    expect(payload.error).toMatch(/不能用这个命令/);
   });
 
   it("reuses a saved session id for the same bug", () => {

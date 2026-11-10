@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { createCaptureSession, listCaptureSessions } from "@/lib/captures";
+import { createCaptureSession, getCaptureSession, listCaptureSessions } from "@/lib/captures";
+import { scheduleCaptureOrganize } from "@/lib/dispatch";
 import { getDb } from "@/lib/db";
 import { glossaryPrompt } from "@/lib/glossary";
 import { withAuth, json } from "@/lib/http";
@@ -80,7 +81,8 @@ export async function POST(
       video,
       frames,
     });
-    return json({ session }, 201);
+    scheduleCaptureOrganize(identity, session.id);
+    return json({ session: getCaptureSession(identity, session.id) }, 201);
   });
 }
 

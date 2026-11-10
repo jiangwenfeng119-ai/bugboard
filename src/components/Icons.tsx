@@ -50,6 +50,15 @@ export function IconCheck({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconStamp({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <circle cx="8" cy="8" r="5.1" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5.6 8.15 7.15 9.7l3.25-3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IconLogout({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>

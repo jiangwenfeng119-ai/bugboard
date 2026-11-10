@@ -50,14 +50,13 @@ export function CreateProjectForm() {
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="bb-card"
-      style={{ padding: "0.9rem", minWidth: 320 }}
-    >
+    <form onSubmit={onSubmit} className="bb-card bb-create-project">
       <div className="bb-field">
-        <label className="bb-label">项目名称</label>
+        <label className="bb-label" htmlFor="new-project-name">
+          项目名称
+        </label>
         <input
+          id="new-project-name"
           className="bb-input"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -79,8 +78,11 @@ export function CreateProjectForm() {
         />
       </div>
       <div className="bb-field">
-        <label className="bb-label">说明</label>
+        <label className="bb-label" htmlFor="new-project-desc">
+          说明
+        </label>
         <input
+          id="new-project-desc"
           className="bb-input"
           value={description}
           onChange={(e) => setDescription(e.target.value)}

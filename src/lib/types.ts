@@ -1,6 +1,7 @@
 import type { ProjectProfile } from "./project-profile";
 
 export type Role = "user" | "admin" | "superadmin";
+export type ProjectRole = "user" | "admin";
 export type ActorType = "user" | "api_key";
 export type Priority = "p1" | "p2" | "p3";
 export type BugStatus =
@@ -9,6 +10,7 @@ export type BugStatus =
   | "needs_info"
   | "awaiting_confirm"
   | "confirmed"
+  | "acknowledged"
   | "invalid";
 
 export const STATUS_LABEL: Record<BugStatus, string> = {
@@ -17,6 +19,7 @@ export const STATUS_LABEL: Record<BugStatus, string> = {
   needs_info: "待补充",
   awaiting_confirm: "待确认",
   confirmed: "已确认",
+  acknowledged: "已认可",
   invalid: "不属实",
 };
 

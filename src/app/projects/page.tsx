@@ -5,6 +5,7 @@ import { IconArrowRight, IconFolder } from "@/components/Icons";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
 import {
+  listInbox,
   listProjects,
   openBugCountsByProject,
   type ProjectAttentionCounts,
@@ -12,6 +13,7 @@ import {
 import type { Role } from "@/lib/types";
 import { CreateProjectForm } from "./CreateProjectForm";
 import { DeleteProjectButton } from "./DeleteProjectButton";
+import { InboxSection } from "./InboxSection";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,7 @@ function attentionChips(
 export default async function ProjectsPage() {
   const identity = await requireUser();
   const projects = listProjects(identity);
+  const inbox = listInbox(identity);
   const openCounts = openBugCountsByProject(identity);
   const canManage = isAdminRole(identity.role);
   const canDelete = isSuperAdminRole(identity.role);
@@ -79,6 +82,8 @@ export default async function ProjectsPage() {
         </div>
         {canManage ? <CreateProjectForm /> : null}
       </div>
+
+      <InboxSection inbox={inbox} />
 
       {projects.length === 0 ? (
         <EmptyState

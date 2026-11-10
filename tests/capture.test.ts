@@ -85,6 +85,35 @@ describe("capture wording", () => {
     expect(extra[1].evidenceSec).toBe(20);
   });
 
+  it("keeps a circle on the sentence in progress, and a silent circle becomes its own draft", () => {
+    const onSentence = splitTranscript([{ start: 0, end: 2, text: "登录按钮没反应" }], [
+      {
+        index: 0,
+        t: 1,
+        note: "",
+        strokes: [{ tool: "rect", points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 }] }],
+      },
+    ]);
+    expect(onSentence).toHaveLength(1);
+    expect(onSentence[0].quote).toContain("登录按钮没反应");
+    expect(onSentence[0].frameIndex).toBe(0);
+    expect(onSentence[0].strokes).toHaveLength(1);
+
+    const alone = splitTranscript([{ start: 0, end: 1, text: "登录没反应" }], [
+      {
+        index: 0,
+        t: 30,
+        note: "",
+        strokes: [{ tool: "ellipse", points: [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.4 }] }],
+      },
+    ]);
+    expect(alone).toHaveLength(2);
+    expect(alone[1].quote).toContain("截了一张图");
+    expect(alone[1].evidenceSec).toBe(30);
+    expect(alone[1].frameIndex).toBe(0);
+    expect(alone[1].strokes).toHaveLength(1);
+  });
+
   it("straightens a rough box or circle and leaves a stroke", () => {
     expect(straightenStroke(boxStroke()).tool).toBe("rect");
     expect(straightenStroke(ellipseStroke()).tool).toBe("ellipse");
@@ -258,6 +287,95 @@ describe("capture sessions", () => {
       "专有名词：Atlas"
     );
     expect(heard).toMatchObject({ available: true, text: "登录失败" });
+  });
+
+  it("replaces rule drafts with the agent split and keeps the marked frame", async () => {
+    const services = await import("../src/lib/services");
+    const captures = await import("../src/lib/captures");
+    const { getDb } = await import("../src/lib/db");
+    const admin = await services.setupAdmin("admin", "secret1");
+    const identity = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "superadmin" as const,
+      username: admin.username,
+    };
+    const project = services.createProject(identity, { name: "柜台", description: "" });
+    const session = captures.createCaptureSession(identity, project.id, {
+      transcript: [
+        { start: 0, end: 1, text: "点保存没有反应" },
+        { start: 4, end: 5, text: "刷新后列表还是旧的" },
+      ],
+      frames: [
+        {
+          t: 0.4,
+          note: "",
+          filename: "圈选.png",
+          mime: "image/png",
+          buffer: Buffer.from("png"),
+          strokes: [],
+        },
+      ],
+    });
+    const framed = session.drafts.find((draft) => draft.frameUrl);
+    expect(framed).toBeTruthy();
+    getDb()
+      .prepare("UPDATE capture_sessions SET organize_status = 'organizing' WHERE id = ?")
+      .run(session.id);
+    const replaced = captures.replaceCaptureDrafts(identity, session.id, [
+      {
+        title: "保存没有反应",
+        quote: "点保存没有反应",
+        steps: ["打开单据", "点保存"],
+        evidenceSec: 0,
+        confidence: "ok",
+        frameDraftId: framed?.id,
+      },
+      {
+        title: "列表没有刷新",
+        quote: "刷新后列表还是旧的",
+        steps: ["保存之后看列表"],
+        evidenceSec: 4,
+        confidence: "low",
+        question: "是整页没刷新，还是只有这一行？",
+      },
+    ]);
+    expect(replaced.organizeStatus).toBe("ready");
+    expect(replaced.drafts.map((draft) => draft.title)).toEqual(["保存没有反应", "列表没有刷新"]);
+    expect(replaced.drafts[0].frameUrl).toBeTruthy();
+    expect(replaced.drafts[0].frameUrl).not.toBe(framed?.frameUrl);
+    expect(replaced.drafts[1].question).toContain("这一行");
+    expect(() => captures.replaceCaptureDrafts(identity, session.id, [{ title: "再写一次" }])).toThrow(
+      /已经结束/
+    );
+
+    const started = captures.createCaptureSession(identity, project.id, {
+      transcript: [{ start: 0, end: 1, text: "按钮点了没反应" }],
+    });
+    getDb()
+      .prepare("UPDATE capture_sessions SET organize_status = 'organizing' WHERE id = ?")
+      .run(started.id);
+    expect(() =>
+      captures.saveCaptureReview(
+        identity,
+        started.id,
+        started.drafts.map((draft) => ({
+          id: draft.id,
+          title: draft.title,
+          body: draft.body,
+          quote: draft.quote,
+          steps: draft.steps,
+          question: draft.question,
+          status: "kept" as const,
+        }))
+      )
+    ).toThrow(/还在整理/);
+    getDb()
+      .prepare("UPDATE capture_drafts SET status = 'kept' WHERE session_id = ?")
+      .run(started.id);
+    expect(() => captures.replaceCaptureDrafts(identity, started.id, [{ title: "覆盖" }])).toThrow(
+      /已经开始审核/
+    );
   });
 });
 

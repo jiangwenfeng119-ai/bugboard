@@ -13,9 +13,14 @@ import {
 } from "./auth";
 import { captureFilePathsForProject } from "./captures";
 import { parseBugEvidence, type BugEvidenceInput } from "./evidence";
-import { canAccessProject, listAccessibleProjectIds, requireAdmin } from "./permissions";
+import {
+  canAccessProject,
+  isProjectAdmin,
+  listAccessibleProjectIds,
+  projectAdminIds,
+  requireAdmin,
+} from "./permissions";
 import { claimStagedUploads } from "./staged";
-import { isAdminRole } from "./roles";
 import {
   ACTION_LABEL,
   allowedActions,
@@ -30,6 +35,7 @@ import type {
   BugStatus,
   Identity,
   Priority,
+  ProjectRole,
   ProjectRow,
   DayCountSeries,
   ReporterAnalytics,
@@ -260,7 +266,7 @@ export function listMembers(identity: Identity, projectId: number) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   return getDb()
     .prepare(
-      `SELECT u.id, u.username, u.role, u.active
+      `SELECT u.id, u.username, pm.role, u.active
        FROM project_members pm JOIN users u ON u.id = pm.user_id
        WHERE pm.project_id = ?
        ORDER BY u.username`
@@ -268,25 +274,52 @@ export function listMembers(identity: Identity, projectId: number) {
     .all(projectId) as {
     id: number;
     username: string;
-    role: Role;
+    role: ProjectRole;
     active: number;
   }[];
+}
+
+function assertProjectRole(role: string): ProjectRole {
+  if (role === "user" || role === "admin") return role;
+  throw new Error("项目角色无效");
 }
 
 export function addMember(
   identity: Identity,
   projectId: number,
-  userId: number
+  userId: number,
+  role: string = "user"
 ) {
   getProject(identity, projectId);
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
+  const projectRole = assertProjectRole(role);
   const user = getDb().prepare("SELECT id FROM users WHERE id = ?").get(userId);
   if (!user) throw new Error("用户不存在");
   getDb()
     .prepare(
-      "INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)"
+      "INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)"
     )
-    .run(projectId, userId);
+    .run(projectId, userId, projectRole);
+  getDb()
+    .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
+    .run(nowIso(), projectId);
+}
+
+export function updateMemberRole(
+  identity: Identity,
+  projectId: number,
+  userId: number,
+  role: string
+) {
+  getProject(identity, projectId);
+  if (!requireAdmin(identity)) throw new Error("需要管理员权限");
+  const projectRole = assertProjectRole(role);
+  const info = getDb()
+    .prepare(
+      "UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?"
+    )
+    .run(projectRole, projectId, userId);
+  if (info.changes === 0) throw new Error("该用户不是项目成员");
   getDb()
     .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
     .run(nowIso(), projectId);
@@ -651,14 +684,14 @@ export type BugListItem = BugRow & {
 };
 
 const REPORTER_LABEL_SQL = `CASE
-  WHEN b.reporter_type = 'user' THEN COALESCE(u.username, '用户#' || b.reporter_id)
-  ELSE COALESCE('Key:' || k.name, 'Key#' || b.reporter_id)
+  WHEN b.reporter_type = 'user' THEN COALESCE(u.username, '已删除用户 #' || b.reporter_id)
+  ELSE COALESCE('Key:' || k.name, '已删除 Key #' || b.reporter_id)
 END`;
 
 const HANDLER_LABEL_SQL = `CASE
   WHEN b.status = 'pending' OR h.id IS NULL THEN NULL
-  WHEN h.actor_type = 'user' THEN COALESCE(hu.username, '用户#' || h.actor_id)
-  ELSE COALESCE('Key:' || hk.name, 'Key#' || h.actor_id)
+  WHEN h.actor_type = 'user' THEN COALESCE(hu.username, '已删除用户 #' || h.actor_id)
+  ELSE COALESCE('Key:' || hk.name, '已删除 Key #' || h.actor_id)
 END`;
 
 const BUG_ORDER_SQL: Record<BugSortKey, string> = {
@@ -671,8 +704,9 @@ const BUG_ORDER_SQL: Record<BugSortKey, string> = {
     WHEN 'needs_info' THEN 2
     WHEN 'awaiting_confirm' THEN 3
     WHEN 'confirmed' THEN 4
-    WHEN 'invalid' THEN 5
-    ELSE 6 END`,
+    WHEN 'acknowledged' THEN 5
+    WHEN 'invalid' THEN 6
+    ELSE 7 END`,
   reporter: `(${REPORTER_LABEL_SQL}) COLLATE NOCASE`,
   handler: `COALESCE(${HANDLER_LABEL_SQL}, '') COLLATE NOCASE`,
   created: "b.created_at",
@@ -826,9 +860,9 @@ export function updateBugPriority(
   bugId: number,
   priority: Priority
 ) {
-  if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   const next = parsePriority(priority);
   const bug = getBug(identity, bugId);
+  if (!isProjectAdmin(identity, bug.project_id)) throw new Error("需要管理员权限");
   getDb()
     .prepare("UPDATE bugs SET priority = ?, updated_at = ? WHERE id = ?")
     .run(next, nowIso(), bug.id);
@@ -869,6 +903,7 @@ export function transitionBug(
     reporterType: bug.reporter_type,
     reporterId: bug.reporter_id,
     note,
+    asAdmin: isProjectAdmin(identity, bug.project_id),
   });
   if (!result.ok) throw new Error(result.error);
   const t = nowIso();
@@ -910,7 +945,8 @@ export function bugActions(identity: Identity, bug: BugRow) {
     identity,
     bug.status,
     bug.reporter_type,
-    bug.reporter_id
+    bug.reporter_id,
+    isProjectAdmin(identity, bug.project_id)
   );
 }
 
@@ -925,14 +961,7 @@ export function projectStats(
       `SELECT status, COUNT(*) AS c FROM bugs WHERE project_id = ? GROUP BY status`
     )
     .all(projectId) as { status: BugStatus; c: number }[];
-  const byStatus: Record<BugStatus, number> = {
-    pending: 0,
-    fixing: 0,
-    needs_info: 0,
-    awaiting_confirm: 0,
-    confirmed: 0,
-    invalid: 0,
-  };
+  const byStatus = emptyStatusCounts();
   let total = 0;
   for (const row of counts) {
     byStatus[row.status] = row.c;
@@ -971,14 +1000,7 @@ export function projectStats(
 
   const inflow: Record<string, Record<BugStatus, number>> = {};
   for (const day of daysList) {
-    inflow[day] = {
-      pending: 0,
-      fixing: 0,
-      needs_info: 0,
-      awaiting_confirm: 0,
-      confirmed: 0,
-      invalid: 0,
-    };
+    inflow[day] = emptyStatusCounts();
   }
   for (const row of inflowSeries) {
     if (!inflow[row.day]) continue;
@@ -991,8 +1013,8 @@ export function projectStats(
               b.reporter_type AS actor_type,
               b.reporter_id AS actor_id,
               MAX(CASE
-                WHEN b.reporter_type = 'user' THEN COALESCE(u.username, '用户#' || b.reporter_id)
-                ELSE COALESCE('Key:' || k.name, 'Key#' || b.reporter_id)
+                WHEN b.reporter_type = 'user' THEN COALESCE(u.username, '已删除用户 #' || b.reporter_id)
+                ELSE COALESCE('Key:' || k.name, '已删除 Key #' || b.reporter_id)
               END) AS label,
               COUNT(*) AS c
        FROM bugs b
@@ -1009,8 +1031,8 @@ export function projectStats(
               e.actor_type AS actor_type,
               e.actor_id AS actor_id,
               MAX(CASE
-                WHEN e.actor_type = 'user' THEN COALESCE(u.username, '用户#' || e.actor_id)
-                ELSE COALESCE('Key:' || k.name, 'Key#' || e.actor_id)
+                WHEN e.actor_type = 'user' THEN COALESCE(u.username, '已删除用户 #' || e.actor_id)
+                ELSE COALESCE('Key:' || k.name, '已删除 Key #' || e.actor_id)
               END) AS label,
               COUNT(*) AS c
        FROM bug_status_events e
@@ -1088,6 +1110,7 @@ const BUG_STATUSES: BugStatus[] = [
   "needs_info",
   "awaiting_confirm",
   "confirmed",
+  "acknowledged",
   "invalid",
 ];
 
@@ -1098,6 +1121,7 @@ function emptyStatusCounts(): StatusCounts {
     needs_info: 0,
     awaiting_confirm: 0,
     confirmed: 0,
+    acknowledged: 0,
     invalid: 0,
   };
 }
@@ -1113,6 +1137,7 @@ function countTotal(counts: StatusCounts) {
     counts.needs_info +
     counts.awaiting_confirm +
     counts.confirmed +
+    counts.acknowledged +
     counts.invalid
   );
 }
@@ -1496,12 +1521,12 @@ export function resolveActorLabel(
     const u = getDb()
       .prepare("SELECT username FROM users WHERE id = ?")
       .get(actorId) as { username: string } | undefined;
-    return u?.username || `用户#${actorId}`;
+    return u?.username || `已删除用户 #${actorId}`;
   }
   const k = getDb()
     .prepare("SELECT name FROM api_keys WHERE id = ?")
     .get(actorId) as { name: string } | undefined;
-  return k ? `Key:${k.name}` : `Key#${actorId}`;
+  return k ? `Key:${k.name}` : `已删除 Key #${actorId}`;
 }
 
 export type ProjectAttentionCounts = {
@@ -1523,6 +1548,7 @@ export function openBugCountsByProject(identity: Identity) {
 
   const ids = projects.map((project) => project.id);
   const placeholders = ids.map(() => "?").join(",");
+  const admins = projectAdminIds(identity, ids);
   const rows = getDb()
     .prepare(
       `SELECT project_id, status, COUNT(*) AS c
@@ -1538,28 +1564,30 @@ export function openBugCountsByProject(identity: Identity) {
     if (!counts) continue;
     counts.open += row.c;
     if (row.status === "pending") counts.pending = row.c;
-    if (isAdminRole(identity.role) && row.status === "awaiting_confirm") {
+    if (admins.has(row.project_id) && row.status === "awaiting_confirm") {
       counts.awaitingConfirm = row.c;
     }
-    if (isAdminRole(identity.role) && row.status === "needs_info") {
+    if (admins.has(row.project_id) && row.status === "needs_info") {
       counts.needsInfo = row.c;
     }
   }
 
-  if (!isAdminRole(identity.role)) {
+  const userProjectIds = ids.filter((id) => !admins.has(id));
+  if (userProjectIds.length > 0) {
     const reporterType = identity.kind === "user" ? "user" : "api_key";
     const reporterId = identity.kind === "user" ? identity.userId : identity.apiKeyId;
+    const userPlaceholders = userProjectIds.map(() => "?").join(",");
     const own = getDb()
       .prepare(
         `SELECT project_id, status, COUNT(*) AS c
          FROM bugs
-         WHERE project_id IN (${placeholders})
+         WHERE project_id IN (${userPlaceholders})
            AND status IN ('awaiting_confirm', 'needs_info')
            AND reporter_type = ?
            AND reporter_id = ?
          GROUP BY project_id, status`
       )
-      .all(...ids, reporterType, reporterId) as {
+      .all(...userProjectIds, reporterType, reporterId) as {
       project_id: number;
       status: BugStatus;
       c: number;
@@ -1573,6 +1601,173 @@ export function openBugCountsByProject(identity: Identity) {
   }
 
   return result;
+}
+
+const INBOX_KIND_ORDER = [
+  "awaiting_confirm",
+  "invalid",
+  "needs_info",
+  "fixing",
+  "pending",
+] as const;
+
+export type InboxKind = (typeof INBOX_KIND_ORDER)[number];
+
+const INBOX_HINT: Record<InboxKind, string> = {
+  awaiting_confirm: "确认修复是否有效",
+  invalid: "认可，或提出异议",
+  needs_info: "补充材料",
+  fixing: "提交修复说明",
+  pending: "接单或给出结论",
+};
+
+const INBOX_KIND_LABEL: Record<InboxKind, string> = {
+  awaiting_confirm: "待确认",
+  invalid: "不属实",
+  needs_info: "待补充",
+  fixing: "修复中",
+  pending: "待处理",
+};
+
+const INBOX_PRIORITY_RANK: Record<Priority, number> = { p1: 0, p2: 1, p3: 2 };
+const INBOX_PENDING_CAP = 8;
+
+export type InboxItem = {
+  id: number;
+  publicId: string;
+  title: string;
+  priority: Priority;
+  status: InboxKind;
+  hint: string;
+};
+
+export type InboxGroup = {
+  projectId: number;
+  projectName: string;
+  counts: { kind: InboxKind; label: string; count: number }[];
+  items: InboxItem[];
+  pendingOverflow: number;
+};
+
+export type Inbox = {
+  total: number;
+  groups: InboxGroup[];
+};
+
+type InboxRow = {
+  id: number;
+  project_id: number;
+  public_id: string;
+  title: string;
+  priority: Priority;
+  status: InboxKind;
+  updated_at: string;
+};
+
+function isInboxKind(status: string): status is InboxKind {
+  return (INBOX_KIND_ORDER as readonly string[]).includes(status);
+}
+
+export function listInbox(identity: Identity): Inbox {
+  const projects = listProjects(identity);
+  if (projects.length === 0) return { total: 0, groups: [] };
+
+  const ids = projects.map((project) => project.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const actorType = identity.kind === "user" ? "user" : "api_key";
+  const actorId = identity.kind === "user" ? identity.userId : identity.apiKeyId;
+  const personal = getDb()
+    .prepare(
+      `SELECT id, project_id, public_id, title, priority, status, updated_at
+       FROM bugs
+       WHERE project_id IN (${placeholders})
+         AND reporter_type = ?
+         AND reporter_id = ?
+         AND status IN ('awaiting_confirm', 'invalid', 'needs_info')`
+    )
+    .all(...ids, actorType, actorId) as InboxRow[];
+
+  const rows = personal.filter((row) => isInboxKind(row.status));
+  const adminIds = [...projectAdminIds(identity, ids)];
+  if (adminIds.length > 0) {
+    const adminPlaceholders = adminIds.map(() => "?").join(",");
+    const pending = getDb()
+      .prepare(
+        `SELECT id, project_id, public_id, title, priority, status, updated_at
+         FROM bugs
+         WHERE project_id IN (${adminPlaceholders}) AND status = 'pending'`
+      )
+      .all(...adminIds) as InboxRow[];
+    const fixing = getDb()
+      .prepare(
+        `SELECT b.id, b.project_id, b.public_id, b.title, b.priority, b.status, b.updated_at
+         FROM bugs b
+         JOIN bug_status_events e ON e.bug_id = b.id AND e.to_status = 'fixing'
+         WHERE b.project_id IN (${adminPlaceholders})
+           AND b.status = 'fixing'
+           AND e.actor_type = ?
+           AND e.actor_id = ?
+           AND e.id = (
+             SELECT MAX(e2.id) FROM bug_status_events e2
+             WHERE e2.bug_id = b.id AND e2.to_status = 'fixing'
+           )`
+      )
+      .all(...adminIds, actorType, actorId) as InboxRow[];
+    const seen = new Set(rows.map((row) => row.id));
+    for (const row of [...fixing, ...pending]) {
+      if (!isInboxKind(row.status) || seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
+    }
+  }
+
+  const byProject = new Map<number, InboxRow[]>();
+  for (const row of rows) {
+    const list = byProject.get(row.project_id) ?? [];
+    list.push(row);
+    byProject.set(row.project_id, list);
+  }
+
+  let total = 0;
+  const groups: InboxGroup[] = [];
+  for (const project of projects) {
+    const list = byProject.get(project.id);
+    if (!list?.length) continue;
+    list.sort((a, b) => {
+      const kind = INBOX_KIND_ORDER.indexOf(a.status) - INBOX_KIND_ORDER.indexOf(b.status);
+      if (kind !== 0) return kind;
+      const priority = INBOX_PRIORITY_RANK[a.priority] - INBOX_PRIORITY_RANK[b.priority];
+      if (priority !== 0) return priority;
+      if (a.updated_at !== b.updated_at) return a.updated_at < b.updated_at ? 1 : -1;
+      return b.id - a.id;
+    });
+    const counts = INBOX_KIND_ORDER.flatMap((kind) => {
+      const count = list.filter((row) => row.status === kind).length;
+      return count > 0 ? [{ kind, label: INBOX_KIND_LABEL[kind], count }] : [];
+    });
+    const pending = list.filter((row) => row.status === "pending");
+    const shown = [
+      ...list.filter((row) => row.status !== "pending"),
+      ...pending.slice(0, INBOX_PENDING_CAP),
+    ];
+    total += list.length;
+    groups.push({
+      projectId: project.id,
+      projectName: project.name,
+      counts,
+      pendingOverflow: pending.length - Math.min(pending.length, INBOX_PENDING_CAP),
+      items: shown.map((row) => ({
+        id: row.id,
+        publicId: row.public_id,
+        title: row.title,
+        priority: row.priority,
+        status: row.status,
+        hint: INBOX_HINT[row.status],
+      })),
+    });
+  }
+
+  return { total, groups };
 }
 
 export { hashApiKey, STATUS_LABEL, ACTION_LABEL };

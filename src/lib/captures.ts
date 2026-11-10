@@ -37,6 +37,9 @@ type SessionRow = {
   video_path: string | null;
   created_at: string;
   updated_at: string;
+  organize_status?: string;
+  organize_detail?: string;
+  organize_started_at?: string | null;
 };
 
 type DraftRow = {
@@ -114,17 +117,36 @@ function sessionView(row: SessionRow, drafts: DraftRow[]) {
     transcript: JSON.parse(row.transcript_json) as Segment[],
     videoUrl: row.video_path ? `/api/captures/${row.id}/video` : null,
     videoFilename: row.video_filename,
+    organizeStatus: row.organize_status || "ready",
+    organizeDetail: row.organize_detail || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     drafts: drafts.map(draftView),
   };
 }
 
+const ORGANIZE_WAIT_MS = 8 * 60 * 1000;
+
+function settleOrganize(row: SessionRow) {
+  if (row.organize_status !== "organizing" || !row.organize_started_at) return row;
+  if (Date.now() - Date.parse(row.organize_started_at) < ORGANIZE_WAIT_MS) return row;
+  const detail = "整理超时，先用规则草稿";
+  getDb()
+    .prepare(
+      `UPDATE capture_sessions
+       SET organize_status = 'failed', organize_detail = ?, updated_at = ?
+       WHERE id = ? AND organize_status = 'organizing'`
+    )
+    .run(detail, nowIso(), row.id);
+  return { ...row, organize_status: "failed", organize_detail: detail };
+}
+
 function loadSession(identity: Identity, sessionId: number) {
-  const row = getDb().prepare("SELECT * FROM capture_sessions WHERE id = ?").get(sessionId) as
+  const found = getDb().prepare("SELECT * FROM capture_sessions WHERE id = ?").get(sessionId) as
     | SessionRow
     | undefined;
-  if (!row) throw new Error("走查不存在");
+  if (!found) throw new Error("走查不存在");
+  const row = settleOrganize(found);
   getProjectForCapture(identity, row.project_id);
   const drafts = getDb()
     .prepare("SELECT * FROM capture_drafts WHERE session_id = ? ORDER BY sort_index, id")
@@ -201,8 +223,8 @@ export function createCaptureSession(
       .prepare(
         `INSERT INTO capture_sessions (
            project_id, author_type, author_id, status, title, transcript_json,
-           duration_sec, truncated, created_at, updated_at
-         ) VALUES (?, ?, ?, 'review', ?, ?, ?, ?, ?, ?)`
+           duration_sec, truncated, organize_status, created_at, updated_at
+         ) VALUES (?, ?, ?, 'review', ?, ?, ?, ?, 'idle', ?, ?)`
       )
       .run(
         projectId,
@@ -305,9 +327,101 @@ export function captureMediaPath(
   return { path: draft.frame_path, filename: draft.frame_filename };
 }
 
+export type ReplacementDraft = {
+  title: string;
+  body?: string;
+  quote?: string;
+  steps?: string[];
+  evidenceSec?: number | null;
+  confidence?: string;
+  question?: string;
+  frameDraftId?: number | null;
+};
+
+export function replaceCaptureDrafts(identity: Identity, sessionId: number, incoming: ReplacementDraft[]) {
+  const { row, drafts } = loadSession(identity, sessionId);
+  if (row.status !== "review") throw new Error("这次走查已经整理完");
+  if (row.organize_status !== "organizing") throw new Error("这次整理已经结束");
+  if (drafts.some((draft) => draft.status !== "draft")) throw new Error("人已经开始审核");
+  if (!incoming.length || incoming.length > 20) throw new Error("草稿数量无效");
+  const frames = new Map(drafts.filter((draft) => draft.frame_path).map((draft) => [draft.id, draft]));
+  const usedFrames = new Set<number>();
+  const next = incoming.map((item, index) => {
+    const title = item.title.trim();
+    if (!title || title.length > BUG_TITLE_MAX) throw new Error("标题必填");
+    const evidence = parseBugEvidence({
+      quote: item.quote,
+      steps: item.steps,
+      evidenceSec: item.evidenceSec,
+      openQuestion: item.question,
+      confidence: item.confidence,
+    });
+    let frame: DraftRow | undefined;
+    if (item.frameDraftId != null) {
+      const id = Number(item.frameDraftId);
+      frame = frames.get(id);
+      if (!frame || usedFrames.has(id)) throw new Error("截图无效");
+      usedFrames.add(id);
+    }
+    return { index, title, evidence, frame, body: (item.body || "").slice(0, 8000) };
+  });
+  const t = nowIso();
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("DELETE FROM capture_drafts WHERE session_id = ?").run(sessionId);
+    const insert = db.prepare(
+      `INSERT INTO capture_drafts (
+         session_id, sort_index, title, body, quote, steps_json, evidence_sec, confidence,
+         question, strokes_json, status, frame_filename, frame_mime, frame_size, frame_path,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'draft', ?, ?, ?, ?, ?, ?)`
+    );
+    for (const item of next) {
+      insert.run(
+        sessionId,
+        item.index,
+        item.title,
+        item.body,
+        item.evidence.quote,
+        JSON.stringify(item.evidence.steps),
+        item.evidence.evidenceSec,
+        item.evidence.confidence,
+        item.evidence.openQuestion,
+        item.frame?.frame_filename ?? null,
+        item.frame?.frame_mime ?? null,
+        item.frame?.frame_size ?? null,
+        item.frame?.frame_path ?? null,
+        t,
+        t
+      );
+    }
+    db.prepare(
+      `UPDATE capture_sessions
+       SET organize_status = 'ready', organize_detail = '', updated_at = ?
+       WHERE id = ?`
+    ).run(t, sessionId);
+  })();
+  return getCaptureSession(identity, sessionId);
+}
+
+export function skipCaptureOrganize(identity: Identity, sessionId: number) {
+  const { row } = loadSession(identity, sessionId);
+  if (row.status !== "review") throw new Error("这次走查已经整理完");
+  if (row.organize_status !== "organizing") return getCaptureSession(identity, sessionId);
+  getDb()
+    .prepare(
+      `UPDATE capture_sessions
+       SET organize_status = 'skipped', organize_detail = '改用规则草稿', updated_at = ?
+       WHERE id = ?`
+    )
+    .run(nowIso(), sessionId);
+  return getCaptureSession(identity, sessionId);
+}
+
 export function saveCaptureReview(identity: Identity, sessionId: number, updates: DraftUpdate[]) {
   const { row, drafts } = loadSession(identity, sessionId);
   if (row.status !== "review") throw new Error("这次走查已经整理完");
+  if (row.organize_status === "organizing") throw new Error("本机 agent 还在整理");
   const byId = new Map(drafts.map((draft) => [draft.id, draft]));
   if (updates.length !== drafts.length) throw new Error("草稿不完整");
   const seen = new Set<number>();
@@ -397,6 +511,7 @@ export async function commitCaptureSession(
   if (updates) saveCaptureReview(identity, sessionId, updates);
   const { row, drafts } = loadSession(identity, sessionId);
   if (row.status !== "review") throw new Error("这次走查已经整理完");
+  if (row.organize_status === "organizing") throw new Error("本机 agent 还在整理");
   if (drafts.some((draft) => draft.status === "draft")) {
     throw new Error("还有没看过的草稿");
   }

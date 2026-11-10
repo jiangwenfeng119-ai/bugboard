@@ -68,10 +68,57 @@ export function usableSessionId(value) {
 }
 
 export function sessionKey(projectCode, bugId) {
+  return sessionKeyFor("bug.needs_agent", projectCode, bugId);
+}
+
+export function sessionKeyFor(event, projectCode, rawId) {
   const code = String(projectCode || "").trim();
-  const id = String(bugId || "").trim();
+  const id = String(rawId || "").trim();
   if (!/^[A-Z][A-Z0-9]{1,7}$/.test(code) || !/^\d{1,12}$/.test(id)) return "";
-  return `bug:${code}:${id}`;
+  const prefix = event === "capture.needs_organize" ? "capture" : "bug";
+  return `${prefix}:${code}:${id}`;
+}
+
+const SHELLS = new Set(["sh", "bash", "zsh", "fish", "osascript", "python", "python3", "node", "perl", "ruby"]);
+
+export function assertAgentCommand(command) {
+  const value = String(command || "").trim();
+  const simple = /^[\w.+@:-]{1,80}$/.test(value);
+  const absolute = /^\/(?:usr|opt|homebrew|Users)\/[\w./+-]{1,180}$/.test(value);
+  if ((!simple && !absolute) || value.split("/").includes("..")) {
+    throw new Error("agent 命令无效");
+  }
+  const base = value.split("/").pop();
+  if (SHELLS.has(base)) throw new Error("不能用这个命令当 agent");
+  return value;
+}
+
+export function resolveAgents(payloadAgents, fallbackAgent) {
+  if (!Array.isArray(payloadAgents)) {
+    return [{ kind: fallbackAgent === "zcode" ? "zcode" : "cursor", command: "" }];
+  }
+  return payloadAgents.map((item) => ({
+    kind: item?.kind === "zcode" || item?.kind === "command" ? item.kind : "cursor",
+    command: typeof item?.command === "string" ? item.command.trim() : "",
+  }));
+}
+
+export function planAgentLaunches({ agents, job, applyEdits, vars, sessionId }) {
+  const organize = job === "organize";
+  return agents.map((item) => {
+    if (item.kind === "command") {
+      const command = assertAgentCommand(item.command);
+      return { command, args: [vars.prompt] };
+    }
+    const args = buildLaunchArgv({
+      agent: item.kind === "zcode" ? "zcode" : "cursor",
+      argv: null,
+      applyEdits: organize ? false : applyEdits,
+      vars,
+      sessionId: organize ? "" : sessionId,
+    });
+    return { command: args[0], args: args.slice(1) };
+  });
 }
 
 export function readSession(file, key) {
@@ -308,10 +355,11 @@ export function createWakeServer(config) {
       send(res, 200, { ok: true, spawned: false });
       return;
     }
-    if (payload.event !== "bug.needs_agent") {
+    if (payload.event !== "bug.needs_agent" && payload.event !== "capture.needs_organize") {
       send(res, 400, { error: "不认识的事件" });
       return;
     }
+    const organize = payload.event === "capture.needs_organize";
     const code = String(payload.project?.code || "");
     const configured = config.projects[code] || config.projects[String(payload.project?.id || "")] || config.cwd;
     let cwd;
@@ -332,8 +380,9 @@ export function createWakeServer(config) {
       return;
     }
     const bugId = String(payload.bug?.id || "");
-    const key = sessionKey(code, bugId);
-    const sessionId = readSession(config.sessionFile, key);
+    const captureId = String(payload.capture?.id || "");
+    const key = sessionKeyFor(payload.event, code, organize ? captureId : bugId);
+    const sessionId = organize ? "" : readSession(config.sessionFile, key);
     const vars = {
       prompt,
       cwd,
@@ -341,30 +390,70 @@ export function createWakeServer(config) {
       publicId: String(payload.bug?.publicId || ""),
       projectCode: code,
     };
-    const launch = buildLaunchArgv({
-      agent: config.agent,
-      argv: config.argv,
-      applyEdits: config.applyEdits,
-      vars,
-      sessionId,
-    });
-    const [command, ...args] = launch;
-    const logName = `${code || "project"}-${bugId || "na"}.json`.replace(/[^\w.-]+/g, "_");
+    let launches;
     try {
-      const pid = await startAgent(
-        command,
-        args,
-        cwd,
-        path.join(config.runDir, logName),
-        rememberLater(path.join(config.runDir, logName), config.sessionFile, key)
-      );
-      console.log(`已拉起 ${command} pid=${pid} ${vars.publicId || vars.bugId} cwd=${cwd}`);
-      send(res, 202, { ok: true, spawned: true, pid });
+      launches = Array.isArray(payload.agents)
+        ? planAgentLaunches({
+            agents: resolveAgents(payload.agents, config.agent),
+            job: organize ? "organize" : "fix",
+            applyEdits: config.applyEdits,
+            vars,
+            sessionId,
+          })
+        : organize
+          ? planAgentLaunches({
+              agents: resolveAgents(undefined, config.agent),
+              job: "organize",
+              applyEdits: false,
+              vars,
+              sessionId: "",
+            })
+          : [
+              (() => {
+                const args = buildLaunchArgv({
+                  agent: config.agent,
+                  argv: config.argv,
+                  applyEdits: config.applyEdits,
+                  vars,
+                  sessionId,
+                });
+                return { command: args[0], args: args.slice(1) };
+              })(),
+            ];
     } catch (error) {
-      const message = error instanceof Error ? error.message : "拉起失败";
-      console.error(message);
-      send(res, 500, { error: message });
+      const message = error instanceof Error ? error.message : "agent 无效";
+      send(res, 400, { error: message });
+      return;
     }
+    if (!launches.length) {
+      send(res, 200, { ok: true, spawned: false });
+      return;
+    }
+    const logStem = `${code || "project"}-${organize ? `cap-${captureId || "na"}` : bugId || "na"}`.replace(
+      /[^\w.-]+/g,
+      "_"
+    );
+    let lastError = "拉起失败";
+    for (let index = 0; index < launches.length; index += 1) {
+      const launch = launches[index];
+      const logName = launches.length === 1 ? `${logStem}.json` : `${logStem}-${index + 1}.json`;
+      try {
+        const pid = await startAgent(
+          launch.command,
+          launch.args,
+          cwd,
+          path.join(config.runDir, logName),
+          rememberLater(path.join(config.runDir, logName), config.sessionFile, key)
+        );
+        console.log(`已拉起 ${launch.command} pid=${pid} ${vars.publicId || captureId || vars.bugId} cwd=${cwd}`);
+        send(res, 202, { ok: true, spawned: true, pid, agent: launch.command });
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : "拉起失败";
+        console.error(lastError);
+      }
+    }
+    send(res, 500, { error: lastError });
   });
 }
 

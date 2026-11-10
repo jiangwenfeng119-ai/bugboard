@@ -119,6 +119,7 @@ server.tool(
         "needs_info",
         "awaiting_confirm",
         "confirmed",
+        "acknowledged",
         "invalid",
       ])
       .optional(),
@@ -296,7 +297,7 @@ server.tool(
 
 server.tool(
   "update_capture_drafts",
-  "修改走查草稿的标题、正文、原话和步骤。status 仍由网页上的人决定。不要把草稿直接建成报障。",
+  "修改走查草稿的标题、正文、原话和步骤。人已经在看的时候用这个。不要把草稿直接建成报障。",
   {
     projectId: z.number().int().positive(),
     sessionId: z.number().int().positive(),
@@ -318,6 +319,42 @@ server.tool(
       return textResult(
         await api(`/api/projects/${projectId}/captures/${sessionId}`, {
           method: "PUT",
+          body: JSON.stringify({ drafts }),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "replace_capture_drafts",
+  "用整理结果替换一次走查的全部草稿。只在 Bugboard 正在等你整理时调用。不要创建报障，不要改代码。frameDraftId 用 get_capture 里已有截图的草稿 id。",
+  {
+    projectId: z.number().int().positive(),
+    sessionId: z.number().int().positive(),
+    drafts: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          body: z.string().optional(),
+          quote: z.string().optional(),
+          steps: z.array(z.string()).optional(),
+          evidenceSec: z.number().optional(),
+          confidence: z.enum(["", "low", "ok"]).optional(),
+          question: z.string().optional(),
+          frameDraftId: z.number().int().positive().optional(),
+        })
+      )
+      .min(1)
+      .max(20),
+  },
+  async ({ projectId, sessionId, drafts }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/captures/${sessionId}/drafts`, {
+          method: "POST",
           body: JSON.stringify({ drafts }),
         })
       );
@@ -477,6 +514,19 @@ server.tool(
   async ({ bugId, note }) => {
     try {
       return textResult(await transition("reject_fix", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "accept_invalid",
+  "认可不属实：不属实 → 已认可（仅原报障人 Key，note 可选）。只在人明确说这张认可不属实时调用。已认可是终态。",
+  { bugId: z.number().int().positive(), note: transitionNote },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("accept_invalid", bugId, note));
     } catch (e) {
       return errResult(e);
     }

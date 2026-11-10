@@ -25,6 +25,7 @@ export async function PUT(
       webhookUrl: typeof body.webhookUrl === "string" ? body.webhookUrl : "",
       cursorEnabled: Boolean(body.cursorEnabled),
       rotateSecret: Boolean(body.rotateSecret),
+      localAgents: Array.isArray(body.localAgents) ? body.localAgents : undefined,
     });
     return json({ settings });
   });

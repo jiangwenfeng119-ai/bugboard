@@ -9,6 +9,7 @@ type Props = {
   note: string;
   partial: string;
   speaking: boolean;
+  autoTake?: boolean;
   onNote: (value: string) => void;
   onSpeak: () => void;
   onCancel: () => void;
@@ -20,6 +21,7 @@ export function Annotator({
   note,
   partial,
   speaking,
+  autoTake = false,
   onNote,
   onSpeak,
   onCancel,
@@ -31,6 +33,11 @@ export function Annotator({
   const [ready, setReady] = useState(false);
   const drawing = useRef<Stroke | null>(null);
   const straightenTimer = useRef<number | null>(null);
+  const takeTimer = useRef<number | null>(null);
+  const strokesRef = useRef(strokes);
+  const noteFocused = useRef(false);
+  const taken = useRef(false);
+  strokesRef.current = strokes;
 
   useEffect(() => {
     const image = new Image();
@@ -41,6 +48,7 @@ export function Annotator({
     image.src = imageUrl;
     return () => {
       if (straightenTimer.current) window.clearTimeout(straightenTimer.current);
+      if (takeTimer.current) window.clearTimeout(takeTimer.current);
     };
   }, [imageUrl]);
 
@@ -61,6 +69,20 @@ export function Annotator({
     return { x, y };
   }
 
+  function clearTake() {
+    if (takeTimer.current) window.clearTimeout(takeTimer.current);
+    takeTimer.current = null;
+  }
+
+  function queueTake(delay = 700) {
+    if (!autoTake || taken.current) return;
+    clearTake();
+    takeTimer.current = window.setTimeout(() => {
+      if (noteFocused.current || !strokesRef.current.length) return;
+      void finish();
+    }, delay);
+  }
+
   function scheduleStraighten() {
     if (straightenTimer.current) window.clearTimeout(straightenTimer.current);
     straightenTimer.current = window.setTimeout(() => {
@@ -75,6 +97,7 @@ export function Annotator({
 
   function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (straightenTimer.current) window.clearTimeout(straightenTimer.current);
+    clearTake();
     event.currentTarget.setPointerCapture(event.pointerId);
     const tool: StrokeTool = event.shiftKey ? "rect" : event.altKey ? "ellipse" : "free";
     const point = pointFrom(event);
@@ -99,20 +122,32 @@ export function Annotator({
     const stroke = drawing.current;
     drawing.current = null;
     if (!stroke || stroke.points.length < 2) return;
-    setStrokes((prev) => [...prev, stroke]);
+    const next = [...strokesRef.current, stroke];
+    strokesRef.current = next;
+    setStrokes(next);
     scheduleStraighten();
+    queueTake();
   }
 
   async function finish() {
+    if (taken.current) return;
     const image = imageRef.current;
-    if (!image) return;
+    const ink = strokesRef.current.map((stroke, index, all) =>
+      index === all.length - 1 ? straightenStroke(stroke) : stroke
+    );
+    if (!image || (autoTake && !ink.length) || taken.current) return;
+    taken.current = true;
+    clearTake();
     const exportCanvas = document.createElement("canvas");
     exportCanvas.width = image.naturalWidth || image.width;
     exportCanvas.height = image.naturalHeight || image.height;
-    paint(exportCanvas, image, strokes, null);
+    paint(exportCanvas, image, ink, null);
     const blob = await new Promise<Blob | null>((resolve) => exportCanvas.toBlob(resolve, "image/png"));
-    if (!blob) return;
-    onDone(new File([blob], `圈选-${Date.now()}.png`, { type: "image/png" }), strokes);
+    if (!blob) {
+      taken.current = false;
+      return;
+    }
+    onDone(new File([blob], `圈选-${Date.now()}.png`, { type: "image/png" }), ink);
   }
 
   return createPortal(
@@ -126,39 +161,80 @@ export function Annotator({
           onPointerUp={onPointerUp}
         />
         <aside className="bb-cap-side">
-          <h2>圈出问题</h2>
-          <p className="bb-muted">拖动自由画。按住 Shift 画方框，按住 Option 画椭圆。停半秒会把接近的框和圆拉直。</p>
+          <h2>{autoTake ? "圈一下" : "圈出问题"}</h2>
+          <p className="bb-muted">
+            {autoTake
+              ? "画一笔，松手就收下这一帧，录屏不停。备注可以写，不写也行。Shift 画方框，Option 画椭圆。"
+              : "拖动自由画。按住 Shift 画方框，按住 Option 画椭圆。停半秒会把接近的框和圆拉直。"}
+          </p>
           <label className="bb-label" htmlFor="bb-cap-note">
             备注
           </label>
           <textarea
             id="bb-cap-note"
             className="bb-textarea"
-            rows={5}
+            rows={autoTake ? 3 : 5}
             value={note}
             onChange={(event) => onNote(event.target.value)}
-            placeholder="说或写下哪里不对"
+            onFocus={() => {
+              noteFocused.current = true;
+              clearTake();
+            }}
+            onBlur={() => {
+              noteFocused.current = false;
+              if (strokesRef.current.length) queueTake(400);
+            }}
+            onKeyDown={(event) => {
+              if (!autoTake || event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              void finish();
+            }}
+            placeholder={autoTake ? "这一笔在说什么，可不填" : "说或写下哪里不对"}
           />
           {partial ? <p className="bb-cap-partial">{partial}</p> : null}
           <div className="bb-cap-actions">
-            <button type="button" className="bb-btn bb-btn-ghost" onClick={onSpeak}>
-              {speaking ? "停止" : "说一句"}
-            </button>
+            {autoTake ? null : (
+              <button type="button" className="bb-btn bb-btn-ghost" onClick={onSpeak}>
+                {speaking ? "停止" : "说一句"}
+              </button>
+            )}
             <button
               type="button"
               className="bb-btn bb-btn-ghost"
-              onClick={() => setStrokes((prev) => prev.slice(0, -1))}
+              onClick={() => {
+                clearTake();
+                let left = 0;
+                setStrokes((prev) => {
+                  const next = prev.slice(0, -1);
+                  strokesRef.current = next;
+                  left = next.length;
+                  return next;
+                });
+                if (left) queueTake();
+              }}
               disabled={!strokes.length}
             >
               撤销
             </button>
           </div>
           <div className="bb-cap-actions">
-            <button type="button" className="bb-btn bb-btn-ghost" onClick={onCancel}>
+            <button
+              type="button"
+              className="bb-btn bb-btn-ghost"
+              onClick={() => {
+                clearTake();
+                onCancel();
+              }}
+            >
               取消
             </button>
-            <button type="button" className="bb-btn" onClick={() => void finish()} disabled={!ready}>
-              用这张图
+            <button
+              type="button"
+              className="bb-btn"
+              onClick={() => void finish()}
+              disabled={!ready || (autoTake && !strokes.length)}
+            >
+              {autoTake ? "现在收下" : "用这张图"}
             </button>
           </div>
         </aside>

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { withAuth, json } from "@/lib/http";
-import { addMember, listMembers, removeMember } from "@/lib/services";
+import { addMember, listMembers, removeMember, updateMemberRole } from "@/lib/services";
 
 export const runtime = "nodejs";
 
@@ -29,9 +29,26 @@ export async function POST(
     if (userIds.length === 0) {
       return json({ error: "请选择用户" }, 400);
     }
+    const role = body.role === undefined ? "user" : String(body.role);
     for (const userId of userIds) {
-      addMember(identity, Number(id), userId);
+      addMember(identity, Number(id), userId, role);
     }
+    return json({ members: listMembers(identity, Number(id)) });
+  });
+}
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  return withAuth(req, async (identity) => {
+    const { id } = await ctx.params;
+    const body = await req.json();
+    const userId = Number(body.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return json({ error: "请指定用户" }, 400);
+    }
+    updateMemberRole(identity, Number(id), userId, String(body.role ?? ""));
     return json({ members: listMembers(identity, Number(id)) });
   });
 }

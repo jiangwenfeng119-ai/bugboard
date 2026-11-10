@@ -15,6 +15,7 @@ const STATUS_COLOR: Record<BugStatus, string> = {
   needs_info: "var(--status-needs)",
   awaiting_confirm: "var(--status-awaiting)",
   confirmed: "var(--status-confirmed)",
+  acknowledged: "var(--status-acknowledged)",
   invalid: "var(--status-invalid)",
 };
 

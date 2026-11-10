@@ -12,6 +12,7 @@ export type TransitionAction =
   | "confirm_fix"
   | "reject_fix"
   | "dispute_invalid"
+  | "accept_invalid"
   | "reopen_invalid"
   | "withdraw_fix";
 
@@ -82,6 +83,13 @@ export const TRANSITIONS: TransitionSpec[] = [
   },
   {
     from: ["invalid"],
+    to: "acknowledged",
+    action: "accept_invalid",
+    who: "reporter",
+    noteRequired: false,
+  },
+  {
+    from: ["invalid"],
     to: "pending",
     action: "reopen_invalid",
     who: "admin",
@@ -115,9 +123,10 @@ export function allowedActions(
   identity: Identity,
   status: BugStatus,
   reporterType: ActorType,
-  reporterId: number
+  reporterId: number,
+  asAdmin = isAdminRole(identity.role)
 ): TransitionAction[] {
-  const admin = isAdminRole(identity.role);
+  const admin = asAdmin;
   const reporter = isReporter(identity, reporterType, reporterId);
   return TRANSITIONS.filter((t) => {
     if (!t.from.includes(status)) return false;
@@ -133,12 +142,14 @@ export function validateTransition(params: {
   reporterType: ActorType;
   reporterId: number;
   note?: string | null;
+  asAdmin?: boolean;
 }): { ok: true; to: BugStatus } | { ok: false; error: string } {
   const spec = findTransition(params.action, params.from);
   if (!spec) {
     return { ok: false, error: "当前状态不允许该操作" };
   }
-  if (spec.who === "admin" && !isAdminRole(params.identity.role)) {
+  const admin = params.asAdmin ?? isAdminRole(params.identity.role);
+  if (spec.who === "admin" && !admin) {
     return { ok: false, error: "需要管理员权限" };
   }
   if (
@@ -162,6 +173,7 @@ export const ACTION_LABEL: Record<TransitionAction, string> = {
   confirm_fix: "确认已修复",
   reject_fix: "仍有问题",
   dispute_invalid: "提出异议",
+  accept_invalid: "认可不属实",
   reopen_invalid: "撤回不属实",
   withdraw_fix: "撤回修复提交",
 };

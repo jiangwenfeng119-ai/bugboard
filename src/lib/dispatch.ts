@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { ADMIN_AGENT_PROMPT, applyProjectName } from "./agent-prompts";
 import { getDb, nowIso } from "./db";
+import { glossaryPrompt } from "./glossary";
 import { canAccessProject, requireAdmin } from "./permissions";
 import type { AttachmentRow, BugRow, Identity, ProjectRow } from "./types";
 import { absoluteAttachmentPath } from "./uploads";
@@ -14,7 +15,25 @@ export type DispatchReason =
   | "dispute_invalid"
   | "reopen_invalid"
   | "manual"
-  | "test";
+  | "test"
+  | "organize";
+
+export type LocalAgentKind = "cursor" | "zcode" | "command";
+
+export type LocalAgent = {
+  id: number;
+  name: string;
+  kind: LocalAgentKind;
+  command: string;
+  enabled: boolean;
+};
+
+export type LocalAgentInput = {
+  name: string;
+  kind: LocalAgentKind;
+  command?: string;
+  enabled: boolean;
+};
 
 export type DispatchTarget = "webhook" | "cursor";
 
@@ -37,6 +56,8 @@ export type DispatchSettings = {
   dispatchKeyConfigured: boolean;
   baseUrl: string;
   repoUrl: string;
+  localAgents: LocalAgent[];
+  localAgentsSaved: boolean;
   recent: DispatchRecent[];
 };
 
@@ -45,6 +66,7 @@ type ConfigRow = {
   webhook_url: string;
   webhook_secret: string;
   cursor_enabled: number;
+  local_agents_saved?: number;
   updated_at: string;
 };
 
@@ -119,6 +141,65 @@ export function assertWebhookUrl(raw: string) {
     throw new Error("叫醒地址不能指向元数据服务");
   }
   return url;
+}
+
+const SHELLS = new Set(["sh", "bash", "zsh", "fish", "osascript", "python", "python3", "node", "perl", "ruby"]);
+
+export function assertLocalAgentCommand(command: string) {
+  const value = command.trim();
+  const simple = /^[\w.+@:-]{1,80}$/.test(value);
+  const absolute = /^\/(?:usr|opt|homebrew|Users)\/[\w./+-]{1,180}$/.test(value);
+  if ((!simple && !absolute) || value.split("/").includes("..")) {
+    throw new Error("agent 命令无效");
+  }
+  const base = value.split("/").pop() || "";
+  if (SHELLS.has(base)) throw new Error("不能用这个命令当 agent");
+  return value;
+}
+
+function readLocalAgents(projectId: number): LocalAgent[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, name, kind, command, enabled
+       FROM project_local_agents
+       WHERE project_id = ?
+       ORDER BY sort_index, id`
+    )
+    .all(projectId) as {
+    id: number;
+    name: string;
+    kind: LocalAgentKind;
+    command: string;
+    enabled: number;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    command: row.command,
+    enabled: row.enabled === 1,
+  }));
+}
+
+function enabledAgentPayload(projectId: number) {
+  const config = readConfig(projectId);
+  if (!config?.local_agents_saved) return undefined;
+  return readLocalAgents(projectId)
+    .filter((item) => item.enabled)
+    .map((item) => ({ kind: item.kind, command: item.command }));
+}
+
+export function normalizeLocalAgents(input: LocalAgentInput[]): LocalAgentInput[] {
+  if (input.length > 8) throw new Error("本机 agent 最多 8 个");
+  return input.map((item) => {
+    const name = item.name.trim();
+    if (!name || name.length > 40) throw new Error("agent 名称无效");
+    if (item.kind !== "cursor" && item.kind !== "zcode" && item.kind !== "command") {
+      throw new Error("agent 类型无效");
+    }
+    const command = item.kind === "command" ? assertLocalAgentCommand(item.command || "") : "";
+    return { name, kind: item.kind, command, enabled: Boolean(item.enabled) };
+  });
 }
 
 /** git@host:org/repo.git 与 https 仓库地址都收成 Cursor 能用的 URL。 */
@@ -231,14 +312,27 @@ export function getDispatchSettings(identity: Identity, projectId: number): Disp
     dispatchKeyConfigured: Boolean(runtime.dispatchKey),
     baseUrl: runtime.baseUrl,
     repoUrl: project.github_url || "",
+    localAgentsSaved: Boolean(row?.local_agents_saved),
+    localAgents: localAgentsForSettings(projectId, Boolean(row?.local_agents_saved)),
     recent: recent.map(present),
   };
+}
+
+function localAgentsForSettings(projectId: number, saved: boolean): LocalAgent[] {
+  const rows = readLocalAgents(projectId);
+  if (rows.length || saved) return rows;
+  return [{ id: 0, name: "本机 Cursor", kind: "cursor", command: "", enabled: true }];
 }
 
 export function saveDispatchSettings(
   identity: Identity,
   projectId: number,
-  input: { webhookUrl: string; cursorEnabled: boolean; rotateSecret?: boolean }
+  input: {
+    webhookUrl: string;
+    cursorEnabled: boolean;
+    rotateSecret?: boolean;
+    localAgents?: LocalAgentInput[];
+  }
 ) {
   requireProjectAdmin(identity, projectId);
   const webhookUrl = assertWebhookUrl(input.webhookUrl);
@@ -257,6 +351,24 @@ export function saveDispatchSettings(
          updated_at = excluded.updated_at`
     )
     .run(projectId, webhookUrl, secret, input.cursorEnabled ? 1 : 0, t);
+  if (input.localAgents) {
+    const agents = normalizeLocalAgents(input.localAgents);
+    const db = getDb();
+    db.transaction(() => {
+      db.prepare("DELETE FROM project_local_agents WHERE project_id = ?").run(projectId);
+      const insert = db.prepare(
+        `INSERT INTO project_local_agents (project_id, name, kind, command, enabled, sort_index)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      );
+      agents.forEach((agent, index) => {
+        insert.run(projectId, agent.name, agent.kind, agent.command || "", agent.enabled ? 1 : 0, index);
+      });
+      db.prepare("UPDATE project_dispatch SET local_agents_saved = 1, updated_at = ? WHERE project_id = ?").run(
+        t,
+        projectId
+      );
+    })();
+  }
   return getDispatchSettings(identity, projectId);
 }
 
@@ -473,7 +585,35 @@ function wakePayload(project: ProjectRow, bug: BugRow, reason: DispatchReason) {
       defaultBranch: project.default_branch,
     },
     prompt: buildWakePrompt(project, bug),
+    ...(enabledAgentPayload(project.id) ? { agents: enabledAgentPayload(project.id) } : {}),
   };
+}
+
+export function buildOrganizePrompt(project: ProjectRow, sessionId: number) {
+  const glossary = glossaryPrompt(project);
+  return [
+    "这一轮由 Bugboard 叫醒，只整理一次走查。不要处理待处理报障。",
+    `项目 id=${project.id}，走查 id=${sessionId}。`,
+    "不要创建报障，不要调用 create_bug，不要修改代码，不要看整段录像。",
+    "先 get_capture 读转写、圈选和已有截图。规则草稿只是按停顿切开的初稿，以转写为准重新拆。",
+    "一条草稿只写一个故障。用 replace_capture_drafts 写回标题、原话 quote、步骤 steps、时间点 evidenceSec。",
+    "没把握时 confidence 用 low，并在 question 里写要人确认的那一句。截图沿用原来的 frameDraftId，不要新造图片。",
+    glossary,
+    "写完草稿就停。人会在走查页上留下、丢掉或补充，完成审核后才会进入待处理。",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function noteOrganize(sessionId: number | null, status: "failed" | "skipped", detail: string) {
+  if (!sessionId) return;
+  getDb()
+    .prepare(
+      `UPDATE capture_sessions
+       SET organize_status = ?, organize_detail = ?, updated_at = ?
+       WHERE id = ? AND organize_status = 'organizing'`
+    )
+    .run(status, detail.slice(0, 180), nowIso(), sessionId);
 }
 
 async function deliverOne(
@@ -482,12 +622,29 @@ async function deliverOne(
   config: ConfigRow,
   project: ProjectRow,
   bug: BugRow | null,
-  reason: DispatchReason
+  reason: DispatchReason,
+  captureSessionId: number | null = null
 ) {
   try {
     if (target === "webhook") {
+      const captureId = captureSessionId;
       const payload =
-        reason === "test" || !bug
+        reason === "organize" && captureId
+          ? {
+              event: "capture.needs_organize" as const,
+              reason,
+              sentAt: nowIso(),
+              capture: { id: captureId },
+              project: {
+                id: project.id,
+                name: project.name,
+                code: project.code,
+                slug: project.slug,
+              },
+              prompt: buildOrganizePrompt(project, captureId),
+              ...(enabledAgentPayload(project.id) ? { agents: enabledAgentPayload(project.id) } : {}),
+            }
+          : reason === "test" || !bug
           ? {
               event: "dispatch.test",
               reason,
@@ -512,10 +669,25 @@ async function deliverOne(
       );
       if (res.status >= 300 && res.status < 400) {
         markDispatch(rowId, "failed", "叫醒地址返回了重定向");
+        noteOrganize(captureId, "failed", "叫醒地址返回了重定向");
         return;
       }
       if (res.status < 200 || res.status >= 300) {
-        markDispatch(rowId, "failed", httpFailureDetail(res.status, res.text));
+        const detail = httpFailureDetail(res.status, res.text);
+        markDispatch(rowId, "failed", detail);
+        noteOrganize(captureId, "failed", detail);
+        return;
+      }
+      let spawned = true;
+      try {
+        const data = JSON.parse(res.text) as { spawned?: boolean };
+        if (data && data.spawned === false) spawned = false;
+      } catch {
+        spawned = true;
+      }
+      if (!spawned) {
+        markDispatch(rowId, "skipped", "没有可启动的本机 agent");
+        noteOrganize(captureId, "skipped", "没有可启动的本机 agent");
         return;
       }
       markDispatch(rowId, "sent", `HTTP ${res.status}`);
@@ -585,6 +757,7 @@ async function deliverOne(
   } catch (error) {
     const message = error instanceof Error ? error.message : "发送失败";
     markDispatch(rowId, "failed", message);
+    noteOrganize(captureSessionId, "failed", message);
   }
 }
 
@@ -635,6 +808,54 @@ export function scheduleAgentWake(
       await deliverOne(item.id, item.target, config, project, bug, reason);
     }
   });
+}
+
+export function scheduleCaptureOrganize(identity: Identity, sessionId: number) {
+  const row = getDb().prepare("SELECT * FROM capture_sessions WHERE id = ?").get(sessionId) as
+    | { id: number; project_id: number; status: string; organize_status: string }
+    | undefined;
+  if (!row) throw new Error("走查不存在");
+  if (!canAccessProject(identity, row.project_id)) throw new Error("无权访问该项目");
+  if (row.status !== "review") return;
+  if (row.organize_status === "organizing" || row.organize_status === "ready") return;
+  const config = readConfig(row.project_id);
+  const savedAgents = config?.local_agents_saved ? enabledAgentPayload(row.project_id) : undefined;
+  if (!config?.webhook_url) {
+    noteOrganizeStatus(row.id, "skipped", "");
+    return;
+  }
+  if (savedAgents && savedAgents.length === 0) {
+    noteOrganizeStatus(row.id, "skipped", "没有启用的本机 agent");
+    return;
+  }
+  const project = getDb().prepare("SELECT * FROM projects WHERE id = ?").get(row.project_id) as
+    | ProjectRow
+    | undefined;
+  if (!project) return;
+  const t = nowIso();
+  noteOrganizeStatus(row.id, "organizing", "");
+  const info = getDb()
+    .prepare(
+      `INSERT INTO agent_dispatches
+         (project_id, bug_id, capture_session_id, reason, target, status, detail, created_at)
+       VALUES (?, NULL, ?, 'organize', 'webhook', 'pending', '', ?)`
+    )
+    .run(row.project_id, row.id, t);
+  const id = Number(info.lastInsertRowid);
+  enqueue(() => deliverOne(id, "webhook", config, project, null, "organize", row.id));
+}
+
+function noteOrganizeStatus(sessionId: number, status: string, detail: string) {
+  const t = nowIso();
+  getDb()
+    .prepare(
+      `UPDATE capture_sessions
+       SET organize_status = ?, organize_detail = ?,
+           organize_started_at = CASE WHEN ? = 'organizing' THEN ? ELSE organize_started_at END,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(status, detail, status, t, t, sessionId);
 }
 
 export function sendDispatchTest(identity: Identity, projectId: number) {

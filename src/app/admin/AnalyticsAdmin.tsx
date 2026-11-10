@@ -14,6 +14,7 @@ type SortKey =
   | "adopted"
   | "confirmed"
   | "invalid"
+  | "acknowledged"
   | "needs_info"
   | "pending"
   | "rate";
@@ -66,6 +67,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
     { key: "confirmed", label: "已确认修复", value: stats.totals.confirmed },
     { key: "awaiting_confirm", label: "待确认", value: stats.totals.awaiting_confirm },
     { key: "invalid", label: "不属实", value: stats.totals.invalid },
+    { key: "acknowledged", label: "已认可", value: stats.totals.acknowledged },
     { key: "needs_info", label: "待补充", value: stats.totals.needs_info },
     { key: "pending", label: "待处理", value: stats.totals.pending },
   ];
@@ -196,6 +198,15 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
                     align="end"
                   />
                   <SortableTh
+                    label="已认可"
+                    sortKey="acknowledged"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    align="end"
+                    hint="原报障人已认可不属实，不算已确认"
+                  />
+                  <SortableTh
                     label="待补充"
                     sortKey="needs_info"
                     active={sortKey}
@@ -317,6 +328,7 @@ function ReporterRows({
         <Num value={row.adopted} />
         <Num value={row.confirmed} tone="ok" />
         <Num value={row.invalid} />
+        <Num value={row.acknowledged} />
         <Num value={row.needs_info} />
         <Num value={row.pending} />
         <td className={`bb-num${row.total === 0 ? " is-zero" : ""}`}>
@@ -325,7 +337,7 @@ function ReporterRows({
       </tr>
       {open ? (
         <tr className="bb-analytics-detail">
-          <td colSpan={9}>
+          <td colSpan={10}>
             <table className="bb-table bb-subtable">
               <thead>
                 <tr>
@@ -336,6 +348,7 @@ function ReporterRows({
                   <th className="bb-num">{STATUS_LABEL.fixing}</th>
                   <th className="bb-num">{STATUS_LABEL.awaiting_confirm}</th>
                   <th className="bb-num">{STATUS_LABEL.invalid}</th>
+                  <th className="bb-num">{STATUS_LABEL.acknowledged}</th>
                   <th className="bb-num">{STATUS_LABEL.needs_info}</th>
                   <th className="bb-num">{STATUS_LABEL.pending}</th>
                 </tr>
@@ -352,6 +365,7 @@ function ReporterRows({
                     <Num value={project.fixing} />
                     <Num value={project.awaiting_confirm} />
                     <Num value={project.invalid} />
+                    <Num value={project.acknowledged} />
                     <Num value={project.needs_info} />
                     <Num value={project.pending} />
                   </tr>

@@ -145,6 +145,7 @@ export function UsersAdmin({
         <select
           className="bb-select"
           style={{ width: "auto" }}
+          aria-label="角色"
           value={role}
           onChange={(e) =>
             setRole(e.target.value as "user" | "admin" | "superadmin")
@@ -197,6 +198,7 @@ export function UsersAdmin({
                   className="bb-btn bb-btn-secondary"
                   onClick={() => startEdit(u)}
                   disabled={locked}
+                  aria-label={`编辑 ${u.username}`}
                   title={locked ? "只有超级管理员可以修改超级管理员" : undefined}
                 >
                   编辑
@@ -206,6 +208,7 @@ export function UsersAdmin({
                   className="bb-btn bb-btn-secondary"
                   onClick={() => toggleActive(u.id, !u.active)}
                   disabled={locked}
+                  aria-label={`${u.active ? "禁用" : "启用"} ${u.username}`}
                   title={locked ? "只有超级管理员可以修改超级管理员" : undefined}
                 >
                   {u.active ? "禁用" : "启用"}

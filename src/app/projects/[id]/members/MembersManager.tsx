@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { roleLabel } from "@/lib/roles";
 
 type Member = {
   id: number;
@@ -22,6 +21,7 @@ export function MembersManager({
 }) {
   const router = useRouter();
   const [userIds, setUserIds] = useState<string[]>([]);
+  const [role, setRole] = useState<"user" | "admin">("user");
   const [error, setError] = useState("");
   const memberIds = new Set(members.map((m) => m.id));
   const candidates = users.filter((u) => u.active && !memberIds.has(u.id));
@@ -38,7 +38,7 @@ export function MembersManager({
     const res = await fetch(`/api/projects/${projectId}/members`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userIds: userIds.map(Number) }),
+      body: JSON.stringify({ userIds: userIds.map(Number), role }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -46,6 +46,22 @@ export function MembersManager({
       return;
     }
     setUserIds([]);
+    setRole("user");
+    router.refresh();
+  }
+
+  async function changeRole(id: number, next: string) {
+    setError("");
+    const res = await fetch(`/api/projects/${projectId}/members`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: id, role: next }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "修改角色失败");
+      return;
+    }
     router.refresh();
   }
 
@@ -86,6 +102,15 @@ export function MembersManager({
             })
           )}
         </div>
+        <select
+          className="bb-select bb-member-role"
+          aria-label="项目角色"
+          value={role}
+          onChange={(e) => setRole(e.target.value === "admin" ? "admin" : "user")}
+        >
+          <option value="user">用户</option>
+          <option value="admin">管理员</option>
+        </select>
         <button
           type="button"
           className="bb-btn"
@@ -113,11 +138,22 @@ export function MembersManager({
             {members.map((m) => (
               <tr key={m.id}>
                 <td>{m.username}</td>
-                <td>{roleLabel(m.role)}</td>
+                <td>
+                  <select
+                    className="bb-select bb-member-role"
+                    aria-label={`${m.username} 的项目角色`}
+                    value={m.role === "admin" ? "admin" : "user"}
+                    onChange={(e) => changeRole(m.id, e.target.value)}
+                  >
+                    <option value="user">用户</option>
+                    <option value="admin">管理员</option>
+                  </select>
+                </td>
                 <td>
                   <button
                     type="button"
                     className="bb-btn bb-btn-ghost"
+                    aria-label={`移除 ${m.username}`}
                     onClick={() => removeMember(m.id)}
                   >
                     移除

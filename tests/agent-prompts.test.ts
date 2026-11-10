@@ -24,6 +24,9 @@ describe("agent prompts", () => {
     expect(USER_AGENT_PROMPT).toContain("confirm_fix");
     expect(USER_AGENT_PROMPT).toContain("reject_fix");
     expect(USER_AGENT_PROMPT).toContain("dispute_invalid");
+    expect(USER_AGENT_PROMPT).toContain("accept_invalid");
+    expect(USER_AGENT_PROMPT).toContain("这张认可不属实");
+    expect(USER_AGENT_PROMPT).toContain("acknowledged");
     expect(USER_AGENT_PROMPT).toContain("provide_info");
     expect(USER_AGENT_PROMPT).toContain("needs_info");
     expect(USER_AGENT_PROMPT).toContain("awaiting_confirm");
@@ -40,6 +43,8 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("不要 request_info");
     expect(ADMIN_AGENT_PROMPT).toContain("只有报障人能提供");
     expect(ADMIN_AGENT_PROMPT).toContain("待确认");
+    expect(ADMIN_AGENT_PROMPT).toContain("不要调用 accept_invalid");
+    expect(ADMIN_AGENT_PROMPT).toContain("acknowledged");
   });
 
   it("asks the fixer to explain outcomes in the reporter's language", () => {

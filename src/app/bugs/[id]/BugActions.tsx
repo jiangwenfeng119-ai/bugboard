@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AttachmentComposer,
@@ -50,6 +50,7 @@ export function BugActions({
   const [active, setActive] = useState<TransitionAction | null>(null);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
+  const noteId = useId();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [priority, setPriority] = useState<Priority>(currentPriority);
@@ -173,7 +174,9 @@ export function BugActions({
             {ACTION_LABEL[active]}
           </h3>
           <div className="bb-field">
-            <label className="bb-label">说明（必填）</label>
+            <label className="bb-label" htmlFor={noteId}>
+              说明（必填）
+            </label>
             {NOTE_HINT[active] ? (
               <p className="bb-muted" style={{ margin: "0 0 0.35rem" }}>
                 {NOTE_HINT[active]}
@@ -181,6 +184,7 @@ export function BugActions({
             ) : null}
             <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
             <textarea
+              id={noteId}
               className="bb-textarea"
               value={note}
               onChange={(e) => setNote(e.target.value)}

@@ -6,10 +6,13 @@ import { createPortal } from "react-dom";
 type Tip = { x: number; y: number; above: boolean };
 
 function clipped(el: HTMLElement) {
-  if (el.scrollWidth > el.clientWidth + 1) return true;
+  if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+    return true;
+  }
   const child = el.firstElementChild;
   return (
-    child instanceof HTMLElement && child.scrollWidth > child.clientWidth + 1
+    child instanceof HTMLElement &&
+    (child.scrollWidth > child.clientWidth + 1 || child.scrollHeight > child.clientHeight + 1)
   );
 }
 

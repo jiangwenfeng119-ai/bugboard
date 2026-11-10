@@ -40,6 +40,7 @@ describe("services integration", () => {
       description: "demo",
     });
     services.addMember(adminId, project.id, user.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
 
     const qaId = {
       kind: "user" as const,
@@ -111,6 +112,7 @@ describe("services integration", () => {
       description: "demo",
     });
     services.addMember(adminId, project.id, user.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
     const qaId = {
       kind: "user" as const,
       userId: user.id,
@@ -213,6 +215,7 @@ describe("services integration", () => {
       description: "",
     });
     services.addMember(adminId, project.id, user.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
     const filed = services.createBug(qaId, {
       projectId: project.id,
       title: "登录失败",
@@ -1043,6 +1046,8 @@ describe("services integration", () => {
     };
     services.addMember(adminId, appA.id, qa.id);
     services.addMember(adminId, appB.id, qa.id);
+    services.addMember(adminId, appA.id, adminId.userId, "admin");
+    services.addMember(adminId, appB.id, adminId.userId, "admin");
 
     const confirmed = services.createBug(qaId, {
       projectId: appA.id,
@@ -1197,6 +1202,7 @@ describe("services integration", () => {
       username: qa.username,
     };
     services.addMember(adminId, soc.id, qa.id);
+    services.addMember(adminId, soc.id, adminId.userId, "admin");
 
     const first = services.createBug(qaId, { projectId: soc.id, title: "登录失败" });
     const second = services.createBug(qaId, { projectId: soc.id, title: "列表错位" });
@@ -1267,6 +1273,7 @@ describe("services integration", () => {
     });
     services.addMember(adminId, project.id, qa.id);
     services.addMember(adminId, project.id, other.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
     const qaId = {
       kind: "user" as const,
       userId: qa.id,
@@ -1377,5 +1384,267 @@ describe("services integration", () => {
       needsInfo: 0,
       open: 7,
     });
+  });
+
+  it("lists only the work waiting on this account, grouped by project", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-inbox", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const qa = await services.createUser(adminId, {
+      username: "qa-inbox",
+      password: "secret1",
+      role: "user",
+    });
+    const other = await services.createUser(adminId, {
+      username: "other-inbox",
+      password: "secret1",
+      role: "user",
+    });
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+    const otherId = {
+      kind: "user" as const,
+      userId: other.id,
+      role: "user" as const,
+      username: other.username,
+    };
+    const alpha = services.createProject(adminId, { name: "甲项目", description: "" });
+    const beta = services.createProject(adminId, { name: "乙项目", description: "" });
+    services.createProject(adminId, { name: "空项目", description: "" });
+    services.addMember(adminId, alpha.id, qa.id);
+    services.addMember(adminId, alpha.id, other.id);
+    services.addMember(adminId, alpha.id, adminId.userId, "admin");
+    services.addMember(adminId, beta.id, adminId.userId, "admin");
+
+    const waiting = services.createBug(qaId, {
+      projectId: alpha.id,
+      title: "等我确认",
+      priority: "p2",
+    });
+    services.transitionBug(adminId, waiting.id, "start_fix");
+    services.transitionBug(adminId, waiting.id, "submit_fix", "已经修好");
+
+    const rejected = services.createBug(qaId, {
+      projectId: alpha.id,
+      title: "等我决定",
+      priority: "p1",
+    });
+    services.transitionBug(adminId, rejected.id, "mark_invalid", "和报障对不上");
+
+    const supplement = services.createBug(qaId, {
+      projectId: alpha.id,
+      title: "等我补充",
+    });
+    services.transitionBug(adminId, supplement.id, "request_info", "还缺崩溃记录");
+
+    const accepted = services.createBug(qaId, {
+      projectId: alpha.id,
+      title: "我已认可",
+    });
+    services.transitionBug(adminId, accepted.id, "mark_invalid", "这是现有做法");
+    services.transitionBug(qaId, accepted.id, "accept_invalid");
+    expect(services.getBug(qaId, accepted.id).status).toBe("acknowledged");
+
+    const theirs = services.createBug(otherId, {
+      projectId: alpha.id,
+      title: "别人的待确认",
+    });
+    services.transitionBug(adminId, theirs.id, "start_fix");
+    services.transitionBug(adminId, theirs.id, "submit_fix", "请对方确认");
+
+    const mine = services.createBug(adminId, {
+      projectId: alpha.id,
+      title: "我提的不属实",
+    });
+    services.transitionBug(adminId, mine.id, "mark_invalid", "先标上");
+
+    const started = services.createBug(otherId, {
+      projectId: alpha.id,
+      title: "我接了一半",
+    });
+    services.transitionBug(adminId, started.id, "start_fix");
+
+    const key = services.createApiKey(adminId, {
+      name: "fixer-inbox",
+      role: "admin",
+      projectIds: [],
+    });
+    const keyId = {
+      kind: "api_key" as const,
+      apiKeyId: key.id,
+      role: "admin" as const,
+      name: "fixer-inbox",
+      projectIds: [] as number[],
+    };
+    const agentFix = services.createBug(otherId, {
+      projectId: alpha.id,
+      title: "Key 接的",
+    });
+    services.transitionBug(keyId, agentFix.id, "start_fix");
+
+    for (let i = 0; i < 9; i += 1) {
+      services.createBug(adminId, { projectId: beta.id, title: `待处理 ${i}` });
+    }
+
+    const qaInbox = services.listInbox(qaId);
+    expect(qaInbox.total).toBe(3);
+    expect(qaInbox.groups.map((group) => group.projectName)).toEqual(["甲项目"]);
+    expect(qaInbox.groups[0].items.map((item) => item.status)).toEqual([
+      "awaiting_confirm",
+      "invalid",
+      "needs_info",
+    ]);
+    expect(qaInbox.groups[0].items.map((item) => [item.status, item.priority])).toEqual([
+      ["awaiting_confirm", "p2"],
+      ["invalid", "p1"],
+      ["needs_info", "p2"],
+    ]);
+
+    const adminInbox = services.listInbox(adminId);
+    expect(adminInbox.groups.map((group) => group.projectName)).toEqual(["乙项目", "甲项目"]);
+    const betaGroup = adminInbox.groups[0];
+    expect(betaGroup.items.filter((item) => item.status === "pending")).toHaveLength(8);
+    expect(betaGroup.pendingOverflow).toBe(1);
+    expect(betaGroup.counts.find((count) => count.kind === "pending")?.count).toBe(9);
+    const alphaGroup = adminInbox.groups[1];
+    expect(alphaGroup.items.map((item) => item.title).sort()).toEqual([
+      "我接了一半",
+      "我提的不属实",
+    ]);
+    expect(alphaGroup.items.find((item) => item.title === "我接了一半")?.hint).toBe(
+      "提交修复说明"
+    );
+    expect(adminInbox.total).toBe(11);
+
+    const stats = services.reporterAnalytics(adminId, "all");
+    const qaRow = stats.reporters.find((row) => row.reporterId === qa.id);
+    expect(qaRow).toMatchObject({ acknowledged: 1, confirmed: 0, adopted: 1 });
+    expect(stats.totals.confirmed).toBe(0);
+    expect(stats.totals.acknowledged).toBe(1);
+    expect(stats.totals.adopted).toBe(4);
+  });
+
+  it("keeps project bug powers on the membership role, separate from the account role", async () => {
+    const services = await import("../src/lib/services");
+    const owner = await services.setupAdmin("owner-roles", "secret1");
+    const ownerId = {
+      kind: "user" as const,
+      userId: owner.id,
+      role: "superadmin" as const,
+      username: owner.username,
+    };
+    const staff = await services.createUser(ownerId, {
+      username: "staff-roles",
+      password: "secret1",
+      role: "admin",
+    });
+    const qa = await services.createUser(ownerId, {
+      username: "qa-roles",
+      password: "secret1",
+      role: "user",
+    });
+    const staffId = {
+      kind: "user" as const,
+      userId: staff.id,
+      role: "admin" as const,
+      username: staff.username,
+    };
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+    const project = services.createProject(ownerId, { name: "角色", description: "" });
+    const other = services.createProject(ownerId, { name: "另一个角色", description: "" });
+
+    services.addMember(ownerId, project.id, staff.id);
+    services.addMember(ownerId, project.id, qa.id, "admin");
+    expect(services.listMembers(ownerId, project.id)).toEqual([
+      expect.objectContaining({ id: qa.id, username: "qa-roles", role: "admin" }),
+      expect.objectContaining({ id: staff.id, username: "staff-roles", role: "user" }),
+    ]);
+
+    const bug = services.createBug(qaId, {
+      projectId: project.id,
+      title: "按钮没反应",
+    });
+    expect(() => services.transitionBug(staffId, bug.id, "start_fix")).toThrow(/需要管理员/);
+    expect(() =>
+      services.updateBugPriority(staffId, bug.id, "p1")
+    ).toThrow(/需要管理员/);
+    services.transitionBug(qaId, bug.id, "start_fix");
+    expect(services.getBug(qaId, bug.id).status).toBe("fixing");
+    expect(() => services.listMembers(qaId, project.id)).toThrow(/需要管理员/);
+    expect(() =>
+      services.updateMemberRole(qaId, project.id, staff.id, "admin")
+    ).toThrow(/需要管理员/);
+
+    services.updateMemberRole(staffId, project.id, staff.id, "admin");
+    expect(
+      services.listMembers(ownerId, project.id).find((member) => member.id === staff.id)?.role
+    ).toBe("admin");
+    services.transitionBug(staffId, bug.id, "submit_fix", "点按后会有反馈");
+    services.updateBugPriority(staffId, bug.id, "p1");
+    expect(services.getBug(staffId, bug.id).priority).toBe("p1");
+
+    const elsewhere = services.createBug(ownerId, {
+      projectId: other.id,
+      title: "另一项目的单",
+    });
+    expect(() => services.transitionBug(staffId, elsewhere.id, "start_fix")).toThrow(
+      /需要管理员/
+    );
+    services.addMember(ownerId, other.id, staff.id, "user");
+    expect(() => services.transitionBug(staffId, elsewhere.id, "mark_invalid", "对不上")).toThrow(
+      /需要管理员/
+    );
+
+    const pending = services.createBug(qaId, { projectId: project.id, title: "还没人接" });
+    expect(services.listInbox(staffId).groups.map((group) => group.projectName)).toEqual([
+      "角色",
+    ]);
+    expect(services.listInbox(ownerId).total).toBe(0);
+    expect(services.openBugCountsByProject(ownerId)[project.id]).toMatchObject({
+      pending: 1,
+      awaitingConfirm: 0,
+    });
+    expect(services.openBugCountsByProject(staffId)[project.id].awaitingConfirm).toBe(1);
+    expect(pending.status).toBe("pending");
+
+    const key = services.createApiKey(ownerId, {
+      name: "fixer-roles",
+      role: "admin",
+    });
+    services.transitionBug(
+      {
+        kind: "api_key",
+        apiKeyId: key.id,
+        role: "admin",
+        name: "fixer-roles",
+        projectIds: [],
+      },
+      elsewhere.id,
+      "start_fix"
+    );
+    expect(services.getBug(ownerId, elsewhere.id).status).toBe("fixing");
+
+    services.deleteBug(ownerId, bug.id);
+    expect(() => services.getBug(ownerId, bug.id)).toThrow(/不存在/);
+    expect(() => services.addMember(ownerId, project.id, qa.id, "superadmin")).toThrow(
+      /项目角色无效/
+    );
+    expect(() => services.updateMemberRole(ownerId, project.id, owner.id, "admin")).toThrow(
+      /不是项目成员/
+    );
   });
 });

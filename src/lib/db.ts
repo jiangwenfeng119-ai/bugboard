@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_members (
   project_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
   PRIMARY KEY (project_id, user_id),
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -184,10 +185,12 @@ function migrateSchema(db: Database.Database) {
     );
   }
   ensureSuperAdminRole(db);
+  ensureMemberRoles(db);
   ensureProjectCodes(db);
   ensureProjectProfile(db);
   ensurePublicIds(db);
   ensureCaptureSchema(db);
+  ensureLocalAgents(db);
 }
 
 function ensureCaptureSchema(db: Database.Database) {
@@ -278,6 +281,41 @@ function ensureCaptureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_drafts_session ON capture_drafts(session_id, sort_index);
     CREATE INDEX IF NOT EXISTS idx_staged_actor ON staged_uploads(actor_type, actor_id, project_id);
   `);
+
+  const sessionCols = new Set(columnNames(db, "capture_sessions"));
+  if (!sessionCols.has("organize_status")) {
+    db.exec("ALTER TABLE capture_sessions ADD COLUMN organize_status TEXT NOT NULL DEFAULT 'ready'");
+  }
+  if (!sessionCols.has("organize_detail")) {
+    db.exec("ALTER TABLE capture_sessions ADD COLUMN organize_detail TEXT NOT NULL DEFAULT ''");
+  }
+  if (!sessionCols.has("organize_started_at")) {
+    db.exec("ALTER TABLE capture_sessions ADD COLUMN organize_started_at TEXT");
+  }
+}
+
+function ensureLocalAgents(db: Database.Database) {
+  const dispatchCols = new Set(columnNames(db, "project_dispatch"));
+  if (!dispatchCols.has("local_agents_saved")) {
+    db.exec("ALTER TABLE project_dispatch ADD COLUMN local_agents_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  const logCols = new Set(columnNames(db, "agent_dispatches"));
+  if (!logCols.has("capture_session_id")) {
+    db.exec("ALTER TABLE agent_dispatches ADD COLUMN capture_session_id INTEGER");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_local_agents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('cursor','zcode','command')),
+      command TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      sort_index INTEGER NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_local_agents_project ON project_local_agents(project_id, sort_index);
+  `);
 }
 
 function ensureProjectProfile(db: Database.Database) {
@@ -295,6 +333,13 @@ function columnNames(db: Database.Database, table: string) {
   return (
     db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   ).map((col) => col.name);
+}
+
+function ensureMemberRoles(db: Database.Database) {
+  if (columnNames(db, "project_members").includes("role")) return;
+  db.exec(
+    "ALTER TABLE project_members ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin'))"
+  );
 }
 
 function ensureProjectCodes(db: Database.Database) {

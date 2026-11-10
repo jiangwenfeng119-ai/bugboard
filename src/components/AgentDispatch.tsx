@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DispatchRecent, DispatchSettings } from "@/lib/dispatch";
+import type { DispatchRecent, DispatchSettings, LocalAgentKind } from "@/lib/dispatch";
 import { formatDateTimeShort } from "@/lib/time";
 
 const REASON_LABEL: Record<string, string> = {
@@ -13,12 +13,37 @@ const REASON_LABEL: Record<string, string> = {
   reopen_invalid: "撤回不属实",
   manual: "手动",
   test: "测试",
+  organize: "整理走查",
 };
 
 const TARGET_LABEL: Record<string, string> = {
   webhook: "本机",
   cursor: "Cursor",
 };
+
+const KIND_LABEL: Record<LocalAgentKind, string> = {
+  cursor: "本机 Cursor",
+  zcode: "ZCode",
+  command: "自定义命令",
+};
+
+type AgentDraft = {
+  key: string;
+  name: string;
+  kind: LocalAgentKind;
+  command: string;
+  enabled: boolean;
+};
+
+function agentDrafts(settings: DispatchSettings): AgentDraft[] {
+  return settings.localAgents.map((item, index) => ({
+    key: `${item.id}-${index}`,
+    name: item.name,
+    kind: item.kind,
+    command: item.command,
+    enabled: item.enabled,
+  }));
+}
 
 const STATUS_LABEL: Record<DispatchRecent["status"], string> = {
   pending: "发送中",
@@ -54,6 +79,7 @@ export function DispatchPanel({
   const [settings, setSettings] = useState(initial);
   const [webhookUrl, setWebhookUrl] = useState(initial.webhookUrl);
   const [cursorEnabled, setCursorEnabled] = useState(initial.cursorEnabled);
+  const [agents, setAgents] = useState<AgentDraft[]>(() => agentDrafts(initial));
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState<"save" | "rotate" | "test" | "">("");
@@ -70,7 +96,17 @@ export function DispatchPanel({
       const res = await fetch(`/api/projects/${projectId}/dispatch`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ webhookUrl, cursorEnabled, rotateSecret }),
+        body: JSON.stringify({
+          webhookUrl,
+          cursorEnabled,
+          rotateSecret,
+          localAgents: agents.map((item) => ({
+            name: item.name,
+            kind: item.kind,
+            command: item.command,
+            enabled: item.enabled,
+          })),
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -83,6 +119,7 @@ export function DispatchPanel({
       setSettings(data.settings);
       setWebhookUrl(data.settings.webhookUrl);
       setCursorEnabled(data.settings.cursorEnabled);
+      setAgents(agentDrafts(data.settings));
       setNotice(rotateSecret ? "已换新密钥" : "已保存");
       router.refresh();
     } finally {
@@ -119,6 +156,34 @@ export function DispatchPanel({
     }
   }
 
+  function updateAgent(key: string, partial: Partial<AgentDraft>) {
+    setAgents((prev) => prev.map((item) => (item.key === key ? { ...item, ...partial } : item)));
+  }
+
+  function addAgent(kind: LocalAgentKind) {
+    if (agents.length >= 8) {
+      setError("本机 agent 最多 8 个");
+      return;
+    }
+    const name = kind === "cursor" ? "本机 Cursor" : kind === "zcode" ? "ZCode" : "自定义命令";
+    setAgents((prev) => [
+      ...prev,
+      { key: `new-${kind}-${prev.length}-${Date.now()}`, name, kind, command: "", enabled: true },
+    ]);
+    setError("");
+  }
+
+  function moveAgent(index: number, delta: number) {
+    setAgents((prev) => {
+      const next = prev.slice();
+      const target = index + delta;
+      if (target < 0 || target >= next.length) return prev;
+      const [item] = next.splice(index, 1);
+      next.splice(target, 0, item);
+      return next;
+    });
+  }
+
   const cursorHint = !settings.cursorKeyConfigured
     ? "当前服务器还没设置 CURSOR_API_KEY。"
     : !settings.repoUrl
@@ -130,8 +195,8 @@ export function DispatchPanel({
   return (
     <section className="bb-card bb-section-card bb-dispatch">
       <h2>叫醒处理端</h2>
-      <p className="bb-muted bb-dispatch-lead">
-        有人新建报障，或把单打回待处理后，通知本机的 Cursor、ZCode 或其他 Agent 来处理这张单。
+        <p className="bb-muted bb-dispatch-lead">
+        待处理的报障，和刚录完的走查，会分别叫醒下面的本机 agent。整理走查只写草稿，不改代码。人在走查页确认后，留下的才进入待处理。
       </p>
       {projects && projects.length > 1 ? (
         <div className="bb-field">
@@ -203,13 +268,95 @@ export function DispatchPanel({
         </div>
         <p className="bb-field-hint">wake 配置里的 secrets 填同一串。换一把之后，旧密钥立刻失效。</p>
       </div>
+      <div className="bb-field">
+        <span className="bb-label">本机 agent</span>
+        <p className="bb-field-hint">
+          按顺序试。前一个拉不起来，才试下一个。处理待处理和整理走查用同一份名单，提示词不同。还没保存过这份名单时，本机 wake 配置里的 agent 会接，默认是 Cursor。
+        </p>
+        <ul className="bb-agent-list">
+          {agents.map((item, index) => (
+            <li key={item.key} className="bb-agent-row">
+              <label className="bb-checkline">
+                <input
+                  type="checkbox"
+                  checked={item.enabled}
+                  onChange={(event) => updateAgent(item.key, { enabled: event.target.checked })}
+                  aria-label={`${item.name} 启用`}
+                />
+              </label>
+              <input
+                className="bb-input"
+                value={item.name}
+                aria-label="agent 名称"
+                onChange={(event) => updateAgent(item.key, { name: event.target.value })}
+              />
+              <select
+                className="bb-select"
+                aria-label="agent 类型"
+                value={item.kind}
+                onChange={(event) =>
+                  updateAgent(item.key, {
+                    kind: event.target.value as LocalAgentKind,
+                    command: event.target.value === "command" ? item.command : "",
+                  })
+                }
+              >
+                {(Object.keys(KIND_LABEL) as LocalAgentKind[]).map((kind) => (
+                  <option key={kind} value={kind}>
+                    {KIND_LABEL[kind]}
+                  </option>
+                ))}
+              </select>
+              {item.kind === "command" ? (
+                <input
+                  className="bb-input"
+                  value={item.command}
+                  aria-label="启动命令"
+                  placeholder="命令名，例如 my-agent"
+                  spellCheck={false}
+                  onChange={(event) => updateAgent(item.key, { command: event.target.value })}
+                />
+              ) : null}
+              <button type="button" className="bb-btn bb-btn-ghost" onClick={() => moveAgent(index, -1)} disabled={index === 0}>
+                上移
+              </button>
+              <button
+                type="button"
+                className="bb-btn bb-btn-ghost"
+                onClick={() => moveAgent(index, 1)}
+                disabled={index === agents.length - 1}
+              >
+                下移
+              </button>
+              <button
+                type="button"
+                className="bb-btn bb-btn-ghost"
+                onClick={() => setAgents((prev) => prev.filter((agent) => agent.key !== item.key))}
+              >
+                移除
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="bb-dispatch-actions">
+          <button type="button" className="bb-btn bb-btn-secondary" onClick={() => addAgent("cursor")}>
+            添加本机 Cursor
+          </button>
+          <button type="button" className="bb-btn bb-btn-secondary" onClick={() => addAgent("zcode")}>
+            添加 ZCode
+          </button>
+          <button type="button" className="bb-btn bb-btn-secondary" onClick={() => addAgent("command")}>
+            添加自定义命令
+          </button>
+        </div>
+      </div>
       <label className="bb-checkline bb-dispatch-cursor">
         <input
           type="checkbox"
           checked={cursorEnabled}
           onChange={(event) => setCursorEnabled(event.target.checked)}
         />
-        同时启动 Cursor 云端 Agent
+        同时启动 Cursor 云端 Agent，只处理待处理报障
       </label>
       <p className="bb-field-hint">{cursorHint}</p>
       {error ? <p className="bb-error">{error}</p> : null}

@@ -58,6 +58,7 @@ export function BugFilters({
         <option value="needs_info">待补充</option>
         <option value="awaiting_confirm">待确认</option>
         <option value="confirmed">已确认</option>
+        <option value="acknowledged">已认可</option>
         <option value="invalid">不属实</option>
       </select>
       <select
@@ -102,6 +103,18 @@ export function BugFilters({
       >
         搜索
       </button>
+      {status || priority || reporter || q || query.trim() ? (
+        <button
+          type="button"
+          className="bb-btn bb-btn-ghost"
+          onClick={() => {
+            setQuery("");
+            router.push(`/projects/${projectId}/bugs`);
+          }}
+        >
+          清除
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -38,6 +38,7 @@ async function setup() {
     username: admin.username,
   };
   const project = services.createProject(identity, { name: "柜台", description: "" });
+  services.addMember(identity, project.id, identity.userId, "admin");
   return { services, dispatch, identity, project };
 }
 
@@ -97,6 +98,43 @@ describe("agent wake", () => {
     await dispatch.flushDispatches();
     const reasons = calls.map((call) => JSON.parse(call.body).reason as string);
     expect(reasons).toContain("reject_fix");
+  });
+
+  it("does not wake when a reporter accepts an invalid bug, and still wakes on a dispute", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const calls: string[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input.body);
+      return { status: 204, text: "" };
+    });
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+    });
+
+    const accepted = services.createBug(identity, {
+      projectId: project.id,
+      title: "口径本来如此",
+    });
+    await dispatch.flushDispatches();
+    const afterCreate = calls.length;
+    services.transitionBug(identity, accepted.id, "mark_invalid", "这是现有做法");
+    services.transitionBug(identity, accepted.id, "accept_invalid");
+    await dispatch.flushDispatches();
+    expect(services.getBug(identity, accepted.id).status).toBe("acknowledged");
+    expect(calls).toHaveLength(afterCreate);
+
+    const disputed = services.createBug(identity, {
+      projectId: project.id,
+      title: "步骤还能复现",
+    });
+    await dispatch.flushDispatches();
+    const beforeDispute = calls.length;
+    services.transitionBug(identity, disputed.id, "mark_invalid", "对不上");
+    services.transitionBug(identity, disputed.id, "dispute_invalid", "按原步骤仍能看到");
+    await dispatch.flushDispatches();
+    expect(calls).toHaveLength(beforeDispute + 1);
+    expect(JSON.parse(calls.at(-1) || "{}").reason).toBe("dispute_invalid");
   });
 
   it("coalesces the same bug and reason for a minute, unless forced", async () => {
@@ -297,5 +335,95 @@ describe("agent wake", () => {
     expect(recent[0].target).toBe("cursor");
     expect(recent[0].status).toBe("skipped");
     expect(recent[0].detail).toContain("CURSOR_API_KEY");
+  });
+
+  it("stores several local agents and wakes one to organize a walkthrough", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const captures = await import("../src/lib/captures");
+    expect(() =>
+      dispatch.saveDispatchSettings(identity, project.id, {
+        webhookUrl: "http://127.0.0.1:3099/wake",
+        cursorEnabled: true,
+        localAgents: [{ name: "坏的", kind: "command", command: "bash", enabled: true }],
+      })
+    ).toThrow(/不能用这个命令/);
+
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: true,
+      localAgents: [
+        { name: "本机 Cursor", kind: "cursor", enabled: true },
+        { name: "备用 ZCode", kind: "zcode", enabled: false },
+        { name: "另一台", kind: "command", command: "my-agent", enabled: true },
+      ],
+    });
+    const saved = dispatch.getDispatchSettings(identity, project.id).localAgents;
+    expect(saved.map((item) => [item.name, item.kind, item.enabled, item.command])).toEqual([
+      ["本机 Cursor", "cursor", true, ""],
+      ["备用 ZCode", "zcode", false, ""],
+      ["另一台", "command", true, "my-agent"],
+    ]);
+
+    process.env.CURSOR_API_KEY = "cursor-test-key";
+    services.updateProject(identity, project.id, {
+      github_url: "https://github.com/acme/counter",
+    });
+    const calls: { url: string; body: string }[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input);
+      if (input.url.includes("api.cursor.com")) {
+        return { status: 200, text: JSON.stringify({ agent: { id: "bc-9", url: "https://cursor.com/agents/bc-9" } }) };
+      }
+      return { status: 202, text: "" };
+    });
+    const session = captures.createCaptureSession(identity, project.id, {
+      transcript: [
+        { start: 0, end: 1, text: "点保存没有反应" },
+        { start: 4, end: 5, text: "列表也没刷新" },
+      ],
+    });
+    dispatch.scheduleCaptureOrganize(identity, session.id);
+    await dispatch.flushDispatches();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("http://127.0.0.1:3099/wake");
+    const payload = JSON.parse(calls[0].body) as {
+      event: string;
+      prompt: string;
+      agents: { kind: string; command: string }[];
+      capture: { id: number };
+    };
+    expect(payload.event).toBe("capture.needs_organize");
+    expect(payload.capture.id).toBe(session.id);
+    expect(payload.prompt).toContain("不要创建报障");
+    expect(payload.prompt).toContain("不要修改代码");
+    expect(payload.prompt).toContain("replace_capture_drafts");
+    expect(payload.prompt).not.toContain("修复流程");
+    expect(payload.agents).toEqual([
+      { kind: "cursor", command: "" },
+      { kind: "command", command: "my-agent" },
+    ]);
+    expect(captures.getCaptureSession(identity, session.id).organizeStatus).toBe("organizing");
+
+    const bug = services.createBug(identity, { projectId: project.id, title: "合计不对" });
+    await dispatch.flushDispatches();
+    const bugPayload = JSON.parse(calls[1].body) as { event: string; agents: { kind: string }[] };
+    expect(bugPayload.event).toBe("bug.needs_agent");
+    expect(bugPayload.agents.map((item) => item.kind)).toEqual(["cursor", "command"]);
+    expect(calls.some((call) => call.url.includes("api.cursor.com"))).toBe(true);
+    expect(bug.id).toBeGreaterThan(0);
+  });
+
+  it("leaves the rule drafts when no local wake address is configured", async () => {
+    const { dispatch, identity, project } = await setup();
+    const captures = await import("../src/lib/captures");
+    const session = captures.createCaptureSession(identity, project.id, {
+      transcript: [{ start: 0, end: 1, text: "按钮没了" }],
+    });
+    dispatch.scheduleCaptureOrganize(identity, session.id);
+    await dispatch.flushDispatches();
+    const viewed = captures.getCaptureSession(identity, session.id);
+    expect(viewed.organizeStatus).toBe("skipped");
+    expect(viewed.drafts.length).toBeGreaterThan(0);
   });
 });

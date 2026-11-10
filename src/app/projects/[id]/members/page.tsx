@@ -20,6 +20,9 @@ export default async function MembersPage({
   return (
     <div className="bb-card bb-section-card">
       <h2>项目成员</h2>
+      <p className="bb-muted">
+        项目角色只决定能不能改这个项目的报障。后台角色仍在管理后台设置。
+      </p>
       <MembersManager
         projectId={Number(id)}
         members={members}

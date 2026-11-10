@@ -1,7 +1,10 @@
+import fs from "fs";
+import path from "path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityMark } from "@/components/PriorityMark";
+import { isProjectAdmin } from "@/lib/permissions";
 import { isAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
 import { formatDateTime } from "@/lib/time";
@@ -21,7 +24,9 @@ import { latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
 import { BugActions } from "./BugActions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
 import { Prose } from "@/components/Prose";
-import type { BugRow } from "@/lib/types";
+import { absoluteAttachmentPath } from "@/lib/uploads";
+import { extractDocx } from "../../../../mcp/docx";
+import type { AttachmentRow, BugRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +39,102 @@ function readList(raw: string) {
   }
 }
 
-function isImageName(filename: string) {
-  return /\.(png|jpe?g|gif|webp)$/i.test(filename);
+type MediaKind = "image" | "video" | "audio" | "file";
+
+function mediaKind(file: { filename: string; mime: string }): MediaKind {
+  const mime = file.mime.toLowerCase();
+  const name = file.filename.toLowerCase();
+  if (mime.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/.test(name)) return "image";
+  if (mime.startsWith("video/") || /\.(mp4|webm|mov)$/.test(name)) return "video";
+  if (mime.startsWith("audio/") || /\.(mp3|wav|ogg|m4a)$/.test(name)) return "audio";
+  return "file";
+}
+
+function hashedName(filename: string) {
+  return /^[a-f0-9]{16,}(\.[a-z0-9]+)?$/i.test(filename);
+}
+
+function attachmentLabel(file: { filename: string; mime: string }, kind: MediaKind) {
+  if (!hashedName(file.filename)) return file.filename;
+  if (kind === "image") return "打开原图";
+  if (kind === "video") return "下载视频";
+  if (kind === "audio") return "下载音频";
+  return "下载附件";
+}
+
+const PREVIEW_CHARS = 4000;
+
+function attachmentPreview(file: AttachmentRow) {
+  const ext = path.extname(file.filename).toLowerCase();
+  if (ext !== ".docx" && ext !== ".txt" && ext !== ".md") return null;
+  if (file.size > 2_000_000) return null;
+  try {
+    const buf = fs.readFileSync(absoluteAttachmentPath(file.storage_path));
+    const text = ext === ".docx" ? extractDocx(buf).text : buf.toString("utf8");
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    return {
+      text: trimmed.slice(0, PREVIEW_CHARS),
+      truncated: trimmed.length > PREVIEW_CHARS,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function numberedLabel(file: AttachmentRow, files: AttachmentRow[]) {
+  const kind = mediaKind(file);
+  const base = attachmentLabel(file, kind);
+  if (!hashedName(file.filename)) return base;
+  const same = files.filter(
+    (item) => mediaKind(item) === kind && hashedName(item.filename)
+  );
+  if (same.length < 2) return base;
+  return `${base} ${same.findIndex((item) => item.id === file.id) + 1}`;
+}
+
+function AttachmentItem({
+  file,
+  files,
+}: {
+  file: AttachmentRow;
+  files: AttachmentRow[];
+}) {
+  const kind = mediaKind(file);
+  const href = `/api/attachments/${file.id}`;
+  const label = numberedLabel(file, files);
+  const preview = kind === "file" ? attachmentPreview(file) : null;
+  return (
+    <li>
+      {kind === "image" ? (
+        // 附件地址由本系统签发。
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="bb-evidence-img"
+          src={href}
+          alt={hashedName(file.filename) ? label : file.filename}
+        />
+      ) : null}
+      {kind === "video" ? (
+        <video className="bb-evidence-video" controls preload="metadata" src={href} />
+      ) : null}
+      {kind === "audio" ? (
+        <audio className="bb-evidence-audio" controls preload="metadata" src={href} />
+      ) : null}
+      {preview ? (
+        <>
+          <pre className="bb-attachment-text">{preview.text}</pre>
+          {preview.truncated ? (
+            <p className="bb-muted">只显示前 {PREVIEW_CHARS} 字，完整内容请下载。</p>
+          ) : null}
+        </>
+      ) : null}
+      <a href={href} target="_blank" rel="noreferrer">
+        {label}
+      </a>{" "}
+      <span className="bb-muted">({Math.round(file.size / 1024)} KB)</span>
+    </li>
+  );
 }
 
 function EvidenceCard({ bug }: { bug: BugRow }) {
@@ -94,6 +193,7 @@ export default async function BugDetailPage({
   const events = getBugEvents(identity, bug.id);
   const attachments = getAttachments("bug", bug.id);
   const actions = bugActions(identity, bug);
+  const canHandleBugs = isProjectAdmin(identity, bug.project_id);
   const isAdmin = isAdminRole(identity.role);
   const wakeLatest = isAdmin ? latestDispatch(bug.id) : null;
   const wakeEnabled = isAdmin && projectWakeEnabled(bug.project_id);
@@ -139,7 +239,7 @@ export default async function BugDetailPage({
             <BugActions
               bugId={bug.id}
               actions={actions}
-              isAdmin={isAdmin}
+              isAdmin={canHandleBugs}
               currentPriority={bug.priority}
             />
           </div>
@@ -170,21 +270,9 @@ export default async function BugDetailPage({
                 无附件
               </p>
             ) : (
-              <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+              <ul className="bb-attachment-list">
                 {attachments.map((a) => (
-                  <li key={a.id}>
-                    {isImageName(a.filename) ? (
-                      // 附件地址由本系统签发。
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img className="bb-evidence-img" src={`/api/attachments/${a.id}`} alt={a.filename} />
-                    ) : null}
-                    <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer">
-                      {a.filename}
-                    </a>{" "}
-                    <span className="bb-muted">
-                      ({Math.round(a.size / 1024)} KB)
-                    </span>
-                  </li>
+                  <AttachmentItem key={a.id} file={a} files={attachments} />
                 ))}
               </ul>
             )}
@@ -210,17 +298,9 @@ export default async function BugDetailPage({
                     </div>
                     {e.note ? <Prose text={e.note} /> : null}
                     {eventAtt.length > 0 ? (
-                      <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1rem" }}>
+                      <ul className="bb-attachment-list">
                         {eventAtt.map((a) => (
-                          <li key={a.id}>
-                            <a
-                              href={`/api/attachments/${a.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {a.filename}
-                            </a>
-                          </li>
+                          <AttachmentItem key={a.id} file={a} files={eventAtt} />
                         ))}
                       </ul>
                     ) : null}

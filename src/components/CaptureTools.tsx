@@ -39,6 +39,8 @@ export function CaptureTools({
   const [heard, setHeard] = useState(false);
   const [speechNote, setSpeechNote] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [said, setSaid] = useState<string[]>([]);
+  const [marks, setMarks] = useState(0);
   const speechRef = useRef<Speech | null>(null);
   const speechStop = useRef(false);
   const finalsRef = useRef("");
@@ -59,6 +61,7 @@ export function CaptureTools({
   const shotsRef = useRef<{ t: number; note: string; strokes: Stroke[]; file: File }[]>([]);
   const pendingRef = useRef<FormData | null>(null);
   const busyRef = useRef(false);
+  const markingRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
@@ -145,8 +148,9 @@ export function CaptureTools({
         if (!duplicate) {
           finalsRef.current = `${finalsRef.current} ${text}`.trim();
           onFinalExtra?.(text, elapsed());
+          setSaid((prev) => [...prev, text].slice(-2));
         }
-        if (!noteDirty.current) setNote(finalsRef.current);
+        if (!noteDirty.current && !markingRef.current) setNote(finalsRef.current);
         setPartial("");
         setHeard(true);
       },
@@ -184,8 +188,12 @@ export function CaptureTools({
     }
     setError("");
     setLanded("");
-    noteDirty.current = false;
-    finalsRef.current = "";
+    const duringWalk = mediaRef.current != null && mediaRef.current.state !== "inactive";
+    if (!duringWalk) {
+      noteDirty.current = false;
+      finalsRef.current = "";
+    }
+    markingRef.current = duringWalk;
     setNote("");
     if (imageUrl) URL.revokeObjectURL(imageUrl);
     setImageUrl(URL.createObjectURL(file));
@@ -335,6 +343,8 @@ export function CaptureTools({
       recorder.start(1000);
       setRecording("walk");
       setPaused(false);
+      setSaid([]);
+      setMarks(0);
       startClock();
       const data = new Uint8Array(analyser.fftSize);
       const tick = () => {
@@ -387,14 +397,19 @@ export function CaptureTools({
     if (!track) return;
     const video = document.createElement("video");
     video.srcObject = new MediaStream([track]);
-    await video.play();
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) return;
-    openImage(new File([blob], `走查-${shotsRef.current.length + 1}.png`, { type: "image/png" }));
+    try {
+      await video.play();
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      canvas.getContext("2d")?.drawImage(video, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) return;
+      openImage(new File([blob], `走查-${shotsRef.current.length + 1}.png`, { type: "image/png" }));
+    } finally {
+      video.pause();
+      video.srcObject = null;
+    }
   }
 
   async function finishWalk(truncated: boolean) {
@@ -531,20 +546,25 @@ export function CaptureTools({
             setNote(value);
           }}
           onSpeak={() => (speaking ? stopSpeech() : beginSpeech("note"))}
+          autoTake={recording === "walk"}
           onCancel={() => {
-            stopSpeech();
+            markingRef.current = false;
+            if (recording !== "walk") stopSpeech();
             URL.revokeObjectURL(imageUrl);
             setImageUrl(null);
+            setNote("");
           }}
           onDone={(file, strokes) => {
             const duringWalk = Boolean(mediaRef.current);
+            markingRef.current = false;
             if (duringWalk) {
               shotsRef.current.push({ t: elapsed(), note, strokes, file });
+              setMarks((count) => count + 1);
             } else {
               onSnap({ file, note, strokes });
               setLanded(note.trim() ? `已写入这张单：${note.trim()}` : "这张图已放进附件。");
             }
-            stopSpeech();
+            if (!duringWalk) stopSpeech();
             URL.revokeObjectURL(imageUrl);
             setImageUrl(null);
             setNote("");
@@ -559,12 +579,19 @@ export function CaptureTools({
           <span className="bb-cap-meter" aria-hidden>
             <span style={{ width: `${Math.round(level * 100)}%` }} />
           </span>
-          <p>{hearing}</p>
+          <div className="bb-cap-heard">
+            {said.map((line, index) => (
+              <p key={`${index}-${line}`}>{line}</p>
+            ))}
+            {partial ? <p className="is-live">{partial}</p> : null}
+            {!said.length && !partial ? <p className="is-live">{hearing}</p> : null}
+            <p className="bb-field-hint">说「不对，是……」会改刚才那句。圈一下收下这一帧，录屏不停。</p>
+          </div>
           <button type="button" className="bb-btn bb-btn-ghost" onClick={togglePause}>
             {paused ? "继续" : "暂停"}
           </button>
-          <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void snapWhileRecording()}>
-            截一张
+          <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void snapWhileRecording()} disabled={Boolean(imageUrl)}>
+            {marks ? `圈一下 · ${marks}` : "圈一下"}
           </button>
           <button type="button" className="bb-btn" onClick={() => void finishWalk(false)} disabled={busy}>
             {busy ? "整理中…" : "完成"}
@@ -593,7 +620,7 @@ export function CaptureTools({
         </div>
       ) : (
         <div className="bb-cap-walk">
-          <p className="bb-field-hint">边说边录屏幕。录完离开这张单，拆成草稿，看完才入库。</p>
+          <p className="bb-field-hint">边说边录屏幕。要标出一块，录的时候圈一下，这一帧会自己留下。</p>
           <div className="bb-cap-actions">
             <button type="button" className="bb-btn bb-btn-secondary" onClick={requestWalk} disabled={recording !== null}>
               录一段走查

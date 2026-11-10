@@ -103,6 +103,7 @@ export default async function BugsPage({
     sort: order.sort,
     dir: order.dir,
   });
+  const filtered = Boolean(sp.status || sp.priority || sp.reporter || sp.q?.trim());
 
   return (
     <div className="bb-bugs-page">
@@ -126,12 +127,26 @@ export default async function BugsPage({
         </div>
       </div>
 
+      {bugs.length > 0 ? <p className="bb-muted bb-bug-count">{bugs.length} 条</p> : null}
+
       {bugs.length === 0 ? (
         <EmptyState
           imageSrc="/brand/empty-bugs.png"
-          title="暂无报障"
-          description="点击「新建报障」提交第一条，支持文字、附件与录音。"
-          action={<NewBugPanel projectId={Number(id)} />}
+          title={filtered ? "没有符合条件的报障" : "暂无报障"}
+          description={
+            filtered
+              ? "换个关键词或筛选条件，也可以清除后看全部。"
+              : "点击「新建报障」提交第一条，支持文字、附件与录音。"
+          }
+          action={
+            filtered ? (
+              <Link href={`/projects/${id}/bugs`} className="bb-btn bb-btn-secondary">
+                清除筛选
+              </Link>
+            ) : (
+              <NewBugPanel projectId={Number(id)} />
+            )
+          }
         />
       ) : (
         <div className="bb-card bb-table-wrap">

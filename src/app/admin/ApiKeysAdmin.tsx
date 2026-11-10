@@ -186,10 +186,12 @@ type RowAction = {
 };
 
 function KeyRowActions({
+  name,
   open,
   onOpenChange,
   actions,
 }: {
+  name: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   actions: RowAction[];
@@ -249,7 +251,7 @@ function KeyRowActions({
     <div className="bb-key-actions" ref={rootRef}>
       <TipButton
         buttonRef={buttonRef}
-        label="操作"
+        label={`操作 ${name}`}
         className="bb-icon-btn"
         pressed={open}
         controls={menuId}
@@ -266,7 +268,7 @@ function KeyRowActions({
               id={menuId}
               className="bb-key-action-pop"
               role="group"
-              aria-label="操作"
+              aria-label={`操作 ${name}`}
               style={{
                 top: box.top,
                 left: box.left,
@@ -916,6 +918,7 @@ export function ApiKeysAdmin({
                     <td className="bb-key-token">{statusLabel(status)}</td>
                     <td className="bb-key-actions-cell">
                       <KeyRowActions
+                        name={k.name}
                         open={openMenuId === k.id}
                         onOpenChange={(next) => {
                           setOpenMenuId(next ? k.id : null);
