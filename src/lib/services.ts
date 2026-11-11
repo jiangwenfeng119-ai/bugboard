@@ -20,6 +20,7 @@ import {
   projectAdminIds,
   requireAdmin,
 } from "./permissions";
+import { isAdminRole } from "./roles";
 import { claimStagedUploads } from "./staged";
 import {
   ACTION_LABEL,
@@ -1548,7 +1549,7 @@ export function openBugCountsByProject(identity: Identity) {
 
   const ids = projects.map((project) => project.id);
   const placeholders = ids.map(() => "?").join(",");
-  const admins = projectAdminIds(identity, ids);
+  const admins = isAdminRole(identity.role) ? new Set(ids) : projectAdminIds(identity, ids);
   const rows = getDb()
     .prepare(
       `SELECT project_id, status, COUNT(*) AS c

@@ -1616,7 +1616,7 @@ describe("services integration", () => {
     expect(services.listInbox(ownerId).total).toBe(0);
     expect(services.openBugCountsByProject(ownerId)[project.id]).toMatchObject({
       pending: 1,
-      awaitingConfirm: 0,
+      awaitingConfirm: 1,
     });
     expect(services.openBugCountsByProject(staffId)[project.id].awaitingConfirm).toBe(1);
     expect(pending.status).toBe("pending");
