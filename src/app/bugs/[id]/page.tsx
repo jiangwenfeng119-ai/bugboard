@@ -245,7 +245,7 @@ export default async function BugDetailPage({
           </div>
           {wakeEnabled || wakeLatest ? (
             <div className="bb-card bb-section-card">
-              <h2>叫醒</h2>
+              <h2>分派去修理</h2>
               <WakeBugButton
                 bugId={bug.id}
                 canWake={wakeEnabled && bug.status === "pending"}

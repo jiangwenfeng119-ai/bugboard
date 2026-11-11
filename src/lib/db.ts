@@ -299,6 +299,12 @@ function ensureLocalAgents(db: Database.Database) {
   if (!dispatchCols.has("local_agents_saved")) {
     db.exec("ALTER TABLE project_dispatch ADD COLUMN local_agents_saved INTEGER NOT NULL DEFAULT 0");
   }
+  if (!dispatchCols.has("organize_enabled")) {
+    db.exec("ALTER TABLE project_dispatch ADD COLUMN organize_enabled INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!dispatchCols.has("repair_local_enabled")) {
+    db.exec("ALTER TABLE project_dispatch ADD COLUMN repair_local_enabled INTEGER NOT NULL DEFAULT 1");
+  }
   const logCols = new Set(columnNames(db, "agent_dispatches"));
   if (!logCols.has("capture_session_id")) {
     db.exec("ALTER TABLE agent_dispatches ADD COLUMN capture_session_id INTEGER");

@@ -51,6 +51,8 @@ export type DispatchRecent = {
 export type DispatchSettings = {
   webhookUrl: string;
   webhookSecret: string;
+  organizeEnabled: boolean;
+  repairLocalEnabled: boolean;
   cursorEnabled: boolean;
   cursorKeyConfigured: boolean;
   dispatchKeyConfigured: boolean;
@@ -61,14 +63,37 @@ export type DispatchSettings = {
   recent: DispatchRecent[];
 };
 
+export type DispatchOverview = {
+  projectId: number;
+  projectName: string;
+  webhookUrl: string;
+  organizeEnabled: boolean;
+  repairLocalEnabled: boolean;
+  cursorEnabled: boolean;
+  agentsSaved: boolean;
+  agents: { name: string; kind: LocalAgentKind; enabled: boolean }[];
+  latest: DispatchRecent | null;
+};
+
+export type DispatchRuntimeStatus = {
+  cursorKeyConfigured: boolean;
+  dispatchKeyConfigured: boolean;
+};
+
 type ConfigRow = {
   project_id: number;
   webhook_url: string;
   webhook_secret: string;
   cursor_enabled: number;
+  organize_enabled?: number;
+  repair_local_enabled?: number;
   local_agents_saved?: number;
   updated_at: string;
 };
+
+function localJobEnabled(url: string, flag: number | undefined) {
+  return Boolean(url) && flag !== 0;
+}
 
 type DispatchLogRow = {
   id: number;
@@ -125,20 +150,20 @@ export function shouldWakeOnAction(action: string, status: string) {
 export function assertWebhookUrl(raw: string) {
   const url = raw.trim();
   if (!url) return "";
-  if (url.length > 500) throw new Error("叫醒地址过长");
+  if (url.length > 500) throw new Error("本机地址过长");
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error("叫醒地址无效");
+    throw new Error("本机地址无效");
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("叫醒地址只支持 http 或 https");
+    throw new Error("本机地址只支持 http 或 https");
   }
-  if (parsed.username || parsed.password) throw new Error("叫醒地址不能带账号密码");
+  if (parsed.username || parsed.password) throw new Error("本机地址不能带账号密码");
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "169.254.169.254" || host === "metadata.google.internal" || host === "fd00:ec2::254") {
-    throw new Error("叫醒地址不能指向元数据服务");
+    throw new Error("本机地址不能指向元数据服务");
   }
   return url;
 }
@@ -236,6 +261,14 @@ function cursorRuntime() {
   };
 }
 
+export function dispatchRuntimeStatus(): DispatchRuntimeStatus {
+  const runtime = cursorRuntime();
+  return {
+    cursorKeyConfigured: Boolean(runtime.apiKey),
+    dispatchKeyConfigured: Boolean(runtime.dispatchKey),
+  };
+}
+
 function readConfig(projectId: number) {
   return getDb()
     .prepare("SELECT * FROM project_dispatch WHERE project_id = ?")
@@ -273,7 +306,8 @@ function present(row: DispatchLogRow): DispatchRecent {
 
 export function projectWakeEnabled(projectId: number) {
   const row = readConfig(projectId);
-  return Boolean(row && (row.webhook_url || row.cursor_enabled));
+  if (!row) return false;
+  return localJobEnabled(row.webhook_url, row.repair_local_enabled) || Boolean(row.cursor_enabled);
 }
 
 export function latestDispatch(bugId: number): DispatchRecent | null {
@@ -307,6 +341,8 @@ export function getDispatchSettings(identity: Identity, projectId: number): Disp
   return {
     webhookUrl: row?.webhook_url || "",
     webhookSecret: row?.webhook_secret || "",
+    organizeEnabled: localJobEnabled(row?.webhook_url || "", row?.organize_enabled),
+    repairLocalEnabled: localJobEnabled(row?.webhook_url || "", row?.repair_local_enabled),
     cursorEnabled: Boolean(row?.cursor_enabled),
     cursorKeyConfigured: Boolean(runtime.apiKey),
     dispatchKeyConfigured: Boolean(runtime.dispatchKey),
@@ -316,6 +352,64 @@ export function getDispatchSettings(identity: Identity, projectId: number): Disp
     localAgents: localAgentsForSettings(projectId, Boolean(row?.local_agents_saved)),
     recent: recent.map(present),
   };
+}
+
+export function listDispatchOverviews(identity: Identity): DispatchOverview[] {
+  if (!requireAdmin(identity)) throw new Error("需要管理员权限");
+  const rows = getDb()
+    .prepare(
+      `SELECT p.id AS project_id, p.name AS project_name,
+              d.webhook_url, d.cursor_enabled,
+              IFNULL(d.organize_enabled, 1) AS organize_enabled,
+              IFNULL(d.repair_local_enabled, 1) AS repair_local_enabled,
+              IFNULL(d.local_agents_saved, 0) AS local_agents_saved
+       FROM project_dispatch d
+       JOIN projects p ON p.id = d.project_id
+       WHERE (d.webhook_url != '' AND (IFNULL(d.organize_enabled, 1) = 1 OR IFNULL(d.repair_local_enabled, 1) = 1))
+          OR d.cursor_enabled = 1
+       ORDER BY p.name, p.id`
+    )
+    .all() as {
+    project_id: number;
+    project_name: string;
+    webhook_url: string;
+    cursor_enabled: number;
+    organize_enabled: number;
+    repair_local_enabled: number;
+    local_agents_saved: number;
+  }[];
+  const latestStmt = getDb().prepare(
+    `SELECT d.*, b.public_id AS public_id
+     FROM agent_dispatches d
+     LEFT JOIN bugs b ON b.id = d.bug_id
+     WHERE d.project_id = ?
+     ORDER BY d.id DESC
+     LIMIT 1`
+  );
+  return rows.flatMap((row) => {
+    if (!canAccessProject(identity, row.project_id)) return [];
+    const saved = row.local_agents_saved === 1;
+    const latest = latestStmt.get(row.project_id) as DispatchLogRow | undefined;
+    return [
+      {
+        projectId: row.project_id,
+        projectName: row.project_name,
+        webhookUrl: row.webhook_url,
+        organizeEnabled: localJobEnabled(row.webhook_url, row.organize_enabled),
+        repairLocalEnabled: localJobEnabled(row.webhook_url, row.repair_local_enabled),
+        cursorEnabled: row.cursor_enabled === 1,
+        agentsSaved: saved,
+        agents: saved
+          ? readLocalAgents(row.project_id).map((agent) => ({
+              name: agent.name,
+              kind: agent.kind,
+              enabled: agent.enabled,
+            }))
+          : [],
+        latest: latest ? present(latest) : null,
+      },
+    ];
+  });
 }
 
 function localAgentsForSettings(projectId: number, saved: boolean): LocalAgent[] {
@@ -330,27 +424,50 @@ export function saveDispatchSettings(
   input: {
     webhookUrl: string;
     cursorEnabled: boolean;
+    organizeEnabled?: boolean;
+    repairLocalEnabled?: boolean;
     rotateSecret?: boolean;
     localAgents?: LocalAgentInput[];
   }
 ) {
   requireProjectAdmin(identity, projectId);
   const webhookUrl = assertWebhookUrl(input.webhookUrl);
+  const organizeEnabled = input.organizeEnabled ?? Boolean(webhookUrl);
+  const repairLocalEnabled = input.repairLocalEnabled ?? Boolean(webhookUrl);
+  if ((organizeEnabled || repairLocalEnabled) && !webhookUrl) {
+    throw new Error("发给本机 Agent 时，先填本机地址");
+  }
+  if (!organizeEnabled && !repairLocalEnabled && !input.cursorEnabled) {
+    throw new Error("至少启用一件活：整理走查，或修理报障");
+  }
   const existing = readConfig(projectId);
   let secret = existing?.webhook_secret || "";
   if (!secret || input.rotateSecret) secret = `whsec_${randomBytes(24).toString("base64url")}`;
   const t = nowIso();
   getDb()
     .prepare(
-      `INSERT INTO project_dispatch (project_id, webhook_url, webhook_secret, cursor_enabled, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO project_dispatch (
+         project_id, webhook_url, webhook_secret, cursor_enabled,
+         organize_enabled, repair_local_enabled, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(project_id) DO UPDATE SET
          webhook_url = excluded.webhook_url,
          webhook_secret = excluded.webhook_secret,
          cursor_enabled = excluded.cursor_enabled,
+         organize_enabled = excluded.organize_enabled,
+         repair_local_enabled = excluded.repair_local_enabled,
          updated_at = excluded.updated_at`
     )
-    .run(projectId, webhookUrl, secret, input.cursorEnabled ? 1 : 0, t);
+    .run(
+      projectId,
+      webhookUrl,
+      secret,
+      input.cursorEnabled ? 1 : 0,
+      organizeEnabled ? 1 : 0,
+      repairLocalEnabled ? 1 : 0,
+      t
+    );
   if (input.localAgents) {
     const agents = normalizeLocalAgents(input.localAgents);
     const db = getDb();
@@ -370,6 +487,15 @@ export function saveDispatchSettings(
     })();
   }
   return getDispatchSettings(identity, projectId);
+}
+
+export function clearDispatchSettings(identity: Identity, projectId: number) {
+  requireProjectAdmin(identity, projectId);
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("DELETE FROM project_local_agents WHERE project_id = ?").run(projectId);
+    db.prepare("DELETE FROM project_dispatch WHERE project_id = ?").run(projectId);
+  })();
 }
 
 function bugUrl(bugId: number) {
@@ -668,8 +794,8 @@ async function deliverOne(
         body
       );
       if (res.status >= 300 && res.status < 400) {
-        markDispatch(rowId, "failed", "叫醒地址返回了重定向");
-        noteOrganize(captureId, "failed", "叫醒地址返回了重定向");
+        markDispatch(rowId, "failed", "本机地址返回了重定向");
+        noteOrganize(captureId, "failed", "本机地址返回了重定向");
         return;
       }
       if (res.status < 200 || res.status >= 300) {
@@ -783,14 +909,16 @@ export function scheduleAgentWake(
   opts?: { force?: boolean }
 ) {
   const config = readConfig(bug.project_id);
-  if (!config || (!config.webhook_url && !config.cursor_enabled)) return;
+  if (!config) return;
+  const repairLocal = localJobEnabled(config.webhook_url, config.repair_local_enabled);
+  if (!repairLocal && !config.cursor_enabled) return;
   if (!opts?.force && recentlySent(bug.id, reason)) return;
   const project = getDb()
     .prepare("SELECT * FROM projects WHERE id = ?")
     .get(bug.project_id) as ProjectRow | undefined;
   if (!project) return;
   const targets: DispatchTarget[] = [];
-  if (config.webhook_url) targets.push("webhook");
+  if (localJobEnabled(config.webhook_url, config.repair_local_enabled)) targets.push("webhook");
   if (config.cursor_enabled) targets.push("cursor");
   const t = nowIso();
   const ids = targets.map((target) => {
@@ -820,7 +948,7 @@ export function scheduleCaptureOrganize(identity: Identity, sessionId: number) {
   if (row.organize_status === "organizing" || row.organize_status === "ready") return;
   const config = readConfig(row.project_id);
   const savedAgents = config?.local_agents_saved ? enabledAgentPayload(row.project_id) : undefined;
-  if (!config?.webhook_url) {
+  if (!config?.webhook_url || config.organize_enabled === 0) {
     noteOrganizeStatus(row.id, "skipped", "");
     return;
   }
@@ -861,7 +989,7 @@ function noteOrganizeStatus(sessionId: number, status: string, detail: string) {
 export function sendDispatchTest(identity: Identity, projectId: number) {
   const project = requireProjectAdmin(identity, projectId);
   const config = readConfig(projectId);
-  if (!config?.webhook_url) throw new Error("先保存叫醒地址，再测试");
+  if (!config?.webhook_url) throw new Error("先保存本机地址，再测试");
   const t = nowIso();
   const info = getDb()
     .prepare(
@@ -879,7 +1007,7 @@ export function wakeBugNow(identity: Identity, bugId: number) {
   const bug = getDb().prepare("SELECT * FROM bugs WHERE id = ?").get(bugId) as BugRow | undefined;
   if (!bug) throw new Error("报障不存在");
   if (!canAccessProject(identity, bug.project_id)) throw new Error("无权访问该项目");
-  if (bug.status !== "pending") throw new Error("只有待处理的单需要叫醒");
-  if (!projectWakeEnabled(bug.project_id)) throw new Error("这个项目还没开叫醒");
+  if (bug.status !== "pending") throw new Error("只有待处理的报障可以分派给 Agent");
+  if (!projectWakeEnabled(bug.project_id)) throw new Error("这个项目还没配置分派给 Agent");
   scheduleAgentWake(bug, "manual", { force: true });
 }

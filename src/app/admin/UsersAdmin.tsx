@@ -173,7 +173,7 @@ export function UsersAdmin({
       </form>
       {error ? <p className="bb-error">{error}</p> : null}
       <div className="bb-table-wrap">
-      <table className="bb-table">
+      <table className="bb-table bb-user-table">
         <thead>
           <tr>
             <th>用户名</th>

@@ -829,6 +829,11 @@ export function ApiKeysAdmin({
         </p>
       ) : null}
 
+      {keys.length === 0 ? (
+        <p className="bb-muted" style={{ margin: "0.8rem 0 0" }}>
+          还没有 API Key。明文只在创建时显示一次。
+        </p>
+      ) : (
       <div className="bb-table-wrap">
         <table className="bb-table bb-key-table">
           <thead>
@@ -1044,6 +1049,7 @@ export function ApiKeysAdmin({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

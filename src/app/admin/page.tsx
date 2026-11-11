@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { DispatchPanel } from "@/components/AgentDispatch";
+import { DispatchAdmin } from "@/components/AgentDispatch";
 import { IconBell, IconChart, IconKey, IconPencil, IconUsers } from "@/components/Icons";
-import { getDispatchSettings } from "@/lib/dispatch";
+import { dispatchRuntimeStatus, getDispatchSettings, listDispatchOverviews } from "@/lib/dispatch";
 import { requireAdminUser } from "@/lib/session-guard";
 import {
   listApiKeys,
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 const TABS = [
   { id: "users", href: "/admin", label: "用户", icon: IconUsers },
   { id: "keys", href: "/admin?tab=keys", label: "API Key", icon: IconKey },
-  { id: "wake", href: "/admin?tab=wake", label: "叫醒", icon: IconBell },
+  { id: "wake", href: "/admin?tab=wake", label: "分派给 Agent", icon: IconBell },
   { id: "analytics", href: "/admin?tab=analytics", label: "数据分析", icon: IconChart },
   { id: "prompts", href: "/admin?tab=prompts", label: "提示词", icon: IconPencil },
 ] as const;
@@ -38,7 +38,7 @@ function localMcpScriptPath() {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; range?: string; project?: string }>;
+  searchParams: Promise<{ tab?: string; range?: string; project?: string; compose?: string }>;
 }) {
   const identity = await requireAdminUser();
   const sp = await searchParams;
@@ -48,8 +48,9 @@ export default async function AdminPage({
       : "users";
   const projects = tab === "wake" ? listProjects(identity) : [];
   const requestedProject = Number(sp.project);
-  const wakeProject =
-    projects.find((project) => project.id === requestedProject) ?? projects[0] ?? null;
+  const wakeProject = projects.find((project) => project.id === requestedProject) ?? null;
+  const wakeOverviews = tab === "wake" ? listDispatchOverviews(identity) : [];
+  const wakeRuntime = tab === "wake" ? dispatchRuntimeStatus() : null;
 
   return (
     <AppShell username={identity.username} role={identity.role}>
@@ -117,20 +118,31 @@ export default async function AdminPage({
 
       {tab === "prompts" ? <AgentPromptsAdmin /> : null}
 
-      {tab === "wake" ? (
-        wakeProject ? (
-          <DispatchPanel
-            key={wakeProject.id}
-            projectId={wakeProject.id}
-            projects={projects.map((project) => ({ id: project.id, name: project.name }))}
-            initial={getDispatchSettings(identity, wakeProject.id)}
-          />
-        ) : (
-          <section className="bb-card bb-section-card">
-            <h2>叫醒处理端</h2>
-            <p className="bb-muted">还没有可配置的项目。</p>
-          </section>
-        )
+      {tab === "wake" && wakeRuntime ? (
+        <DispatchAdmin
+          projects={projects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            repoUrl: project.github_url || "",
+          }))}
+          overviews={wakeOverviews}
+          runtime={wakeRuntime}
+          editor={
+            wakeProject
+              ? {
+                  mode: "edit",
+                  project: {
+                    id: wakeProject.id,
+                    name: wakeProject.name,
+                    repoUrl: wakeProject.github_url || "",
+                  },
+                  initial: getDispatchSettings(identity, wakeProject.id),
+                }
+              : sp.compose === "new"
+                ? { mode: "create" }
+                : null
+          }
+        />
       ) : null}
     </AppShell>
   );

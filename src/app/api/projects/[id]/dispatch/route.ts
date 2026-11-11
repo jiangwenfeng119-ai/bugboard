@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
-import { getDispatchSettings, saveDispatchSettings, sendDispatchTest } from "@/lib/dispatch";
+import {
+  clearDispatchSettings,
+  getDispatchSettings,
+  saveDispatchSettings,
+  sendDispatchTest,
+} from "@/lib/dispatch";
 import { json, withAuth } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -24,10 +29,23 @@ export async function PUT(
     const settings = saveDispatchSettings(identity, Number(id), {
       webhookUrl: typeof body.webhookUrl === "string" ? body.webhookUrl : "",
       cursorEnabled: Boolean(body.cursorEnabled),
+      organizeEnabled: typeof body.organizeEnabled === "boolean" ? body.organizeEnabled : undefined,
+      repairLocalEnabled: typeof body.repairLocalEnabled === "boolean" ? body.repairLocalEnabled : undefined,
       rotateSecret: Boolean(body.rotateSecret),
       localAgents: Array.isArray(body.localAgents) ? body.localAgents : undefined,
     });
     return json({ settings });
+  });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  return withAuth(req, async (identity) => {
+    const { id } = await ctx.params;
+    clearDispatchSettings(identity, Number(id));
+    return json({ ok: true });
   });
 }
 

@@ -426,4 +426,84 @@ describe("agent wake", () => {
     expect(viewed.organizeStatus).toBe("skipped");
     expect(viewed.drafts.length).toBeGreaterThan(0);
   });
+
+  it("lists configured dispatch targets and clears one", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const other = services.createProject(identity, { name: "库房", description: "" });
+    expect(dispatch.listDispatchOverviews(identity)).toEqual([]);
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+      localAgents: [{ name: "本机 Cursor", kind: "cursor", enabled: true }],
+    });
+    dispatch.saveDispatchSettings(identity, other.id, {
+      webhookUrl: "",
+      cursorEnabled: true,
+    });
+    const listed = dispatch.listDispatchOverviews(identity);
+    expect(listed.map((item) => item.projectName).sort()).toEqual(["库房", "柜台"]);
+    const local = listed.find((item) => item.projectId === project.id);
+    expect(local?.webhookUrl).toBe("http://127.0.0.1:3099/wake");
+    expect(local?.agents.map((agent) => agent.name)).toEqual(["本机 Cursor"]);
+    expect(listed.find((item) => item.projectId === other.id)?.cursorEnabled).toBe(true);
+    expect(() =>
+      dispatch.saveDispatchSettings(identity, project.id, { webhookUrl: "", cursorEnabled: false })
+    ).toThrow(/至少启用/);
+    dispatch.clearDispatchSettings(identity, project.id);
+    expect(dispatch.listDispatchOverviews(identity).map((item) => item.projectId)).toEqual([other.id]);
+    expect(dispatch.projectWakeEnabled(project.id)).toBe(false);
+  });
+
+  it("sends walkthrough organize and bug repair on separate switches", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const captures = await import("../src/lib/captures");
+    process.env.CURSOR_API_KEY = "cursor-test-key";
+    services.updateProject(identity, project.id, { github_url: "https://github.com/acme/counter" });
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: true,
+      organizeEnabled: true,
+      repairLocalEnabled: false,
+      localAgents: [{ name: "本机 Cursor", kind: "cursor", enabled: true }],
+    });
+    const saved = dispatch.getDispatchSettings(identity, project.id);
+    expect(saved.organizeEnabled).toBe(true);
+    expect(saved.repairLocalEnabled).toBe(false);
+    expect(saved.cursorEnabled).toBe(true);
+
+    const calls: { url: string }[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push({ url: input.url });
+      if (input.url.includes("api.cursor.com")) {
+        return { status: 200, text: JSON.stringify({ agent: { id: "bc-3", url: "https://cursor.com/agents/bc-3" } }) };
+      }
+      return { status: 202, text: "" };
+    });
+    const session = captures.createCaptureSession(identity, project.id, {
+      transcript: [{ start: 0, end: 1, text: "点保存没有反应" }],
+    });
+    dispatch.scheduleCaptureOrganize(identity, session.id);
+    await dispatch.flushDispatches();
+    expect(calls.map((call) => call.url)).toEqual(["http://127.0.0.1:3099/wake"]);
+
+    calls.length = 0;
+    services.createBug(identity, { projectId: project.id, title: "合计不对" });
+    await dispatch.flushDispatches();
+    expect(calls.map((call) => call.url)).toEqual(["https://api.cursor.com/v1/agents"]);
+
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: true,
+      organizeEnabled: false,
+      repairLocalEnabled: false,
+    });
+    calls.length = 0;
+    const again = captures.createCaptureSession(identity, project.id, {
+      transcript: [{ start: 0, end: 1, text: "再录一次" }],
+    });
+    dispatch.scheduleCaptureOrganize(identity, again.id);
+    await dispatch.flushDispatches();
+    expect(calls).toEqual([]);
+    expect(captures.getCaptureSession(identity, again.id).organizeStatus).toBe("skipped");
+  });
 });
