@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { withAuth, json } from "@/lib/http";
 import { listProjectDocuments } from "@/lib/project-documents";
+import { toPublicProject } from "@/lib/project-logo";
 import { profilePatchFromBody } from "@/lib/project-profile";
 import { deleteProject, getProject, updateProject } from "@/lib/services";
 
@@ -15,7 +16,7 @@ export async function GET(
     const projectId = Number(id);
     const project = getProject(identity, projectId);
     return json({
-      project,
+      project: toPublicProject(project),
       documents: listProjectDocuments(identity, projectId),
     });
   });
@@ -36,7 +37,7 @@ export async function PATCH(
       ...(typeof body.code === "string" ? { code: body.code } : {}),
       ...profilePatchFromBody(body),
     });
-    return json({ project });
+    return json({ project: toPublicProject(project) });
   });
 }
 

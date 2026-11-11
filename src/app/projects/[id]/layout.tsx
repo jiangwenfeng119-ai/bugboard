@@ -2,6 +2,7 @@ import { AppShell } from "@/components/AppShell";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
 import { listProjectDocuments } from "@/lib/project-documents";
+import { projectHasLogo } from "@/lib/project-logo";
 import { profileFromRow } from "@/lib/project-profile";
 import { getProject, listProjects } from "@/lib/services";
 import { ProjectHeader } from "./ProjectHeader";
@@ -39,6 +40,8 @@ export default async function ProjectLayout({
         name={project.name}
         code={project.code}
         description={project.description}
+        hasLogo={projectHasLogo(project)}
+        updatedAt={project.updated_at}
         profile={profileFromRow(project)}
         documents={listProjectDocuments(identity, project.id)}
         isAdmin={isAdminRole(identity.role)}

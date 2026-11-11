@@ -2327,6 +2327,49 @@ a.bb-bug-id:hover {
   text-decoration: none;
 }
 
+.bb-project-icon.has-logo {
+  background: var(--surface);
+  box-shadow: none;
+  border: 1px solid var(--line);
+  padding: 0.28rem;
+}
+
+.bb-project-icon.has-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bb-project-mark,
+.bb-logo-preview {
+  object-fit: contain;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.bb-project-mark {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  padding: 0.18rem;
+}
+
+.bb-logo-preview {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 12px;
+  padding: 0.28rem;
+}
+
+.bb-logo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
 .bb-open-chip {
   font-size: 0.75rem;
   font-weight: 400;
@@ -3652,6 +3695,10 @@ a.bb-bug-id:hover {
 .bb-dispatch-lead {
   margin: 0;
   max-width: 68ch;
+}
+
+.bb-dispatch-lead + .bb-dispatch-lead {
+  margin-top: 0.35rem;
 }
 
 .bb-dispatch-empty {

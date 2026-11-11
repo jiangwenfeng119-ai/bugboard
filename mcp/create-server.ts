@@ -75,7 +75,7 @@ const transitionNote = z.string().optional().describe("说明 / 修复说明 / �
 
 server.tool(
   "list_projects",
-  "列出当前 Key 可见的项目。每条含 description（项目列表卡片上的说明），以及项目资料：product_manager、experience_officer、github_url、default_branch、tech_stack、design_url、docs_url、dev_url、test_url、prod_url、verify_env、agent_notes，以及 documents（设计稿和需求文档附件）",
+  "列出当前 Key 可见的项目。每条含 description（项目列表卡片上的说明），以及项目资料：product_manager、experience_officer、github_url、default_branch、tech_stack、design_url、docs_url、dev_url、test_url、prod_url、verify_env、agent_notes、has_logo（是否已有 logo），以及 documents（设计稿和需求文档附件）",
   {},
   async () => {
     try {
@@ -616,6 +616,49 @@ server.tool(
           method: "POST",
           body: form,
         })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "upload_project_logo",
+  "给项目上传 logo（仅管理员级 Key）。path 是本机图片绝对路径，只接受 png、jpg、webp，单张不超过 2MB。再上传会替换原来的图。显示在项目列表卡片和项目标题上。修报障时不要调用，只有用户让你补项目资料时才用。",
+  {
+    projectId: z.number().int().positive(),
+    path: z.string().min(1).describe("要上传的本机图片绝对路径"),
+  },
+  async ({ projectId, path: filePath }) => {
+    try {
+      const abs = path.resolve(filePath);
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+        throw new Error("找不到这个文件");
+      }
+      const buf = fs.readFileSync(abs);
+      const form = new FormData();
+      form.set("file", new Blob([new Uint8Array(buf)]), path.basename(abs));
+      return textResult(
+        await api(`/api/projects/${projectId}/logo`, {
+          method: "POST",
+          body: form,
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "remove_project_logo",
+  "移除项目 logo（仅管理员级 Key）。修报障时不要调用，只有用户让你改项目资料时才用。",
+  { projectId: z.number().int().positive() },
+  async ({ projectId }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/logo`, { method: "DELETE" })
       );
     } catch (e) {
       return errResult(e);

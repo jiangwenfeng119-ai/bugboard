@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS projects (
   prod_url TEXT NOT NULL DEFAULT '',
   verify_env TEXT NOT NULL DEFAULT '',
   agent_notes TEXT NOT NULL DEFAULT '',
+  logo_path TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -188,6 +189,7 @@ function migrateSchema(db: Database.Database) {
   ensureMemberRoles(db);
   ensureProjectCodes(db);
   ensureProjectProfile(db);
+  ensureProjectLogo(db);
   ensurePublicIds(db);
   ensureCaptureSchema(db);
   ensureLocalAgents(db);
@@ -322,6 +324,11 @@ function ensureLocalAgents(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_local_agents_project ON project_local_agents(project_id, sort_index);
   `);
+}
+
+function ensureProjectLogo(db: Database.Database) {
+  if (columnNames(db, "projects").includes("logo_path")) return;
+  db.exec("ALTER TABLE projects ADD COLUMN logo_path TEXT NOT NULL DEFAULT ''");
 }
 
 function ensureProjectProfile(db: Database.Database) {

@@ -178,9 +178,11 @@ export function deleteProject(identity: Identity, projectId: number) {
               WHERE b.project_id = ?
             ))
          UNION ALL
-         SELECT storage_path FROM project_documents WHERE project_id = ?`
+         SELECT storage_path FROM project_documents WHERE project_id = ?
+         UNION ALL
+         SELECT logo_path AS storage_path FROM projects WHERE id = ? AND logo_path != ''`
       )
-      .all(projectId, projectId, projectId) as { storage_path: string }[];
+      .all(projectId, projectId, projectId, projectId) as { storage_path: string }[];
     files.push(...captureFilePathsForProject(projectId));
     db.prepare(
       `DELETE FROM attachments

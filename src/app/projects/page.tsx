@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { IconArrowRight, IconFolder } from "@/components/Icons";
+import { projectLogoSrc } from "@/lib/project-logo-shared";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
 import {
@@ -106,6 +107,7 @@ export default async function ProjectsPage() {
               open: 0,
             };
             const bugsHref = `/projects/${p.id}/bugs`;
+            const logoSrc = p.logo_path ? projectLogoSrc(p.id, p.updated_at) : "";
             return (
               <div
                 key={p.id}
@@ -119,8 +121,18 @@ export default async function ProjectsPage() {
                   />
                 ) : null}
                 <div className="bb-project-card-top">
-                  <Link href={bugsHref} className="bb-project-icon" aria-label={`打开${p.name}`}>
-                    <IconFolder size={20} />
+                  <Link
+                    href={bugsHref}
+                    className={`bb-project-icon${logoSrc ? " has-logo" : ""}`}
+                    aria-label={`打开${p.name}`}
+                  >
+                    {logoSrc ? (
+                      // 登录后的项目图，浏览器直接带上 cookie，不用图片优化器。
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={logoSrc} alt="" />
+                    ) : (
+                      <IconFolder size={20} />
+                    )}
                   </Link>
                   <div className="bb-open-chips">
                     {attentionChips(p.id, counts, identity).map((chip) => (

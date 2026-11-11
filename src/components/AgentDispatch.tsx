@@ -69,17 +69,35 @@ const STATUS_LABEL: Record<DispatchRecent["status"], string> = {
   skipped: "未发送",
 };
 
+function explainDetail(detail: string) {
+  if (detail === "fetch failed") return "连不上这个地址";
+  if (detail === "没有可启动的本机 agent") return "本机收到了，但没有可启动的 Agent";
+  return detail;
+}
+
 function resultText(item: DispatchRecent) {
+  const when = formatDateTimeShort(item.createdAt);
+  if (item.reason === "test") {
+    if (item.status === "failed") {
+      return { head: `${when} · 测试本机地址：没送到`, href: "", extra: explainDetail(item.detail) };
+    }
+    if (item.status === "pending") {
+      return { head: `${when} · 测试本机地址：正在发送`, href: "", extra: "" };
+    }
+    return {
+      head: `${when} · 测试本机地址：已通`,
+      href: "",
+      extra: "只说明地址和签名对上了，没有启动 Agent",
+    };
+  }
   const reason = REASON_LABEL[item.reason] || item.reason;
   const target = TARGET_LABEL[item.target] || item.target;
-  const when = formatDateTimeShort(item.createdAt);
   const head = `${when} · ${reason} · ${target} · ${STATUS_LABEL[item.status]}`;
   if (item.status === "sent" && item.detail.startsWith("https://cursor.com/")) {
     return { head, href: item.detail, extra: "" };
   }
   if (item.status === "failed" || item.status === "skipped") {
-    const extra = item.detail === "fetch failed" ? "连不上这个地址" : item.detail;
-    return { head, href: "", extra };
+    return { head, href: "", extra: explainDetail(item.detail) };
   }
   return { head, href: "", extra: "" };
 }
@@ -166,7 +184,9 @@ function DispatchList({
         setError(data.error || "测试失败");
         return;
       }
-      setNotice(`已向「${item.projectName}」的本机地址发送测试。几秒后刷新可以看到结果。`);
+      setNotice(
+        `已向「${item.projectName}」的本机地址发出检查。大约一秒后，项目名下面会更新：写成「本机地址已通」就是通了，写成「没送到」才是没通。这次不启动 Agent。`
+      );
       window.setTimeout(() => router.refresh(), 1200);
     } finally {
       setBusyId(null);
@@ -204,7 +224,10 @@ function DispatchList({
         <div>
           <h2>分派给 Agent</h2>
           <p className="bb-muted bb-dispatch-lead">
-            每个项目一套，两件活分开开关。整理走查只发给本机 Agent，修理报障可以发给本机 Agent、Cursor 云端 Agent，或两个都发。
+            每个项目一套。整理走查只发给本机 Agent。修理报障可以发给本机 Agent、Cursor 云端 Agent，或两个都发。绿色字是已经保存的开关。
+          </p>
+          <p className="bb-muted bb-dispatch-lead">
+            「测试地址」只检查本机地址和签名能不能对上，不启动 Agent，也不测云端。结果在项目名下面：写成「本机地址已通」就是通了，写成「没送到」才是没通。会不会拉起 Agent，要等一次真实的整理走查或修理报障，结果写成「已送达」才算拉起。
           </p>
           {!canCreate ? <p className="bb-dispatch-reason">{createReason}</p> : null}
         </div>
@@ -250,11 +273,11 @@ function DispatchList({
                       ) : null}
                       {latest ? (
                         <span className="bb-dispatch-sub">
-                          最近 {latest.head}
-                          {latest.extra ? ` · ${latest.extra}` : ""}
+                          最近一次结果：{latest.head}
+                          {latest.extra ? `。${latest.extra}` : ""}
                         </span>
                       ) : (
-                        <span className="bb-dispatch-sub">还没有分派给 Agent 的记录</span>
+                        <span className="bb-dispatch-sub">还没有结果。点「测试地址」检查本机地址通不通。</span>
                       )}
                     </td>
                     <td>
@@ -291,9 +314,13 @@ function DispatchList({
                           className="bb-btn bb-btn-secondary"
                           onClick={() => testRow(item)}
                           disabled={busy || !item.webhookUrl}
-                          title={item.webhookUrl ? "向本机地址发一次测试" : "还没有本机地址，无法测试"}
+                          title={
+                            item.webhookUrl
+                              ? "只检查本机地址和签名，不启动 Agent，也不测云端"
+                              : "还没有本机地址，无法测试"
+                          }
                         >
-                          {busy ? "处理中…" : "测试"}
+                          {busy ? "处理中…" : "测试地址"}
                         </button>
                         <button
                           type="button"
@@ -426,7 +453,9 @@ function DispatchEditor({
         setError(data.error || "测试失败");
         return;
       }
-      setNotice("已向本机地址发送测试。几秒后刷新可以看到结果。云端 Agent 不在这次测试里。");
+      setNotice(
+        "已向已保存的本机地址发出检查。大约一秒后，下面的记录会更新：写成「本机地址已通」就是通了。这次不启动 Agent，也不测云端。"
+      );
       window.setTimeout(() => router.refresh(), 1200);
     } finally {
       setLoading("");
@@ -728,11 +757,14 @@ function DispatchEditor({
           disabled={
             loading !== "" || !settings?.webhookUrl || webhookUrl.trim() !== settings.webhookUrl || !selected
           }
-          title="只向已保存的本机地址发测试，不会启动云端 Agent"
+          title="只检查已保存的本机地址和签名。不启动 Agent，也不测云端。改过地址要先保存。"
         >
           {loading === "test" ? "发送中…" : "测试本机地址"}
         </button>
       </div>
+      <p className="bb-field-hint">
+        先保存，再测。测试用的是已保存的本机地址和签名。写成「本机地址已通」就是通了。这次不启动 Agent，也不测云端。会不会拉起 Agent，要看真实整理或修理的结果是否写成「已送达」。
+      </p>
       {settings && settings.recent.length > 0 ? (
         <ul className="bb-dispatch-log">
           {settings.recent.map((item) => {
@@ -801,7 +833,7 @@ export function WakeBugButton({
               </a>
             </>
           ) : null}
-          {latest.extra ? ` · ${latest.extra}` : ""}
+          {latest.extra ? `。${latest.extra}` : ""}
         </p>
       ) : (
         <p className="bb-muted">这张报障还没有分派去修理。</p>

@@ -82,7 +82,11 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("项目列表卡片");
     expect(ADMIN_AGENT_PROMPT).toContain(".md");
     expect(ADMIN_AGENT_PROMPT).toContain("upload_project_document");
+    expect(ADMIN_AGENT_PROMPT).toContain("upload_project_logo");
+    expect(ADMIN_AGENT_PROMPT).toContain("remove_project_logo");
     expect(USER_AGENT_PROMPT).toContain("upload_project_document");
+    expect(USER_AGENT_PROMPT).toContain("upload_project_logo");
+    expect(USER_AGENT_PROMPT).toContain("remove_project_logo");
     expect(USER_AGENT_PROMPT).toContain("本角色不调用");
     expect(USER_AGENT_PROMPT).toContain("范围内每张单都有了一行结果");
     expect(USER_AGENT_PROMPT).toContain("## 环境");

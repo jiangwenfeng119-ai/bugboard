@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconPencil } from "@/components/Icons";
 import type { ProjectDocument, ProjectDocumentKind } from "@/lib/project-documents";
+import { logoFileError, projectLogoSrc } from "@/lib/project-logo-shared";
 import {
   PROFILE_GROUPS,
   VERIFY_ENV_OPTIONS,
@@ -23,7 +24,12 @@ export type ProjectDraft = {
   profile: ProjectProfile;
 };
 
-type SavedProject = ProjectDraft & { id: number; documents: ProjectDocument[] };
+type SavedProject = ProjectDraft & {
+  id: number;
+  documents: ProjectDocument[];
+  hasLogo: boolean;
+  updatedAt: string;
+};
 
 const emptyPending = (): Record<ProjectDocumentKind, File[]> => ({
   design: [],
@@ -35,6 +41,8 @@ export function ProjectProfileDialog({
   projectId,
   isAdmin,
   draft,
+  hasLogo,
+  updatedAt,
   documents,
   onClose,
   onSaved,
@@ -43,6 +51,8 @@ export function ProjectProfileDialog({
   projectId: number;
   isAdmin: boolean;
   draft: ProjectDraft;
+  hasLogo: boolean;
+  updatedAt: string;
   documents: ProjectDocument[];
   onClose: () => void;
   onSaved: (project: SavedProject) => void;
@@ -59,6 +69,9 @@ export function ProjectProfileDialog({
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(emptyPending);
   const [removed, setRemoved] = useState<number[]>([]);
+  const [pendingLogo, setPendingLogo] = useState<File | null>(null);
+  const [logoRemoved, setLogoRemoved] = useState(false);
+  const [logoPreview, setLogoPreview] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -74,6 +87,8 @@ export function ProjectProfileDialog({
     setProfile(draft.profile);
     setPending(emptyPending());
     setRemoved([]);
+    setPendingLogo(null);
+    setLogoRemoved(false);
     // 只在打开或切换项目时回到只读，避免编辑过程中被父组件重绘清掉。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, projectId]);
@@ -97,6 +112,16 @@ export function ProjectProfileDialog({
     };
   }, [open, mode, loading, onClose]);
 
+  useEffect(() => {
+    if (!pendingLogo) {
+      setLogoPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(pendingLogo);
+    setLogoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingLogo]);
+
   function startEdit() {
     setName(draft.name);
     setCode(draft.code);
@@ -104,8 +129,14 @@ export function ProjectProfileDialog({
     setProfile(draft.profile);
     setPending(emptyPending());
     setRemoved([]);
+    setPendingLogo(null);
+    setLogoRemoved(false);
     setError("");
     setMode("edit");
+  }
+
+  function savedLogoSrc() {
+    return hasLogo && !logoRemoved ? projectLogoSrc(projectId, updatedAt) : "";
   }
 
   function visibleDocuments(kind: ProjectDocumentKind) {
@@ -121,6 +152,14 @@ export function ProjectProfileDialog({
     setLoading(true);
     setError("");
     try {
+      if (pendingLogo) {
+        const bytes = new Uint8Array(await pendingLogo.arrayBuffer());
+        const logoError = logoFileError(pendingLogo.name, bytes);
+        if (logoError) {
+          setError(logoError);
+          return;
+        }
+      }
       const res = await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -138,6 +177,8 @@ export function ProjectProfileDialog({
             name: string;
             code: string;
             description: string;
+            updated_at?: string;
+            has_logo?: boolean;
           } & ProjectProfile;
         }
       ).project;
@@ -145,6 +186,21 @@ export function ProjectProfileDialog({
         setError("保存失败");
         return;
       }
+      const publish = (
+        documentsNext: ProjectDocument[],
+        logoState?: { hasLogo: boolean; updatedAt: string }
+      ) => {
+        onSaved({
+          id: project.id,
+          name: project.name,
+          code: project.code,
+          description: project.description,
+          profile: profileFromRow(project),
+          documents: documentsNext,
+          hasLogo: logoState?.hasLogo ?? project.has_logo ?? hasLogo,
+          updatedAt: logoState?.updatedAt ?? project.updated_at ?? updatedAt,
+        });
+      };
       let nextDocuments = documents.filter((doc) => !removed.includes(doc.id));
       for (const id of removed) {
         const deleted = await fetch(`/api/projects/${projectId}/documents/${id}`, {
@@ -153,14 +209,7 @@ export function ProjectProfileDialog({
         const deletedData = await deleted.json().catch(() => ({}));
         if (!deleted.ok) {
           setError((deletedData as { error?: string }).error || "删除文档失败");
-          onSaved({
-            id: project.id,
-            name: project.name,
-            code: project.code,
-            description: project.description,
-            profile: profileFromRow(project),
-            documents: nextDocuments,
-          });
+          publish(nextDocuments);
           return;
         }
         nextDocuments = (deletedData as { documents?: ProjectDocument[] }).documents || nextDocuments;
@@ -177,28 +226,54 @@ export function ProjectProfileDialog({
         const uploadedData = await uploaded.json().catch(() => ({}));
         if (!uploaded.ok) {
           setError((uploadedData as { error?: string }).error || "上传文档失败");
-          onSaved({
-            id: project.id,
-            name: project.name,
-            code: project.code,
-            description: project.description,
-            profile: profileFromRow(project),
-            documents: nextDocuments,
-          });
+          publish(nextDocuments);
           return;
         }
         nextDocuments = (uploadedData as { documents?: ProjectDocument[] }).documents || nextDocuments;
       }
-      onSaved({
-        id: project.id,
-        name: project.name,
-        code: project.code,
-        description: project.description,
-        profile: profileFromRow(project),
-        documents: nextDocuments,
-      });
+      let nextHasLogo = project.has_logo ?? hasLogo;
+      let nextUpdatedAt = project.updated_at ?? updatedAt;
+      if (pendingLogo) {
+        const form = new FormData();
+        form.set("file", pendingLogo, pendingLogo.name);
+        const uploaded = await fetch(`/api/projects/${projectId}/logo`, {
+          method: "POST",
+          body: form,
+        });
+        const uploadedData = (await uploaded.json().catch(() => ({}))) as {
+          error?: string;
+          has_logo?: boolean;
+          updated_at?: string;
+        };
+        if (!uploaded.ok) {
+          setError(uploadedData.error || "上传 Logo 失败");
+          publish(nextDocuments, { hasLogo: nextHasLogo, updatedAt: nextUpdatedAt });
+          return;
+        }
+        nextHasLogo = Boolean(uploadedData.has_logo);
+        nextUpdatedAt = uploadedData.updated_at || nextUpdatedAt;
+      } else if (logoRemoved && hasLogo) {
+        const removedLogo = await fetch(`/api/projects/${projectId}/logo`, {
+          method: "DELETE",
+        });
+        const removedData = (await removedLogo.json().catch(() => ({}))) as {
+          error?: string;
+          has_logo?: boolean;
+          updated_at?: string;
+        };
+        if (!removedLogo.ok) {
+          setError(removedData.error || "移除 Logo 失败");
+          publish(nextDocuments, { hasLogo: nextHasLogo, updatedAt: nextUpdatedAt });
+          return;
+        }
+        nextHasLogo = Boolean(removedData.has_logo);
+        nextUpdatedAt = removedData.updated_at || nextUpdatedAt;
+      }
+      publish(nextDocuments, { hasLogo: nextHasLogo, updatedAt: nextUpdatedAt });
       setPending(emptyPending());
       setRemoved([]);
+      setPendingLogo(null);
+      setLogoRemoved(false);
       setMode("view");
     } catch {
       setError("网络异常，请重试");
@@ -253,6 +328,7 @@ export function ProjectProfileDialog({
               name={draft.name}
               code={draft.code}
               description={draft.description}
+              logoSrc={hasLogo ? projectLogoSrc(projectId, updatedAt) : ""}
               profile={draft.profile}
               documents={documents}
             />
@@ -304,6 +380,17 @@ export function ProjectProfileDialog({
                       onChange={(event) => setDescription(event.target.value)}
                     />
                   </div>
+                  <LogoField
+                    previewSrc={logoPreview || savedLogoSrc()}
+                    onPick={(file) => {
+                      setPendingLogo(file);
+                      setLogoRemoved(false);
+                    }}
+                    onRemove={() => {
+                      setPendingLogo(null);
+                      setLogoRemoved(true);
+                    }}
+                  />
                 </div>
               </section>
 
@@ -405,6 +492,8 @@ export function ProjectProfileDialog({
                 onClick={() => {
                   setPending(emptyPending());
                   setRemoved([]);
+                  setPendingLogo(null);
+                  setLogoRemoved(false);
                   setMode("view");
                   setError("");
                 }}
@@ -430,11 +519,64 @@ export function ProjectProfileDialog({
   );
 }
 
+function LogoField({
+  previewSrc,
+  onPick,
+  onRemove,
+}: {
+  previewSrc: string;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="bb-field is-wide">
+      <label className="bb-label" htmlFor={inputId}>
+        Logo
+      </label>
+      {previewSrc ? (
+        // 本地预览或已保存的项目图。
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="bb-logo-preview" src={previewSrc} alt="" />
+      ) : (
+        <p className="bb-muted" style={{ margin: 0 }}>
+          未上传
+        </p>
+      )}
+      <div className="bb-logo-actions">
+        <input
+          id={inputId}
+          ref={inputRef}
+          type="file"
+          hidden
+          accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onPick(file);
+            event.target.value = "";
+          }}
+        />
+        <button type="button" className="bb-btn bb-btn-secondary" onClick={() => inputRef.current?.click()}>
+          选择图片
+        </button>
+        {previewSrc ? (
+          <button type="button" className="bb-btn bb-btn-ghost" onClick={onRemove}>
+            移除
+          </button>
+        ) : null}
+      </div>
+      <p className="bb-muted bb-field-hint">png、jpg 或 webp，不超过 2MB。显示在项目列表和项目标题上。</p>
+    </div>
+  );
+}
+
 function ProfileView({
   projectId,
   name,
   code,
   description,
+  logoSrc,
   profile,
   documents,
 }: {
@@ -442,6 +584,7 @@ function ProfileView({
   name: string;
   code: string;
   description: string;
+  logoSrc: string;
   profile: ProjectProfile;
   documents: ProjectDocument[];
 }) {
@@ -453,6 +596,15 @@ function ProfileView({
           <ProfileRow label="项目名称" value={name} />
           <ProfileRow label="缩写" value={code} />
           <ProfileRow label="说明" value={description} />
+          <dt>Logo</dt>
+          <dd>
+            {logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="bb-logo-preview" src={logoSrc} alt="" />
+            ) : (
+              <span className="bb-muted">未上传</span>
+            )}
+          </dd>
         </dl>
       </section>
       {PROFILE_GROUPS.map((group) => (

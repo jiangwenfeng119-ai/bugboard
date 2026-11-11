@@ -61,6 +61,7 @@ export type ProjectRow = {
   slug: string;
   code: string;
   description: string;
+  logo_path: string;
   widget_token: string | null;
   widget_owner_user_id: number | null;
   created_at: string;
