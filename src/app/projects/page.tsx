@@ -148,13 +148,21 @@ export default async function ProjectsPage() {
                   </div>
                 </div>
                 <Link href={bugsHref} className="bb-project-card-link">
-                  <h2 className="bb-project-name">{p.name}</h2>
-                  {p.description ? (
-                    <p className="bb-muted bb-project-desc">{p.description}</p>
-                  ) : null}
+                  <h2 className="bb-project-name" title={p.name}>
+                    {p.name}
+                  </h2>
+                  <p
+                    className="bb-muted bb-project-desc"
+                    title={p.description || undefined}
+                    aria-hidden={p.description ? undefined : true}
+                  >
+                    {p.description}
+                  </p>
                 </Link>
                 <div className="bb-project-card-foot">
-                  <code className="bb-slug">{p.slug}</code>
+                  <code className="bb-slug" title={p.code}>
+                    {p.code}
+                  </code>
                   <Link href={`/projects/${p.id}/bugs`} className="bb-enter-link">
                     进入 <IconArrowRight size={14} />
                   </Link>

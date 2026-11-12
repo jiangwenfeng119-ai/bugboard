@@ -2286,6 +2286,7 @@ a.bb-bug-id:hover {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 15rem;
   padding: 1.25rem 1.3rem 1.15rem;
   text-align: left;
 }
@@ -2451,22 +2452,42 @@ a.bb-bug-id:hover {
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.35;
-  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .bb-project-desc {
   margin: 0.4rem 0 0;
   font-size: 0.875rem;
   line-height: 1.75;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .bb-project-card-foot {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   margin-top: auto;
   padding-top: 0.95rem;
+}
+
+.bb-project-card-foot .bb-slug {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 4.5rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bb-slug {
@@ -2475,6 +2496,10 @@ a.bb-bug-id:hover {
   background: var(--surface-2);
   border-radius: 6px;
   padding: 0.15rem 0.4rem;
+}
+
+.bb-project-card-foot .bb-enter-link {
+  flex-shrink: 0;
 }
 
 .bb-enter-link {
