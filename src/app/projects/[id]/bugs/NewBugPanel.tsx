@@ -8,6 +8,7 @@ import {
   type PendingFile,
 } from "@/components/AttachmentComposer";
 import { CaptureTools } from "@/components/CaptureTools";
+import { BUG_BODY_TEMPLATE, bugBodyUntouched } from "@/lib/bug-body";
 import { BUG_BODY_MAX, BUG_TITLE_MAX } from "@/lib/limits";
 import type { Stroke } from "@/lib/strokes";
 import { PRIORITY_HINT, PRIORITY_LABEL, type Priority } from "@/lib/types";
@@ -21,7 +22,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(BUG_BODY_TEMPLATE);
   const [priority, setPriority] = useState<Priority>("p2");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [quote, setQuote] = useState("");
@@ -44,7 +45,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
       return [];
     });
     setTitle("");
-    setBody("");
+    setBody(BUG_BODY_TEMPLATE);
     setPriority("p2");
     setQuote("");
     setSteps([]);
@@ -67,7 +68,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
     if (!clean) return;
     setQuote(clean);
     setTitle((current) => current.trim() || Array.from(clean).slice(0, 42).join(""));
-    setBody((current) => current.trim() || clean);
+    setBody((current) => (bugBodyUntouched(current) ? clean : current));
   }
 
   function closePanel() {
@@ -178,9 +179,9 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
               className="bb-textarea"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder={"## 环境\n\n## 复现步骤\n1. \n\n## 期望\n\n## 实际"}
+              placeholder="写清环境、步骤、期望和实际"
               maxLength={BUG_BODY_MAX}
-              rows={7}
+              rows={8}
             />
             <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
           </div>
@@ -216,7 +217,9 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
 
           <CaptureTools
             projectId={projectId}
-            draftPending={Boolean(title.trim() || body.trim() || files.length || quote.trim())}
+            draftPending={Boolean(
+              title.trim() || !bugBodyUntouched(body) || files.length || quote.trim()
+            )}
             onSnap={({ file, note, strokes: marks }) => {
               addCapturedFile(file);
               setStrokes(marks);

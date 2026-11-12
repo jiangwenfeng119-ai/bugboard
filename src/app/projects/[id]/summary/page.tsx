@@ -13,6 +13,7 @@ const STATUS_COLOR: Record<BugStatus, string> = {
   pending: "var(--status-pending)",
   fixing: "var(--status-fixing)",
   needs_info: "var(--status-needs)",
+  needs_product: "var(--status-product)",
   awaiting_confirm: "var(--status-awaiting)",
   confirmed: "var(--status-confirmed)",
   acknowledged: "var(--status-acknowledged)",

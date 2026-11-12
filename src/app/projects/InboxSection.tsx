@@ -19,13 +19,14 @@ export function InboxSection({ inbox }: { inbox: Inbox }) {
         <span className="bb-inbox-total">{inbox.total}</span>
       </div>
       {inbox.groups.map((group) => (
-        <div key={group.projectId} className="bb-inbox-group">
-          <h3>
-            <Link href={`/projects/${group.projectId}/bugs`}>{group.projectName}</Link>
-          </h3>
-          <p className="bb-inbox-meta">
-            {group.counts.map((count) => `${count.label} ${count.count}`).join(" · ")}
-          </p>
+        <details key={group.projectId} className="bb-inbox-group">
+          <summary className="bb-inbox-summary">
+            <span className="bb-inbox-chevron" aria-hidden />
+            <span className="bb-inbox-project">{group.projectName}</span>
+            <span className="bb-inbox-count">
+              {group.counts.map((count) => `${count.label} ${count.count}`).join(" · ")}
+            </span>
+          </summary>
           <ul className="bb-inbox-list">
             {group.items.map((item) => (
               <li key={item.id}>
@@ -49,7 +50,7 @@ export function InboxSection({ inbox }: { inbox: Inbox }) {
               </li>
             ) : null}
           </ul>
-        </div>
+        </details>
       ))}
     </section>
   );

@@ -35,9 +35,9 @@ export function BugFilters({
     if (p) sp.set("priority", p);
     if (r) sp.set("reporter", r);
     if (qq) sp.set("q", qq);
-    if (!(sort === "updated" && dir === "desc")) {
-      if (sort) sp.set("sort", sort);
-      if (dir) sp.set("dir", dir);
+    if (sort && dir) {
+      sp.set("sort", sort);
+      sp.set("dir", dir);
     }
     const qs = sp.toString();
     router.push(`/projects/${projectId}/bugs${qs ? `?${qs}` : ""}`);
@@ -56,6 +56,7 @@ export function BugFilters({
         <option value="pending">待处理</option>
         <option value="fixing">修复中</option>
         <option value="needs_info">待补充</option>
+        <option value="needs_product">待产品经理确认</option>
         <option value="awaiting_confirm">待确认</option>
         <option value="confirmed">已确认</option>
         <option value="acknowledged">已认可</option>

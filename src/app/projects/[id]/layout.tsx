@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
@@ -52,6 +53,9 @@ export default async function ProjectLayout({
         isAdmin={isAdminRole(identity.role)}
       />
       {children}
+      <Link href="/projects" className="bb-crumb bb-crumb-end">
+        ← 全部项目
+      </Link>
     </AppShell>
   );
 }

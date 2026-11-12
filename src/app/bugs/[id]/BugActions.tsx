@@ -14,6 +14,8 @@ import type { Priority } from "@/lib/types";
 
 const NOTE_ACTIONS = new Set<TransitionAction>([
   "mark_invalid",
+  "request_product",
+  "decline_product",
   "request_info",
   "provide_info",
   "submit_fix",
@@ -27,7 +29,11 @@ const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
   submit_fix:
     "写给报障人，用 Markdown 分成三段：## 原来的问题、## 现在的表现、## 请这样重测。重测步骤用 1. 2. 。用界面上的说法，不要写文件名或实现细节。",
   mark_invalid:
-    "写给报障人：实际做了什么、看到了什么、为什么和报障对不上。改产品时写明现在的做法，并请报障人去和产品经理沟通。",
+    "写给报障人：实际做了什么、看到了什么、为什么和报障对不上。已经有这个功能、只是没用对或配置不对时用这个。",
+  request_product:
+    "写给产品经理：现在界面上是怎样的，这张单想要的新能力是什么。这次先不改。",
+  decline_product:
+    "写给报障人：为什么这次不做。报障人之后可以认可，也可以提出异议。",
   request_info:
     "写清已经查过什么，以及还缺报障人哪一份材料。缺的应是账号、机型、崩溃记录或操作记录。",
   provide_info: "写上补了什么。可以同时附上截图或记录。",
@@ -153,7 +159,7 @@ export function BugActions({
               key={a}
               type="button"
               className={
-                a === "mark_invalid" || a === "reject_fix"
+                a === "mark_invalid" || a === "decline_product" || a === "reject_fix"
                   ? "bb-btn bb-btn-danger"
                   : "bb-btn"
               }

@@ -58,7 +58,9 @@ describe("agent prompts", () => {
 
   it("treats a new capability as out of scope and finishes the whole batch", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("改产品");
-    expect(ADMIN_AGENT_PROMPT).toContain("请和产品经理沟通");
+    expect(ADMIN_AGENT_PROMPT).toContain("这张在等产品经理决定做不做");
+    expect(ADMIN_AGENT_PROMPT).toContain("之后补的说明，都不算");
+    expect(ADMIN_AGENT_PROMPT).not.toContain("请和产品经理沟通是否要增加");
     expect(ADMIN_AGENT_PROMPT).toContain("这张按需求做");
     expect(ADMIN_AGENT_PROMPT).toContain("已经和产品经理沟通确认");
     expect(ADMIN_AGENT_PROMPT).toContain("已经和 Marshal 确认");

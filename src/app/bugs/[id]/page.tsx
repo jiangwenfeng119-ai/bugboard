@@ -24,6 +24,7 @@ import { latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
 import { BugActions } from "./BugActions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
 import { Prose } from "@/components/Prose";
+import { bugListQueryFromUnknown } from "@/lib/bug-list-query";
 import { absoluteAttachmentPath } from "@/lib/uploads";
 import { extractDocx } from "../../../../mcp/docx";
 import type { AttachmentRow, BugRow } from "@/lib/types";
@@ -182,11 +183,15 @@ function EvidenceCard({ bug }: { bug: BugRow }) {
 
 export default async function BugDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ back?: string }>;
 }) {
   const identity = await requireUser();
   const { id } = await params;
+  const sp = await searchParams;
+  const listQuery = bugListQueryFromUnknown(sp.back);
   const bug = getBug(identity, Number(id));
   const project = getProject(identity, bug.project_id);
   const projects = listProjects(identity);
@@ -209,7 +214,10 @@ export default async function BugDetailPage({
         />
       }
     >
-      <Link href={`/projects/${project.id}/bugs`} className="bb-crumb">
+      <Link
+        href={`/projects/${project.id}/bugs${listQuery ? `?${listQuery}` : ""}`}
+        className="bb-crumb"
+      >
         ← {project.name} / 报障
       </Link>
 
@@ -311,6 +319,12 @@ export default async function BugDetailPage({
           </div>
         </div>
       </div>
+      <Link
+        href={`/projects/${project.id}/bugs${listQuery ? `?${listQuery}` : ""}`}
+        className="bb-crumb bb-crumb-end"
+      >
+        ← {project.name} / 报障
+      </Link>
     </AppShell>
   );
 }

@@ -8,6 +8,7 @@ export type BugStatus =
   | "pending"
   | "fixing"
   | "needs_info"
+  | "needs_product"
   | "awaiting_confirm"
   | "confirmed"
   | "acknowledged"
@@ -17,6 +18,7 @@ export const STATUS_LABEL: Record<BugStatus, string> = {
   pending: "待处理",
   fixing: "修复中",
   needs_info: "待补充",
+  needs_product: "待产品经理确认",
   awaiting_confirm: "待确认",
   confirmed: "已确认",
   acknowledged: "已认可",

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/session-guard";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
-import { listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
+import { bugListQuery } from "@/lib/bug-list-query";
+import { BUG_SORT_KEYS, listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityMark } from "@/components/PriorityMark";
 import { EmptyState } from "@/components/EmptyState";
@@ -42,12 +43,14 @@ function listHref(
   if (filters.priority) sp.set("priority", filters.priority);
   if (filters.reporter) sp.set("reporter", filters.reporter);
   if (filters.q) sp.set("q", filters.q);
-  if (!(sort === "updated" && dir === "desc")) {
-    sp.set("sort", sort);
-    sp.set("dir", dir);
-  }
-  const qs = sp.toString();
-  return `/projects/${projectId}/bugs${qs ? `?${qs}` : ""}`;
+  sp.set("sort", sort);
+  sp.set("dir", dir);
+  return `/projects/${projectId}/bugs?${sp.toString()}`;
+}
+
+function bugHref(bugId: number, listQuery: string) {
+  if (!listQuery) return `/bugs/${bugId}`;
+  return `/bugs/${bugId}?back=${encodeURIComponent(listQuery)}`;
 }
 
 function SortMark({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
@@ -93,15 +96,24 @@ export default async function BugsPage({
   const canDelete = isSuperAdminRole(identity.role);
   const { id } = await params;
   const sp = await searchParams;
-  const order = resolveBugSort(sp.sort, sp.dir);
+  const explicitSort = (BUG_SORT_KEYS as readonly string[]).includes(sp.sort || "");
+  const order = explicitSort ? resolveBugSort(sp.sort, sp.dir) : null;
   const reporters = listProjectReporters(identity, Number(id));
   const bugs = listBugs(identity, Number(id), {
     status: sp.status as BugStatus | undefined,
     priority: sp.priority as Priority | undefined,
     reporter: sp.reporter,
     q: sp.q,
-    sort: order.sort,
-    dir: order.dir,
+    sort: order?.sort,
+    dir: order?.dir,
+  });
+  const listQuery = bugListQuery({
+    status: sp.status,
+    priority: sp.priority,
+    reporter: sp.reporter,
+    q: sp.q,
+    sort: order?.sort,
+    dir: order?.dir,
   });
   const filtered = Boolean(sp.status || sp.priority || sp.reporter || sp.q?.trim());
 
@@ -118,8 +130,8 @@ export default async function BugsPage({
             label: row.reporter_label,
           }))}
           q={sp.q || ""}
-          sort={order.sort}
-          dir={order.dir}
+          sort={order?.sort || ""}
+          dir={order?.dir || ""}
         />
         <div className="bb-bugs-actions">
           {isAdmin ? <WidgetSnippet projectId={Number(id)} /> : null}
@@ -173,12 +185,13 @@ export default async function BugsPage({
                       </th>
                     );
                   }
-                  const active = order.sort === col.key;
-                  const nextDir = active
-                    ? order.dir === "asc"
-                      ? "desc"
-                      : "asc"
-                    : defaultSortDir(col.key);
+                  const active = order?.sort === col.key;
+                  const nextDir =
+                    active && order
+                      ? order.dir === "asc"
+                        ? "desc"
+                        : "asc"
+                      : defaultSortDir(col.key);
                   const href = listHref(
                     id,
                     { status: sp.status, priority: sp.priority, reporter: sp.reporter, q: sp.q },
@@ -189,7 +202,7 @@ export default async function BugsPage({
                     <th
                       key={col.key}
                       aria-sort={
-                        active
+                        active && order
                           ? order.dir === "asc"
                             ? "ascending"
                             : "descending"
@@ -202,7 +215,7 @@ export default async function BugsPage({
                         scroll={false}
                       >
                         {col.label}
-                        <SortMark active={active} dir={order.dir} />
+                        <SortMark active={active} dir={active && order ? order.dir : nextDir} />
                       </Link>
                     </th>
                   );
@@ -221,7 +234,7 @@ export default async function BugsPage({
                     <td className="bb-num">{index + 1}</td>
                     <td className="bb-nowrap">
                       <HoverTip text={b.public_id}>
-                        <Link href={`/bugs/${b.id}`} className="bb-bug-id">
+                        <Link href={bugHref(b.id, listQuery)} className="bb-bug-id">
                           {b.public_id}
                         </Link>
                       </HoverTip>
@@ -231,7 +244,7 @@ export default async function BugsPage({
                     </td>
                     <td className="bb-title-cell">
                       <HoverTip text={b.title}>
-                        <Link href={`/bugs/${b.id}`}>{b.title}</Link>
+                        <Link href={bugHref(b.id, listQuery)}>{b.title}</Link>
                       </HoverTip>
                     </td>
                     <td>

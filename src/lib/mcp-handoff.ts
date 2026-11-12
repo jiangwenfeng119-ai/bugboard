@@ -78,7 +78,7 @@ function handoffFacts(input: McpHandoffInput) {
   const apiKeyValue = input.rawKey ?? "REPLACE_WITH_FULL_KEY";
   const capability =
     input.role === "admin"
-      ? "这个 Key 是管理员级，适合修复 Agent：可以接单（start_fix）、提交修复（submit_fix）、标记不属实（mark_invalid），材料只在报障人手里时可以要求补充（request_info），也可以撤回判错的不属实（reopen_invalid）或撤回已提交的修复（withdraw_fix）。可访问全部项目。不能代替报障人确认已修复或补充材料。"
+      ? "这个 Key 是管理员级，适合修复 Agent：可以接单（start_fix）、提交修复（submit_fix）、标记不属实（mark_invalid），新能力可以请产品经理确认（request_product），并在人明确判断后不做（decline_product）或可以做（accept_product）。材料只在报障人手里时可以要求补充（request_info），也可以撤回判错的不属实（reopen_invalid）或撤回已提交的修复（withdraw_fix）。可访问全部项目。不能代替报障人确认已修复或补充材料。"
       : "这个 Key 是用户级，适合提报 Agent：可以建单（create_bug），并对自己提的单确认、打回、提出异议、在人明确说认可时调用 accept_invalid，或在待补充时补上材料（provide_info）。不能接单或提交修复。";
   return { serverId, roleLabel, access, apiKeyValue, capability };
 }

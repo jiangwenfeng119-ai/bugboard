@@ -18,6 +18,7 @@
   --status-pending: #b45309;
   --status-fixing: #1f6feb;
   --status-needs: #0f766e;
+  --status-product: #9a3412;
   --status-awaiting: #5b4bb5;
   --status-confirmed: #1b7f4a;
   --status-acknowledged: #3d5c4e;
@@ -849,6 +850,11 @@ legend.bb-label + * {
   color: var(--status-needs);
   background: color-mix(in srgb, var(--status-needs) 12%, white);
   border-color: color-mix(in srgb, var(--status-needs) 25%, white);
+}
+.bb-badge-needs_product {
+  color: var(--status-product);
+  background: color-mix(in srgb, var(--status-product) 12%, white);
+  border-color: color-mix(in srgb, var(--status-product) 25%, white);
 }
 .bb-badge-awaiting_confirm {
   color: var(--status-awaiting);
@@ -2147,41 +2153,80 @@ a.bb-bug-id:hover {
 }
 
 .bb-inbox-group + .bb-inbox-group {
-  margin-top: 1.15rem;
+  margin-top: 0.55rem;
 }
 
-.bb-inbox-group h3 {
-  margin: 0;
+.bb-inbox-group {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.bb-inbox-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.bb-inbox-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bb-inbox-summary::marker {
+  content: "";
+}
+
+.bb-inbox-summary:hover {
+  background: var(--surface-2);
+}
+
+.bb-inbox-chevron {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: none;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--ink-muted);
+  transform: rotate(-45deg);
+  transition: transform 160ms var(--ease-out);
+}
+
+.bb-inbox-group[open] .bb-inbox-chevron {
+  transform: rotate(45deg);
+}
+
+.bb-inbox-group:not([open]) > :not(summary) {
+  display: none;
+}
+
+.bb-inbox-project {
+  flex: 1;
+  min-width: 0;
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.35;
 }
 
-.bb-inbox-group h3 a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.bb-inbox-group h3 a:hover {
-  color: var(--accent-strong);
-}
-
-.bb-inbox-meta {
-  margin: 0.15rem 0 0.45rem;
+.bb-inbox-count {
   color: var(--ink-muted);
   font-size: 0.82rem;
   line-height: 1.4;
+  white-space: nowrap;
 }
 
 .bb-inbox-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+  border-top: 1px solid var(--line);
 }
 
 .bb-inbox-row,
@@ -2483,6 +2528,10 @@ a.bb-bug-id:hover {
 .bb-stat-needs_info .bb-stat-icon {
   color: var(--status-needs);
   background: color-mix(in srgb, var(--status-needs) 12%, white);
+}
+.bb-stat-needs_product .bb-stat-icon {
+  color: var(--status-product);
+  background: color-mix(in srgb, var(--status-product) 12%, white);
 }
 .bb-stat-awaiting_confirm .bb-stat-icon {
   color: var(--status-awaiting);
@@ -2834,6 +2883,11 @@ a.bb-bug-id:hover {
 
 .bb-crumb:hover {
   color: var(--accent-strong);
+}
+
+.bb-crumb-end {
+  margin-top: 1.75rem;
+  margin-bottom: 0.2rem;
 }
 
 .bb-measure {

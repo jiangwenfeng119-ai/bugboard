@@ -6,6 +6,9 @@ export { isAdminRole };
 export type TransitionAction =
   | "start_fix"
   | "mark_invalid"
+  | "request_product"
+  | "decline_product"
+  | "accept_product"
   | "request_info"
   | "provide_info"
   | "submit_fix"
@@ -38,6 +41,27 @@ export const TRANSITIONS: TransitionSpec[] = [
     action: "mark_invalid",
     who: "admin",
     noteRequired: true,
+  },
+  {
+    from: ["pending", "fixing"],
+    to: "needs_product",
+    action: "request_product",
+    who: "admin",
+    noteRequired: true,
+  },
+  {
+    from: ["needs_product"],
+    to: "invalid",
+    action: "decline_product",
+    who: "admin",
+    noteRequired: true,
+  },
+  {
+    from: ["needs_product"],
+    to: "fixing",
+    action: "accept_product",
+    who: "admin",
+    noteRequired: false,
   },
   {
     from: ["pending", "fixing"],
@@ -167,6 +191,9 @@ export function validateTransition(params: {
 export const ACTION_LABEL: Record<TransitionAction, string> = {
   start_fix: "接单（开始修复）",
   mark_invalid: "标为不属实",
+  request_product: "请产品经理确认",
+  decline_product: "不做，标为不属实",
+  accept_product: "可以做",
   request_info: "要求补充",
   provide_info: "补充材料",
   submit_fix: "提交修复说明",

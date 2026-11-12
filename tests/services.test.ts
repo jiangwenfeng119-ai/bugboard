@@ -915,7 +915,7 @@ describe("services integration", () => {
     ).rejects.toThrow(/无权修改密码/);
   });
 
-  it("lists bugs newest first and sorts each column", async () => {
+  it("lists open bugs ahead of confirmed ones and sorts each column", async () => {
     const services = await import("../src/lib/services");
     const { getDb } = await import("../src/lib/db");
     const admin = await services.setupAdmin("admin", "secret1");
@@ -984,8 +984,8 @@ describe("services integration", () => {
 
     expect(titles(services.listBugs(adminId, project.id))).toEqual([
       "登录失败",
-      "文案错误",
       "界面错位",
+      "文案错误",
     ]);
     expect(services.listBugs(adminId, project.id)[0].reporter_label).toBe("李四");
     expect(
@@ -999,6 +999,9 @@ describe("services integration", () => {
       "文案错误",
       "界面错位",
     ]);
+    expect(
+      titles(services.listBugs(adminId, project.id, { sort: "updated", dir: "desc" }))
+    ).toEqual(["登录失败", "文案错误", "界面错位"]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "updated", dir: "asc" }))
     ).toEqual(["界面错位", "文案错误", "登录失败"]);

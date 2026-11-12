@@ -34,6 +34,44 @@ describe("state machine", () => {
     );
   });
 
+  it("sends an unconfirmed new capability to the product manager", () => {
+    expect(allowedActions(admin, "pending", "user", 2)).toContain("request_product");
+    expect(allowedActions(reporter, "needs_product", "user", 2)).not.toContain(
+      "decline_product"
+    );
+    expect(allowedActions(admin, "needs_product", "user", 2)).toEqual(
+      expect.arrayContaining(["decline_product", "accept_product"])
+    );
+
+    const missing = validateTransition({
+      action: "decline_product",
+      from: "needs_product",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+    });
+    expect(missing.ok).toBe(false);
+
+    const declined = validateTransition({
+      action: "decline_product",
+      from: "needs_product",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "这次不做",
+    });
+    if (declined.ok) expect(declined.to).toBe("invalid");
+
+    const accepted = validateTransition({
+      action: "accept_product",
+      from: "needs_product",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+    });
+    if (accepted.ok) expect(accepted.to).toBe("fixing");
+  });
+
   it("allows admin to start fix from pending", () => {
     const actions = allowedActions(admin, "pending", "user", 2);
     expect(actions).toContain("start_fix");

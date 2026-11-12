@@ -25,6 +25,8 @@ export function StatIcon({
       return <IconWrench {...common} />;
     case "needs_info":
       return <IconMessage {...common} />;
+    case "needs_product":
+      return <IconStamp {...common} />;
     case "awaiting_confirm":
       return <IconClock {...common} />;
     case "confirmed":

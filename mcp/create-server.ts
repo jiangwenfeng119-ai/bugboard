@@ -117,6 +117,7 @@ server.tool(
         "pending",
         "fixing",
         "needs_info",
+        "needs_product",
         "awaiting_confirm",
         "confirmed",
         "acknowledged",
@@ -411,7 +412,7 @@ server.tool(
 
 server.tool(
   "mark_invalid",
-  "标为不属实（管理员级 Key，note 必填）。改产品、现象不存在、符合现有做法或重复时使用。报障里写明已经和产品经理或 Marshal 沟通确认的不要调用，应按确认过的需求改。没有确认的改产品，说明写现在的做法，并请报障人找产品经理。正文或附件还没读时不要调用。",
+  "标为不属实（管理员级 Key，note 必填）。现象不存在、已经有这个功能但没用对、配置不对、符合现有做法或重复时使用。要一个现在没有的能力时不要调用，改用 request_product。报障里写明已经和产品经理或 Marshal 沟通确认的不要调用，应按确认过的需求改。正文或附件还没读时不要调用。",
   {
     bugId: z.number().int().positive(),
     note: z
@@ -424,6 +425,59 @@ server.tool(
   async ({ bugId, note }) => {
     try {
       return textResult(await transition("mark_invalid", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "request_product",
+  "请产品经理确认：待处理或修复中 → 待产品经理确认（管理员级 Key，note 必填）。要一个现在没有的能力、而且提交时的标题、正文和附件还没写已经和产品经理确认时使用。后补的确认不算。不要改产品。现象不存在、没用对或配置问题用 mark_invalid。",
+  {
+    bugId: z.number().int().positive(),
+    note: z
+      .string()
+      .min(1)
+      .describe(
+        "给产品经理的说明（必填）。写现在的做法、这张单要的新能力，并请产品经理确认。不要写文件名、函数名、接口或实现细节。"
+      ),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("request_product", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "decline_product",
+  "不做：待产品经理确认 → 不属实（管理员级 Key，note 必填）。只有人明确说这张不做时才调用。说明写给报障人，之后由报障人认可或提出异议。",
+  {
+    bugId: z.number().int().positive(),
+    note: z
+      .string()
+      .min(1)
+      .describe("给报障人的原因（必填）。写清为什么这次不做。不要写文件名、函数名、接口或实现细节。"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("decline_product", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "accept_product",
+  "可以做：待产品经理确认 → 修复中（管理员级 Key）。只有人明确说这张可以做时才调用。做完再 submit_fix，让报障人确认。",
+  { bugId: z.number().int().positive(), note: transitionNote },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("accept_product", bugId, note));
     } catch (e) {
       return errResult(e);
     }
