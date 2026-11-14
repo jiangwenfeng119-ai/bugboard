@@ -15,10 +15,14 @@
     <string>/Users/你/Apps/bugboard-wake</string>
     <key>ProgramArguments</key>
     <array>
-      <string>/usr/bin/env</string>
-      <string>node</string>
+      <string>/绝对路径/node</string>
       <string>/Users/你/Apps/bugboard/scripts/wake-agent.mjs</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/绝对路径的 node 所在目录:/usr/bin:/bin</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
