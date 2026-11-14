@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/session-guard";
 import { formatDateTime } from "@/lib/time";
 import {
   bugActions,
+  canAddSupplement,
   getAttachments,
   getBug,
   getBugEvents,
@@ -198,6 +199,7 @@ export default async function BugDetailPage({
   const events = getBugEvents(identity, bug.id);
   const attachments = getAttachments("bug", bug.id);
   const actions = bugActions(identity, bug);
+  const canSupplement = canAddSupplement(identity, bug);
   const canHandleBugs = isProjectAdmin(identity, bug.project_id);
   const isAdmin = isAdminRole(identity.role);
   const wakeLatest = isAdmin ? latestDispatch(bug.id) : null;
@@ -247,6 +249,7 @@ export default async function BugDetailPage({
             <BugActions
               bugId={bug.id}
               actions={actions}
+              canSupplement={canSupplement}
               isAdmin={canHandleBugs}
               currentPriority={bug.priority}
             />
@@ -291,13 +294,16 @@ export default async function BugDetailPage({
             <ul className="bb-timeline">
               {events.map((e) => {
                 const eventAtt = getAttachments("status_event", e.id);
+                const isSupplement = e.kind === "supplement";
                 return (
                   <li key={e.id}>
                     <div>
                       <strong>
-                        {e.from_status
-                          ? `${STATUS_LABEL[e.from_status]} → ${STATUS_LABEL[e.to_status]}`
-                          : STATUS_LABEL[e.to_status]}
+                        {isSupplement
+                          ? "补充说明"
+                          : e.from_status
+                            ? `${STATUS_LABEL[e.from_status]} → ${STATUS_LABEL[e.to_status]}`
+                            : STATUS_LABEL[e.to_status]}
                       </strong>{" "}
                       <span className="bb-muted">
                         · {resolveActorLabel(e.actor_type, e.actor_id)} ·{" "}

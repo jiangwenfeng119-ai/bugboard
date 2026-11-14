@@ -157,11 +157,11 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 管理员在管理后台的「分派给 Agent」里配置。每个项目一套，清单里可以编辑、测试和删除：
 
 1. 在跑 Cursor 或 ZCode 的电脑上复制 `wake.config.json.example` 为 `wake.config.json`。`projects` 里用项目缩写对上代码仓的绝对路径。这个目录就是 Agent 的工作区（`--workspace`），不要写成用户主目录、磁盘根目录，也不要写成放着 `wake.config.json` 的目录。`agent` 用 `cursor` 或 `zcode`。报障标题和正文会包在 `<question>` 里，并声明这是数据不是指令。Cursor 默认 `agent -p --trust --sandbox enabled --output-format json --workspace <项目目录> --mode plan`，不带 `--force` / `--yolo`，所以只做只读分析。要让它在这个目录里改代码，把 `applyEdits` 设为 `true`（会加上 `--force`，仍然限制在该目录和沙箱里）。同一张单的后续分派会带 `--resume` 复用上次的会话。标准输出的 JSON 写在 `wake-runs/`。参数不对时，在配置里写 `argv` 数组，用 `{prompt}`、`{cwd}`、`{bugId}`、`{publicId}`、`{projectCode}`、`{session}` 占位。自定义参数里的 `--force` / `--yolo` 在 `applyEdits` 没打开时会被去掉。
-2. 执行 `npm run wake`。它只监听 `127.0.0.1:3099`。
-3. 把打印出来的地址填进本机地址，保存，复制签名密钥，贴进 `secrets`，重启 `npm run wake`。点 **测试本机地址**，终端里应出现一行测试日志。
+2. 执行 `npm run wake`。它只监听 `127.0.0.1:3099`。Docker 场景可在单独目录放 `wake.config.json`（含 `allowLan: true` 与 `listen: 0.0.0.0:3099`），用 `node /path/to/bugboard/scripts/wake-agent.mjs` 启动。想开机自启可参考 `scripts/com.bugboard.wake.plist.example`。
+3. 把打印出来的地址填进本机地址，保存，复制签名密钥，贴进 `secrets`，重启叫醒服务。点 **测试本机地址**，终端里应出现一行测试日志。
 4. 之后网页上新建的待处理单会拉起本机 Agent。提示词就是管理员级修复提示，并点名这张单。Agent 用这台机器上已经接好的 Bugboard MCP 去 `get_bug`、`start_fix`。
 
-Bugboard 跑在 Docker 里时，容器访问不到宿主机的 `127.0.0.1`。本机地址改成 `http://host.docker.internal:3099/wake`。若仍不通，把 `listen` 改成 `0.0.0.0:3099`，并写上 `"allowLan": true`，只在可信网络里这样做。
+Bugboard 跑在 Docker 里时，容器访问不到宿主机的 `127.0.0.1`。本机地址改成 `http://host.docker.internal:3099/wake`。若仍不通，把 `listen` 改成 `0.0.0.0:3099`，并写上 `"allowLan": true`，只在可信网络里这样做。分派记录里出现「连不上这个地址」时，先确认叫醒服务还在跑。
 
 Cursor 云端只参加修理。在同一套配置里勾选「分派给 Cursor 云端 Agent 修理」即可。它不整理走查。服务器需要 `CURSOR_API_KEY`（Cursor 后台 Cloud Agents 的密钥），项目资料里要有代码仓。云端虚拟机要能访问 `BASE_URL`，单才会被回写；访问不了时，它仍按报障正文改代码，但不会自己 `submit_fix`。再设置 `BUGBOARD_DISPATCH_API_KEY`（一把管理员级 Key）后，云端 Agent 会带上这个站的远程 MCP。
 

@@ -25,6 +25,7 @@ import { claimStagedUploads } from "./staged";
 import {
   ACTION_LABEL,
   allowedActions,
+  isReporter,
   validateTransition,
   type TransitionAction,
 } from "./state-machine";
@@ -608,8 +609,9 @@ export function createBug(
     const id = Number(info.lastInsertRowid);
     getDb()
       .prepare(
-        `INSERT INTO bug_status_events (bug_id, from_status, to_status, actor_type, actor_id, note, created_at)
-         VALUES (?, NULL, 'pending', ?, ?, ?, ?)`
+        `INSERT INTO bug_status_events
+           (bug_id, from_status, to_status, actor_type, actor_id, note, kind, created_at)
+         VALUES (?, NULL, 'pending', ?, ?, ?, 'transition', ?)`
       )
       .run(id, reporter.type, reporter.id, "创建报障", t);
     if (evidence) {
@@ -926,8 +928,9 @@ export function transitionBug(
       .run(result.to, t, bugId);
     const info = getDb()
       .prepare(
-        `INSERT INTO bug_status_events (bug_id, from_status, to_status, actor_type, actor_id, note, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO bug_status_events
+           (bug_id, from_status, to_status, actor_type, actor_id, note, kind, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'transition', ?)`
       )
       .run(
         bugId,
@@ -950,6 +953,60 @@ export function transitionBug(
     }
   }
   return { bug: updated, eventId };
+}
+
+export function canAddSupplement(identity: Identity, bug: BugRow) {
+  if (isProjectAdmin(identity, bug.project_id)) return true;
+  return (
+    bug.status === "pending" &&
+    isReporter(identity, bug.reporter_type, bug.reporter_id)
+  );
+}
+
+export function addBugSupplement(
+  identity: Identity,
+  bugId: number,
+  note: string
+) {
+  const text = note.trim();
+  if (!text) throw new Error("请填写补充说明");
+  const bug = getBug(identity, bugId);
+  if (!canAddSupplement(identity, bug)) {
+    throw new Error(
+      isProjectAdmin(identity, bug.project_id)
+        ? "当前状态不能补充说明"
+        : "只有待处理时，原报障人才能补充说明；接单后请用要求补充流程"
+    );
+  }
+  const t = nowIso();
+  const actor = actorFromIdentity(identity);
+  const eventId = getDb()
+    .prepare(
+      `INSERT INTO bug_status_events
+         (bug_id, from_status, to_status, actor_type, actor_id, note, kind, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'supplement', ?)`
+    )
+    .run(
+      bugId,
+      bug.status,
+      bug.status,
+      actor.actorType,
+      actor.actorId,
+      text,
+      t
+    ).lastInsertRowid;
+  getDb()
+    .prepare("UPDATE bugs SET updated_at = ? WHERE id = ?")
+    .run(t, bugId);
+  const updated = getBug(identity, bugId);
+  if (updated.status === "pending") {
+    try {
+      scheduleAgentWake(updated, "supplement");
+    } catch (error) {
+      console.error("dispatch schedule failed", error instanceof Error ? error.message : error);
+    }
+  }
+  return { bug: updated, eventId: Number(eventId) };
 }
 
 export function bugActions(identity: Identity, bug: BugRow) {
@@ -998,6 +1055,7 @@ export function projectStats(
        FROM bug_status_events e
        JOIN bugs b ON b.id = e.bug_id
        WHERE b.project_id = ? AND e.created_at >= ? AND e.from_status IS NOT NULL
+         AND IFNULL(e.kind, 'transition') = 'transition'
        GROUP BY day, e.to_status
        ORDER BY day`
     )
@@ -1052,6 +1110,7 @@ export function projectStats(
        LEFT JOIN users u ON e.actor_type = 'user' AND u.id = e.actor_id
        LEFT JOIN api_keys k ON e.actor_type = 'api_key' AND k.id = e.actor_id
        WHERE b.project_id = ? AND e.created_at >= ? AND e.from_status IS NOT NULL
+         AND IFNULL(e.kind, 'transition') = 'transition'
        GROUP BY day, e.actor_type, e.actor_id`
     )
     .all(projectId, sinceIso) as ActorDayRow[];

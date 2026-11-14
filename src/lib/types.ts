@@ -147,6 +147,8 @@ export type ReporterAnalytics = {
   trend: AnalyticsTrend;
 };
 
+export type StatusEventKind = "transition" | "supplement";
+
 export type StatusEventRow = {
   id: number;
   bug_id: number;
@@ -155,6 +157,7 @@ export type StatusEventRow = {
   actor_type: ActorType;
   actor_id: number;
   note: string | null;
+  kind: StatusEventKind;
   created_at: string;
 };
 

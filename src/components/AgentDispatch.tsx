@@ -70,7 +70,12 @@ const STATUS_LABEL: Record<DispatchRecent["status"], string> = {
 };
 
 function explainDetail(detail: string) {
-  if (detail === "fetch failed") return "连不上这个地址";
+  if (
+    detail === "fetch failed" ||
+    /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ETIMEDOUT|AbortError|timeout/i.test(detail)
+  ) {
+    return "连不上这个地址（本机叫醒服务没在跑，或 Docker 要用 host.docker.internal）";
+  }
   if (detail === "没有可启动的本机 agent") return "本机收到了，但没有可启动的 Agent";
   return detail;
 }

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  让本机叫醒服务开机自启、崩溃后拉起。
+  1. 把本文件复制到 ~/Library/LaunchAgents/com.bugboard.wake.plist
+  2. 把下面 WorkingDirectory、ProgramArguments 改成你机器上的路径
+     （WorkingDirectory 需含 wake.config.json，通常是 Apps/bugboard-wake）
+  3. launchctl load ~/Library/LaunchAgents/com.bugboard.wake.plist
+-->
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.bugboard.wake</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/你/Apps/bugboard-wake</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/env</string>
+      <string>node</string>
+      <string>/Users/你/Apps/bugboard/scripts/wake-agent.mjs</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/你/Apps/bugboard-wake/wake.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/你/Apps/bugboard-wake/wake.stderr.log</string>
+  </dict>
+</plist>

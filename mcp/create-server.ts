@@ -620,6 +620,27 @@ server.tool(
 );
 
 server.tool(
+  "add_supplement",
+  "补充说明：不改状态，写入时间线（管理员级 Key 任意时候可用；原报障人 Key 仅在待处理时可用）。给处理人和后续 Agent 看的背景或澄清，不算提交时的正文。",
+  {
+    bugId: z.number().int().positive(),
+    note: z.string().min(1).describe("补充说明（必填）。写清补了什么背景或细节。"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(
+        await api(`/api/bugs/${bugId}/supplements`, {
+          method: "POST",
+          body: JSON.stringify({ note }),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
   "update_project_docs",
   "写入项目资料（仅管理员级 Key）：description（项目列表卡片上的说明）、product_manager、experience_officer、github_url、default_branch、tech_stack、design_url、docs_url、dev_url、test_url、prod_url、verify_env（dev、test、prod 或空字符串）、agent_notes。只改传入的字段。没有写明的人名、地址和说明不要编。修报障时不要调用，只有用户让你补项目资料时才用。",
   {

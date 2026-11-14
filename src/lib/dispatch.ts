@@ -14,6 +14,7 @@ export type DispatchReason =
   | "reject_fix"
   | "dispute_invalid"
   | "reopen_invalid"
+  | "supplement"
   | "manual"
   | "test"
   | "organize";
@@ -112,6 +113,7 @@ const AUTO_WAKE = new Set<DispatchReason>([
   "reject_fix",
   "dispute_invalid",
   "reopen_invalid",
+  "supplement",
 ]);
 
 const CURSOR_AGENTS_URL = "https://api.cursor.com/v1/agents";
@@ -881,7 +883,9 @@ async function deliverOne(
     }
     markDispatch(rowId, "sent", detail);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "发送失败";
+    const err = error as Error & { cause?: { code?: string; message?: string } };
+    const cause = err.cause?.code || err.cause?.message || "";
+    const message = [err.message || "发送失败", cause].filter(Boolean).join(": ");
     markDispatch(rowId, "failed", message);
     noteOrganize(captureSessionId, "failed", message);
   }

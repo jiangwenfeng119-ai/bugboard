@@ -1650,4 +1650,59 @@ describe("services integration", () => {
       /不是项目成员/
     );
   });
+
+  it("lets reporter supplement while pending and admin anytime", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const user = await services.createUser(adminId, {
+      username: "qa",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, {
+      name: "Supplement",
+      description: "",
+    });
+    services.addMember(adminId, project.id, user.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
+    const qaId = {
+      kind: "user" as const,
+      userId: user.id,
+      role: "user" as const,
+      username: user.username,
+    };
+
+    const bug = services.createBug(qaId, {
+      projectId: project.id,
+      title: "描述不清",
+      body: "点了没反应",
+    });
+    expect(services.canAddSupplement(qaId, bug)).toBe(true);
+    const { eventId } = services.addBugSupplement(qaId, bug.id, "其实是点保存没反应");
+    const events = services.getBugEvents(qaId, bug.id);
+    const supplement = events.find((e) => e.id === eventId);
+    expect(supplement?.kind).toBe("supplement");
+    expect(supplement?.note).toBe("其实是点保存没反应");
+    expect(services.getBug(qaId, bug.id).status).toBe("pending");
+
+    services.transitionBug(adminId, bug.id, "start_fix");
+    expect(services.canAddSupplement(qaId, services.getBug(qaId, bug.id))).toBe(false);
+    expect(() => services.addBugSupplement(qaId, bug.id, "接单后还想补")).toThrow(/待处理/);
+
+    expect(services.canAddSupplement(adminId, services.getBug(adminId, bug.id))).toBe(true);
+    services.addBugSupplement(adminId, bug.id, "后台看是接口超时");
+    const after = services.getBugEvents(adminId, bug.id);
+    expect(after.filter((e) => e.kind === "supplement")).toHaveLength(2);
+    expect(services.getBug(adminId, bug.id).status).toBe("fixing");
+
+    const stats = services.projectStats(adminId, project.id, 7);
+    const todayInflow = stats.inflow[stats.inflow.length - 1];
+    expect(todayInflow.fixing).toBe(1);
+  });
 });

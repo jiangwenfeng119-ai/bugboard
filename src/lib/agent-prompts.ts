@@ -109,7 +109,7 @@ get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字
 3. 这一轮完成的标准：范围内每张单都有了结果。结果是待确认、不属实、待补充、待产品经理确认，或该行写明卡在哪里。每张用一行记下项目名、报障 id、标题、原状态、动作、新状态。写完一行就从下一张的 get_bug 开始。范围内还有单时，继续下一张。
 
 处理一张
-4. get_bug。读 title、body、quote、steps_json、open_question、source_url、strokes_json、attachments 里每条的 text 和 media，以及 events 里的说明。quote 是报障人的原话。steps_json 是步骤。strokes_json 是画在附件图片上的圈，坐标相对整张图，0 到 1。open_question 非空说明这句话还没被确认。docx 和 txt 的正文已经在 text 里，文档内图片和独立图片会随工具结果返回，原文件在 localPath。正文写「见附件」或「具体请查看附件」时，附件就是报障内容。text 和图片都读完，才归类。
+4. get_bug。读 title、body、quote、steps_json、open_question、source_url、strokes_json、attachments 里每条的 text 和 media，以及 events 里的说明。events 里 kind 为 supplement 的是后补说明，要当背景读，但不算提交时的正文，也不能当作产品确认。quote 是报障人的原话。steps_json 是步骤。strokes_json 是画在附件图片上的圈，坐标相对整张图，0 到 1。open_question 非空说明这句话还没被确认。docx 和 txt 的正文已经在 text 里，文档内图片和独立图片会随工具结果返回，原文件在 localPath。正文写「见附件」或「具体请查看附件」时，附件就是报障内容。text 和图片都读完，才归类。
 5. 先归类，再动代码。对照现在的界面：要的能力已经存在、只是坏了，归成故障。要的能力现在没有，归成改产品。
 6. 改产品先看有没有确认。只认提交时的标题、正文和附件 text。里面写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」，或同类说法（写明已经和产品经理、Marshal 确认过），算已确认。时间线、异议，以及停在待产品经理确认之后补的说明，都不算。我在对话里写了「这张按需求做」或「这张可以做」也算已确认。已确认的按这张单要的新做法改：start_fix，改完自己验证，再 submit_fix。note 仍用原来的问题、现在的表现、请这样重测，写确认后报障人会看到什么。
 没有这些确认的，request_product，仓库保持原样。已经改过的代码先撤回，再请产品经理确认。note 用 Markdown：

@@ -41,19 +41,23 @@ const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
   withdraw_fix: "写清为什么先收回这次修复说明，还有哪一点要再改。",
 };
 
+type ActiveAction = TransitionAction | "add_supplement";
+
 export function BugActions({
   bugId,
   actions,
+  canSupplement = false,
   isAdmin,
   currentPriority,
 }: {
   bugId: number;
   actions: TransitionAction[];
+  canSupplement?: boolean;
   isAdmin: boolean;
   currentPriority: Priority;
 }) {
   const router = useRouter();
-  const [active, setActive] = useState<TransitionAction | null>(null);
+  const [active, setActive] = useState<ActiveAction | null>(null);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const noteId = useId();
@@ -61,12 +65,16 @@ export function BugActions({
   const [loading, setLoading] = useState(false);
   const [priority, setPriority] = useState<Priority>(currentPriority);
 
+  function openNoted(action: ActiveAction) {
+    setActive(action);
+    setNote("");
+    setFiles([]);
+    setError("");
+  }
+
   async function runSimple(action: TransitionAction) {
     if (NOTE_ACTIONS.has(action)) {
-      setActive(action);
-      setNote("");
-      setFiles([]);
-      setError("");
+      openNoted(action);
       return;
     }
     setLoading(true);
@@ -99,13 +107,21 @@ export function BugActions({
     setError("");
     try {
       const form = new FormData();
-      form.set("action", active);
       form.set("note", note);
       for (const f of files) form.append("files", f.file, f.file.name);
-      const res = await fetch(`/api/bugs/${bugId}/transitions`, {
-        method: "POST",
-        body: form,
-      });
+      const res =
+        active === "add_supplement"
+          ? await fetch(`/api/bugs/${bugId}/supplements`, {
+              method: "POST",
+              body: form,
+            })
+          : await (() => {
+              form.set("action", active);
+              return fetch(`/api/bugs/${bugId}/transitions`, {
+                method: "POST",
+                body: form,
+              });
+            })();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(
@@ -146,13 +162,13 @@ export function BugActions({
     }
   }
 
-  if (actions.length === 0 && !isAdmin) {
+  if (actions.length === 0 && !canSupplement && !isAdmin) {
     return <p className="bb-muted" style={{ margin: 0 }}>当前无需你操作，可查看时间线。</p>;
   }
 
   return (
     <div>
-      {actions.length > 0 ? (
+      {actions.length > 0 || canSupplement ? (
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           {actions.map((a) => (
             <button
@@ -169,6 +185,16 @@ export function BugActions({
               {ACTION_LABEL[a]}
             </button>
           ))}
+          {canSupplement ? (
+            <button
+              type="button"
+              className="bb-btn bb-btn-secondary"
+              disabled={loading}
+              onClick={() => openNoted("add_supplement")}
+            >
+              补充说明
+            </button>
+          ) : null}
         </div>
       ) : (
         <p className="bb-muted">当前状态没有可执行的流转操作。</p>
@@ -177,13 +203,17 @@ export function BugActions({
       {active ? (
         <form onSubmit={submitNoted} style={{ marginTop: "1rem" }}>
           <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.875rem", fontWeight: 600, letterSpacing: 0 }}>
-            {ACTION_LABEL[active]}
+            {active === "add_supplement" ? "补充说明" : ACTION_LABEL[active]}
           </h3>
           <div className="bb-field">
             <label className="bb-label" htmlFor={noteId}>
               说明（必填）
             </label>
-            {NOTE_HINT[active] ? (
+            {active === "add_supplement" ? (
+              <p className="bb-muted" style={{ margin: "0 0 0.35rem" }}>
+                写给处理人和 Agent：补清背景、期望或遗漏的细节。不改变状态，会出现在时间线里。
+              </p>
+            ) : NOTE_HINT[active] ? (
               <p className="bb-muted" style={{ margin: "0 0 0.35rem" }}>
                 {NOTE_HINT[active]}
               </p>

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { withAuth, json } from "@/lib/http";
 import {
   bugActions,
+  canAddSupplement,
   deleteBug,
   getAttachments,
   getBug,
@@ -28,6 +29,8 @@ export async function GET(
       attachments: getAttachments("status_event", e.id),
     }));
     const attachments = getAttachments("bug", bug.id);
+    const actions = bugActions(identity, bug);
+    const canSupplement = canAddSupplement(identity, bug);
     return json({
       bug: {
         ...bug,
@@ -37,7 +40,8 @@ export async function GET(
       },
       events,
       attachments,
-      actions: bugActions(identity, bug),
+      actions: canSupplement ? [...actions, "add_supplement"] : actions,
+      canSupplement,
     });
   });
 }

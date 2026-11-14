@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS bug_status_events (
   actor_type TEXT NOT NULL CHECK(actor_type IN ('user','api_key')),
   actor_id INTEGER NOT NULL,
   note TEXT,
+  kind TEXT NOT NULL DEFAULT 'transition',
   created_at TEXT NOT NULL,
   FOREIGN KEY (bug_id) REFERENCES bugs(id) ON DELETE CASCADE
 );
@@ -193,6 +194,16 @@ function migrateSchema(db: Database.Database) {
   ensurePublicIds(db);
   ensureCaptureSchema(db);
   ensureLocalAgents(db);
+  ensureEventKind(db);
+}
+
+function ensureEventKind(db: Database.Database) {
+  const cols = new Set(columnNames(db, "bug_status_events"));
+  if (!cols.has("kind")) {
+    db.exec(
+      "ALTER TABLE bug_status_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'transition'"
+    );
+  }
 }
 
 function ensureCaptureSchema(db: Database.Database) {
