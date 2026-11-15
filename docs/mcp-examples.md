@@ -62,14 +62,16 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 | `list_bugs` / `get_bug` | ✓ | ✓ |
 | `create_bug` | ✓ | ✓ |
 | `confirm_fix` / `reject_fix` / `dispute_invalid` / `provide_info` | 仅自己提的单 | 仅自己提的单 |
-| `start_fix` / `submit_fix` / `mark_invalid` / `request_info` | | ✓ |
+| `start_fix` / `submit_fix` / `withdraw_fix` / `mark_invalid` / `request_info` | | ✓ |
+| `record_change` / `list_changes` / `list_pending_release` / `run_release` / `mark_released` | | ✓（`list_changes` 项目成员也可看） |
 
 ## 4. 推荐闭环
 
 1. **bugboard-qa**：`create_bug` → 得到 `bugId`
-2. **bugboard-fixer**：`start_fix` → `submit_fix`（必填 note）
-3. **bugboard-qa**：`confirm_fix`，或 `reject_fix` 打回
-4. 材料只在报障人手里时，**bugboard-fixer** 用 `request_info` 把单退到待补充；原报障人补上后用 `provide_info` 回到待处理
+2. **bugboard-fixer**：`start_fix` → 改完并 push → `submit_fix`（必填 note，进入待发布）→ `record_change`（`kind=fix`，带上 `bugIds` 和 `commitShas`）
+3. 看队列：`list_pending_release`。人明确要求紧急发布时才 `run_release`（只入队，不会马上上线）。外部已经发布完成则 `mark_released`，待发布变为待确认。不要在待发布时 `confirm_fix`
+4. **bugboard-qa**：只对 `awaiting_confirm` 做 `confirm_fix`，或 `reject_fix` 打回
+5. 材料只在报障人手里时，**bugboard-fixer** 用 `request_info` 把单退到待补充；原报障人补上后用 `provide_info` 回到待处理
 
 本地脚本验证（不依赖 Cursor UI）：
 

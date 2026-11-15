@@ -2452,6 +2452,12 @@ a.bb-bug-id:hover {
   border-color: color-mix(in srgb, var(--status-awaiting) 22%, white);
 }
 
+.bb-open-chip.is-hot.is-ready {
+  color: var(--status-ready);
+  background: color-mix(in srgb, var(--status-ready) 12%, white);
+  border-color: color-mix(in srgb, var(--status-ready) 22%, white);
+}
+
 .bb-project-name {
   margin: 0;
   font-size: 1.25rem;
@@ -2563,6 +2569,10 @@ a.bb-bug-id:hover {
 .bb-stat-needs_product .bb-stat-icon {
   color: var(--status-product);
   background: color-mix(in srgb, var(--status-product) 12%, white);
+}
+.bb-stat-ready_to_release .bb-stat-icon {
+  color: var(--status-ready);
+  background: color-mix(in srgb, var(--status-ready) 12%, white);
 }
 .bb-stat-awaiting_confirm .bb-stat-icon {
   color: var(--status-awaiting);

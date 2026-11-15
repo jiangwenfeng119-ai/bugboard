@@ -55,6 +55,14 @@ function attentionChips(
       tone: "pending",
     },
     supplement,
+    {
+      key: "ready",
+      count: counts.readyToRelease,
+      label: "待发布",
+      title: "已提交修复、尚未发布到验收环境的报障",
+      href: `/projects/${projectId}/bugs?status=ready_to_release`,
+      tone: "ready",
+    },
     confirm,
   ];
 }
@@ -104,6 +112,7 @@ export default async function ProjectsPage() {
               pending: 0,
               awaitingConfirm: 0,
               needsInfo: 0,
+              readyToRelease: 0,
               open: 0,
             };
             const bugsHref = `/projects/${p.id}/bugs`;

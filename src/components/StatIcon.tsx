@@ -1,6 +1,7 @@
 import {
   IconAlert,
   IconBan,
+  IconChanges,
   IconCheck,
   IconClock,
   IconStamp,
@@ -27,6 +28,8 @@ export function StatIcon({
       return <IconMessage {...common} />;
     case "needs_product":
       return <IconStamp {...common} />;
+    case "ready_to_release":
+      return <IconChanges {...common} />;
     case "awaiting_confirm":
       return <IconClock {...common} />;
     case "confirmed":

@@ -178,7 +178,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
                     dir={sortDir}
                     onSort={toggleSort}
                     align="end"
-                    hint="当前为修复中、待确认或已确认"
+                    hint="当前为修复中、待发布、待确认或已确认"
                   />
                   <SortableTh
                     label="已确认"
@@ -254,7 +254,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
           </div>
         )}
         <p className="bb-muted bb-analytics-note">
-          已采纳指当前停在「修复中」「待确认」或「已确认」：管理员接过单，而且现在没有标成不属实。打回或异议回到待处理的不算。待补充是在等报障人补材料，不算已采纳。已确认是原报障人确认修复，也就是被采纳并走完闭环，已包含在已采纳里。按报障创建时间落入所选区间，状态取当前状态。
+          已采纳指当前停在「修复中」「待发布」「待确认」或「已确认」：管理员接过单，而且现在没有标成不属实。打回或异议回到待处理的不算。待发布是已提交修复、尚未上线。待补充是在等报障人补材料，不算已采纳。已确认是原报障人确认修复，也就是被采纳并走完闭环，已包含在已采纳里。按报障创建时间落入所选区间，状态取当前状态。
         </p>
       </section>
     </div>
