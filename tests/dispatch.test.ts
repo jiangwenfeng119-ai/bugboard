@@ -83,6 +83,7 @@ describe("agent wake", () => {
 
     services.transitionBug(identity, bug.id, "start_fix");
     services.transitionBug(identity, bug.id, "submit_fix", "已按原口径计算");
+    services.transitionBug(identity, bug.id, "release_fixes");
     services.transitionBug(identity, bug.id, "confirm_fix");
     await dispatch.flushDispatches();
     expect(calls).toHaveLength(1);
@@ -94,6 +95,7 @@ describe("agent wake", () => {
     });
     services.transitionBug(identity, again.id, "start_fix");
     services.transitionBug(identity, again.id, "submit_fix", "又改了一处");
+    services.transitionBug(identity, again.id, "release_fixes");
     services.transitionBug(identity, again.id, "reject_fix", "保存后还是少 1 分");
     await dispatch.flushDispatches();
     const reasons = calls.map((call) => JSON.parse(call.body).reason as string);

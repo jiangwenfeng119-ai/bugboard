@@ -708,11 +708,12 @@ const BUG_ORDER_SQL: Record<BugSortKey, string> = {
     WHEN 'fixing' THEN 1
     WHEN 'needs_info' THEN 2
     WHEN 'needs_product' THEN 3
-    WHEN 'awaiting_confirm' THEN 4
-    WHEN 'confirmed' THEN 5
-    WHEN 'acknowledged' THEN 6
-    WHEN 'invalid' THEN 7
-    ELSE 7 END`,
+    WHEN 'ready_to_release' THEN 4
+    WHEN 'awaiting_confirm' THEN 5
+    WHEN 'confirmed' THEN 6
+    WHEN 'acknowledged' THEN 7
+    WHEN 'invalid' THEN 8
+    ELSE 8 END`,
   reporter: `(${REPORTER_LABEL_SQL}) COLLATE NOCASE`,
   handler: `COALESCE(${HANDLER_LABEL_SQL}, '') COLLATE NOCASE`,
   created: "b.created_at",
@@ -801,7 +802,7 @@ export function listBugs(
        LEFT JOIN bug_status_events h ON h.id = (
          SELECT e.id FROM bug_status_events e
          WHERE e.bug_id = b.id
-           AND e.to_status IN ('fixing', 'needs_info', 'needs_product', 'awaiting_confirm', 'invalid')
+           AND e.to_status IN ('fixing', 'needs_info', 'needs_product', 'ready_to_release', 'awaiting_confirm', 'invalid')
          ORDER BY e.id DESC
          LIMIT 1
        )
@@ -1180,6 +1181,7 @@ const BUG_STATUSES: BugStatus[] = [
   "fixing",
   "needs_info",
   "needs_product",
+  "ready_to_release",
   "awaiting_confirm",
   "confirmed",
   "acknowledged",
@@ -1192,6 +1194,7 @@ function emptyStatusCounts(): StatusCounts {
     fixing: 0,
     needs_info: 0,
     needs_product: 0,
+    ready_to_release: 0,
     awaiting_confirm: 0,
     confirmed: 0,
     acknowledged: 0,
@@ -1209,6 +1212,7 @@ function countTotal(counts: StatusCounts) {
     counts.fixing +
     counts.needs_info +
     counts.needs_product +
+    counts.ready_to_release +
     counts.awaiting_confirm +
     counts.confirmed +
     counts.acknowledged +
@@ -1217,7 +1221,12 @@ function countTotal(counts: StatusCounts) {
 }
 
 function countAdopted(counts: StatusCounts) {
-  return counts.fixing + counts.awaiting_confirm + counts.confirmed;
+  return (
+    counts.fixing +
+    counts.ready_to_release +
+    counts.awaiting_confirm +
+    counts.confirmed
+  );
 }
 
 export function parseAnalyticsRange(raw: string | undefined): AnalyticsRange {
@@ -1578,7 +1587,7 @@ export function getBugHandlerLabel(bug: Pick<BugRow, "id" | "status">) {
   const event = getDb()
     .prepare(
       `SELECT actor_type, actor_id FROM bug_status_events
-       WHERE bug_id = ? AND to_status IN ('fixing', 'needs_info', 'needs_product', 'awaiting_confirm', 'invalid')
+       WHERE bug_id = ? AND to_status IN ('fixing', 'needs_info', 'needs_product', 'ready_to_release', 'awaiting_confirm', 'invalid')
        ORDER BY id DESC
        LIMIT 1`
     )
@@ -1607,11 +1616,12 @@ export type ProjectAttentionCounts = {
   pending: number;
   awaitingConfirm: number;
   needsInfo: number;
+  readyToRelease: number;
   open: number;
 };
 
 function emptyAttentionCounts(): ProjectAttentionCounts {
-  return { pending: 0, awaitingConfirm: 0, needsInfo: 0, open: 0 };
+  return { pending: 0, awaitingConfirm: 0, needsInfo: 0, readyToRelease: 0, open: 0 };
 }
 
 export function openBugCountsByProject(identity: Identity) {
@@ -1628,7 +1638,7 @@ export function openBugCountsByProject(identity: Identity) {
       `SELECT project_id, status, COUNT(*) AS c
        FROM bugs
        WHERE project_id IN (${placeholders})
-         AND status IN ('pending', 'fixing', 'needs_info', 'needs_product', 'awaiting_confirm')
+         AND status IN ('pending', 'fixing', 'needs_info', 'needs_product', 'ready_to_release', 'awaiting_confirm')
        GROUP BY project_id, status`
     )
     .all(...ids) as { project_id: number; status: BugStatus; c: number }[];
@@ -1643,6 +1653,9 @@ export function openBugCountsByProject(identity: Identity) {
     }
     if (admins.has(row.project_id) && row.status === "needs_info") {
       counts.needsInfo = row.c;
+    }
+    if (admins.has(row.project_id) && row.status === "ready_to_release") {
+      counts.readyToRelease = row.c;
     }
   }
 
@@ -1679,6 +1692,7 @@ export function openBugCountsByProject(identity: Identity) {
 
 const INBOX_KIND_ORDER = [
   "awaiting_confirm",
+  "ready_to_release",
   "needs_product",
   "invalid",
   "needs_info",
@@ -1690,6 +1704,7 @@ export type InboxKind = (typeof INBOX_KIND_ORDER)[number];
 
 const INBOX_HINT: Record<InboxKind, string> = {
   awaiting_confirm: "确认修复是否有效",
+  ready_to_release: "纳入本次发布",
   needs_product: "判断做不做",
   invalid: "认可，或提出异议",
   needs_info: "补充材料",
@@ -1699,6 +1714,7 @@ const INBOX_HINT: Record<InboxKind, string> = {
 
 const INBOX_KIND_LABEL: Record<InboxKind, string> = {
   awaiting_confirm: "待确认",
+  ready_to_release: "待发布",
   needs_product: "待产品经理确认",
   invalid: "不属实",
   needs_info: "待补充",
@@ -1782,6 +1798,13 @@ export function listInbox(identity: Identity): Inbox {
          WHERE project_id IN (${adminPlaceholders}) AND status = 'needs_product'`
       )
       .all(...adminIds) as InboxRow[];
+    const releasing = getDb()
+      .prepare(
+        `SELECT id, project_id, public_id, title, priority, status, updated_at
+         FROM bugs
+         WHERE project_id IN (${adminPlaceholders}) AND status = 'ready_to_release'`
+      )
+      .all(...adminIds) as InboxRow[];
     const fixing = getDb()
       .prepare(
         `SELECT b.id, b.project_id, b.public_id, b.title, b.priority, b.status, b.updated_at
@@ -1798,7 +1821,7 @@ export function listInbox(identity: Identity): Inbox {
       )
       .all(...adminIds, actorType, actorId) as InboxRow[];
     const seen = new Set(rows.map((row) => row.id));
-    for (const row of [...product, ...fixing, ...pending]) {
+    for (const row of [...product, ...releasing, ...fixing, ...pending]) {
       if (!isInboxKind(row.status) || seen.has(row.id)) continue;
       seen.add(row.id);
       rows.push(row);

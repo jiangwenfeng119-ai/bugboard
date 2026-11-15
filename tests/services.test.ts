@@ -63,6 +63,10 @@ describe("services integration", () => {
 
     services.transitionBug(adminId, bug.id, "submit_fix", "已修复缓存");
     current = services.getBug(adminId, bug.id);
+    expect(current.status).toBe("ready_to_release");
+
+    services.transitionBug(adminId, bug.id, "release_fixes");
+    current = services.getBug(adminId, bug.id);
     expect(current.status).toBe("awaiting_confirm");
 
     services.transitionBug(qaId, bug.id, "confirm_fix");
@@ -81,6 +85,7 @@ describe("services integration", () => {
     const inflowToday = stats.inflow.find((d) => d.day === today);
     expect(inflowToday).toMatchObject({
       fixing: 1,
+      ready_to_release: 1,
       awaiting_confirm: 1,
       confirmed: 1,
     });
@@ -140,9 +145,7 @@ describe("services integration", () => {
 
     services.transitionBug(adminId, bug.id, "start_fix");
     services.transitionBug(adminId, bug.id, "submit_fix", "已改");
-    expect(() => services.transitionBug(adminId, bug.id, "confirm_fix")).toThrow(
-      /仅原报障人/
-    );
+    expect(services.getBug(adminId, bug.id).status).toBe("ready_to_release");
     expect(() =>
       services.transitionBug(qaId, bug.id, "withdraw_fix", "我想收回")
     ).toThrow(/需要管理员/);
@@ -153,6 +156,13 @@ describe("services integration", () => {
       "说明写早了，列表上还有一处要改"
     );
     expect(services.getBug(adminId, bug.id).status).toBe("fixing");
+
+    services.transitionBug(adminId, bug.id, "submit_fix", "改完了");
+    services.transitionBug(adminId, bug.id, "release_fixes");
+    expect(services.getBug(adminId, bug.id).status).toBe("awaiting_confirm");
+    expect(() => services.transitionBug(adminId, bug.id, "confirm_fix")).toThrow(
+      /仅原报障人/
+    );
   });
 
   it("buckets daily stats by the Shanghai calendar day", async () => {
@@ -1058,6 +1068,7 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, confirmed.id, "start_fix");
     services.transitionBug(adminId, confirmed.id, "submit_fix", "已修");
+    services.transitionBug(adminId, confirmed.id, "release_fixes");
     services.transitionBug(qaId, confirmed.id, "confirm_fix");
 
     const rejected = services.createBug(qaId, {
@@ -1135,6 +1146,7 @@ describe("services integration", () => {
       invalid: 2,
       fixing: 1,
       pending: 2,
+      ready_to_release: 0,
       awaiting_confirm: 0,
     });
     expect(qaRow?.projects.map((project) => [project.projectName, project.total, project.adopted])).toEqual([
@@ -1146,7 +1158,8 @@ describe("services integration", () => {
       total: 1,
       adopted: 1,
       confirmed: 0,
-      awaiting_confirm: 1,
+      ready_to_release: 1,
+      awaiting_confirm: 0,
     });
     expect(keyRow?.projects).toMatchObject([{ projectName: "记账", total: 1, adopted: 1 }]);
     expect(quietRow).toMatchObject({ total: 0, projects: [] });
@@ -1155,6 +1168,7 @@ describe("services integration", () => {
       adopted: 3,
       confirmed: 1,
       invalid: 2,
+      ready_to_release: 1,
       submitters: 2,
     });
     expect(pending.status).toBe("pending");
@@ -1227,6 +1241,7 @@ describe("services integration", () => {
     ).toBe("admin-ids");
 
     services.transitionBug(adminId, first.id, "submit_fix", "已改");
+    services.transitionBug(adminId, first.id, "release_fixes");
     services.transitionBug(qaId, first.id, "confirm_fix");
     expect(services.getBugHandlerLabel(services.getBug(adminId, first.id))).toBe("admin-ids");
 
@@ -1297,6 +1312,7 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, returned.id, "start_fix");
     services.transitionBug(adminId, returned.id, "submit_fix", "先改了一版");
+    services.transitionBug(adminId, returned.id, "release_fixes");
     services.transitionBug(qaId, returned.id, "reject_fix", "还有一处没好");
 
     const fixing = services.createBug(otherId, {
@@ -1311,6 +1327,7 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, qaConfirm.id, "start_fix");
     services.transitionBug(adminId, qaConfirm.id, "submit_fix", "已改");
+    services.transitionBug(adminId, qaConfirm.id, "release_fixes");
 
     const otherConfirm = services.createBug(otherId, {
       projectId: project.id,
@@ -1318,10 +1335,12 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, otherConfirm.id, "start_fix");
     services.transitionBug(adminId, otherConfirm.id, "submit_fix", "已改");
+    services.transitionBug(adminId, otherConfirm.id, "release_fixes");
 
     const done = services.createBug(qaId, { projectId: project.id, title: "已确认" });
     services.transitionBug(adminId, done.id, "start_fix");
     services.transitionBug(adminId, done.id, "submit_fix", "已改");
+    services.transitionBug(adminId, done.id, "release_fixes");
     services.transitionBug(qaId, done.id, "confirm_fix");
 
     const key = services.createApiKey(adminId, {
@@ -1342,6 +1361,7 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, keyConfirm.id, "start_fix");
     services.transitionBug(adminId, keyConfirm.id, "submit_fix", "已改");
+    services.transitionBug(adminId, keyConfirm.id, "release_fixes");
 
     const needsInfo = services.createBug(qaId, {
       projectId: project.id,
@@ -1363,29 +1383,41 @@ describe("services integration", () => {
       "记录对不上这台手机，还要同型号再试一次"
     );
 
+    const held = services.createBug(qaId, {
+      projectId: project.id,
+      title: "修好还没发布",
+    });
+    services.transitionBug(adminId, held.id, "start_fix");
+    services.transitionBug(adminId, held.id, "submit_fix", "已经 push");
+    expect(services.getBug(adminId, held.id).status).toBe("ready_to_release");
+
     expect(services.openBugCountsByProject(adminId)[project.id]).toEqual({
       pending: 2,
       awaitingConfirm: 3,
       needsInfo: 1,
-      open: 7,
+      readyToRelease: 1,
+      open: 8,
     });
     expect(services.openBugCountsByProject(qaId)[project.id]).toEqual({
       pending: 2,
       awaitingConfirm: 1,
       needsInfo: 1,
-      open: 7,
+      readyToRelease: 0,
+      open: 8,
     });
     expect(services.openBugCountsByProject(otherId)[project.id]).toEqual({
       pending: 2,
       awaitingConfirm: 1,
       needsInfo: 0,
-      open: 7,
+      readyToRelease: 0,
+      open: 8,
     });
     expect(services.openBugCountsByProject(keyId)[project.id]).toEqual({
       pending: 2,
       awaitingConfirm: 1,
       needsInfo: 0,
-      open: 7,
+      readyToRelease: 0,
+      open: 8,
     });
   });
 
@@ -1435,6 +1467,7 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, waiting.id, "start_fix");
     services.transitionBug(adminId, waiting.id, "submit_fix", "已经修好");
+    services.transitionBug(adminId, waiting.id, "release_fixes");
 
     const rejected = services.createBug(qaId, {
       projectId: alpha.id,
@@ -1463,6 +1496,7 @@ describe("services integration", () => {
     });
     services.transitionBug(adminId, theirs.id, "start_fix");
     services.transitionBug(adminId, theirs.id, "submit_fix", "请对方确认");
+    services.transitionBug(adminId, theirs.id, "release_fixes");
 
     const mine = services.createBug(adminId, {
       projectId: alpha.id,
@@ -1494,6 +1528,14 @@ describe("services integration", () => {
     });
     services.transitionBug(keyId, agentFix.id, "start_fix");
 
+    const unreleased = services.createBug(qaId, {
+      projectId: alpha.id,
+      title: "还没发布",
+    });
+    services.transitionBug(adminId, unreleased.id, "start_fix");
+    services.transitionBug(adminId, unreleased.id, "submit_fix", "已 push，等今晚发布");
+    expect(services.getBug(qaId, unreleased.id).status).toBe("ready_to_release");
+
     for (let i = 0; i < 9; i += 1) {
       services.createBug(adminId, { projectId: beta.id, title: `待处理 ${i}` });
     }
@@ -1501,6 +1543,8 @@ describe("services integration", () => {
     const qaInbox = services.listInbox(qaId);
     expect(qaInbox.total).toBe(3);
     expect(qaInbox.groups.map((group) => group.projectName)).toEqual(["甲项目"]);
+    expect(qaInbox.groups[0].items.map((item) => item.title)).not.toContain("还没发布");
+    expect(qaInbox.groups[0].counts.find((count) => count.kind === "ready_to_release")).toBeUndefined();
     expect(qaInbox.groups[0].items.map((item) => item.status)).toEqual([
       "awaiting_confirm",
       "invalid",
@@ -1522,18 +1566,32 @@ describe("services integration", () => {
     expect(alphaGroup.items.map((item) => item.title).sort()).toEqual([
       "我接了一半",
       "我提的不属实",
+      "还没发布",
     ]);
+    expect(alphaGroup.counts.find((count) => count.kind === "ready_to_release")).toMatchObject({
+      label: "待发布",
+      count: 1,
+    });
+    expect(alphaGroup.items.find((item) => item.title === "还没发布")?.hint).toBe(
+      "纳入本次发布"
+    );
     expect(alphaGroup.items.find((item) => item.title === "我接了一半")?.hint).toBe(
       "提交修复说明"
     );
-    expect(adminInbox.total).toBe(11);
+    expect(adminInbox.total).toBe(12);
 
     const stats = services.reporterAnalytics(adminId, "all");
     const qaRow = stats.reporters.find((row) => row.reporterId === qa.id);
-    expect(qaRow).toMatchObject({ acknowledged: 1, confirmed: 0, adopted: 1 });
+    expect(qaRow).toMatchObject({
+      acknowledged: 1,
+      confirmed: 0,
+      ready_to_release: 1,
+      adopted: 2,
+    });
     expect(stats.totals.confirmed).toBe(0);
     expect(stats.totals.acknowledged).toBe(1);
-    expect(stats.totals.adopted).toBe(4);
+    expect(stats.totals.ready_to_release).toBe(1);
+    expect(stats.totals.adopted).toBe(5);
   });
 
   it("keeps project bug powers on the membership role, separate from the account role", async () => {
@@ -1619,9 +1677,10 @@ describe("services integration", () => {
     expect(services.listInbox(ownerId).total).toBe(0);
     expect(services.openBugCountsByProject(ownerId)[project.id]).toMatchObject({
       pending: 1,
-      awaitingConfirm: 1,
+      readyToRelease: 1,
     });
-    expect(services.openBugCountsByProject(staffId)[project.id].awaitingConfirm).toBe(1);
+    expect(services.openBugCountsByProject(staffId)[project.id].readyToRelease).toBe(1);
+    expect(services.openBugCountsByProject(qaId)[project.id].readyToRelease).toBe(1);
     expect(pending.status).toBe("pending");
 
     const key = services.createApiKey(ownerId, {

@@ -5,6 +5,7 @@ const STATUSES = new Set<string>([
   "fixing",
   "needs_info",
   "needs_product",
+  "ready_to_release",
   "awaiting_confirm",
   "confirmed",
   "acknowledged",

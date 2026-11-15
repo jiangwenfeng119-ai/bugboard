@@ -9,6 +9,7 @@ describe("bug list return query", () => {
     ).toBe("status=awaiting_confirm&priority=p2&sort=updated&dir=desc");
     expect(bugListQueryFromUnknown("https://evil.example/?status=pending")).toBe("");
     expect(bugListQuery({ status: "nope", q: "  标题  " })).toBe("q=%E6%A0%87%E9%A2%98");
+    expect(bugListQuery({ status: "ready_to_release" })).toBe("status=ready_to_release");
   });
 });
 
