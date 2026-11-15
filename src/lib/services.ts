@@ -693,6 +693,10 @@ const REPORTER_LABEL_SQL = `CASE
   ELSE COALESCE('Key:' || k.name, '已删除 Key #' || b.reporter_id)
 END`;
 
+/** Fixer statuses. Publishing moves a bug to awaiting_confirm and must not replace the fixer. */
+const HANDLER_EVENT_STATUSES_SQL =
+  "'fixing', 'needs_info', 'needs_product', 'ready_to_release', 'invalid'";
+
 const HANDLER_LABEL_SQL = `CASE
   WHEN b.status = 'pending' OR h.id IS NULL THEN NULL
   WHEN h.actor_type = 'user' THEN COALESCE(hu.username, '已删除用户 #' || h.actor_id)
@@ -802,7 +806,7 @@ export function listBugs(
        LEFT JOIN bug_status_events h ON h.id = (
          SELECT e.id FROM bug_status_events e
          WHERE e.bug_id = b.id
-           AND e.to_status IN ('fixing', 'needs_info', 'needs_product', 'ready_to_release', 'awaiting_confirm', 'invalid')
+           AND e.to_status IN (${HANDLER_EVENT_STATUSES_SQL})
          ORDER BY e.id DESC
          LIMIT 1
        )
@@ -1587,7 +1591,7 @@ export function getBugHandlerLabel(bug: Pick<BugRow, "id" | "status">) {
   const event = getDb()
     .prepare(
       `SELECT actor_type, actor_id FROM bug_status_events
-       WHERE bug_id = ? AND to_status IN ('fixing', 'needs_info', 'needs_product', 'ready_to_release', 'awaiting_confirm', 'invalid')
+       WHERE bug_id = ? AND to_status IN (${HANDLER_EVENT_STATUSES_SQL})
        ORDER BY id DESC
        LIMIT 1`
     )

@@ -36,11 +36,15 @@ export function markReleased(
   const result: ReleaseResult = input.result ?? "success";
   if (result !== "success" && result !== "failed") throw new Error("发布结果无效");
 
+  const fromRunner = input.dispatchId !== undefined;
   const explicit = input.bugIds !== undefined;
-  const bugIds = explicit
-    ? explicitBugIds(projectId, input.bugIds ?? [], result)
-    : listReadyToReleaseIds(projectId);
-  const headSha = input.headSha?.trim() || "";
+  const bugIds =
+    !explicit
+      ? listReadyToReleaseIds(projectId)
+      : fromRunner && result === "success"
+        ? readySubset(projectId, input.bugIds ?? [])
+        : explicitBugIds(projectId, input.bugIds ?? [], result);
+  const headSha = typeof input.headSha === "string" ? input.headSha.trim() : "";
   const short = headSha.slice(0, 7);
   const releaseInput = {
     kind: "release" as const,
@@ -62,16 +66,21 @@ export function markReleased(
     return { release, bugIds };
   }
 
-  const release = getDb().transaction(() => {
-    const row = insertChange(identity, projectId, releaseInput);
-    for (const id of bugIds) {
+  const done = getDb().transaction(() => {
+    const advancing = fromRunner
+      ? explicit
+        ? readySubset(projectId, input.bugIds ?? [])
+        : listReadyToReleaseIds(projectId)
+      : bugIds;
+    const row = insertChange(identity, projectId, { ...releaseInput, bugIds: advancing });
+    for (const id of advancing) {
       transitionBug(identity, id, "release_fixes", "已随发布进入待确认");
     }
-    linkChangesToRelease(projectId, bugIds, row.id, !explicit);
+    linkChangesToRelease(projectId, advancing, row.id, !explicit);
     closeRunningRelease(projectId, input.dispatchId, "sent", short ? `已发布 ${short}` : "已发布");
-    return row;
+    return { release: row, bugIds: advancing };
   })();
-  return { release, bugIds };
+  return done;
 }
 
 /** 待发布报障，以及还没挂上某次发布的代码变更。仅管理员。 */
@@ -125,7 +134,11 @@ export function requestRunRelease(
     headSha: input.headSha?.trim() || null,
     detail: input.detail?.trim() || null,
   };
-  const dispatchId = insertQueuedRelease(projectId, payload);
+  const dispatchId = getDb().transaction(() => {
+    expireStaleRunningReleases();
+    if (releaseInFlight(projectId)) throw new Error("已有发布任务在排队或执行");
+    return insertQueuedRelease(projectId, payload);
+  })();
   pokeReleaseRunner(projectId, dispatchId);
   return { queued: true as const, dispatchId };
 }
@@ -223,15 +236,7 @@ export function enqueueScheduledReleases(identity: Identity, at: string) {
     expireStaleRunningReleases();
     for (const row of rows) {
       if (!isProjectAdmin(identity, row.id)) continue;
-      const pending = getDb()
-        .prepare(
-          `SELECT id FROM agent_dispatches
-           WHERE project_id = ? AND target = 'release_runner' AND reason = 'release'
-             AND status IN ('queued', 'running')
-           LIMIT 1`
-        )
-        .get(row.id) as { id: number } | undefined;
-      if (pending) continue;
+      if (releaseInFlight(row.id)) continue;
       const dispatchId = insertQueuedRelease(row.id, {
         mode: "run",
         trigger: "scheduled",
@@ -245,7 +250,7 @@ export function enqueueScheduledReleases(identity: Identity, at: string) {
   return created;
 }
 
-/** 发布任务跑完后记账。成功才推进报障；失败只留失败记录。 */
+/** 发布任务跑完后记账。成功只推进仍待发布的报障；失败只留失败记录。记账抛错时改记失败并结束任务。 */
 export function finishRunningRelease(
   identity: Identity,
   input: {
@@ -268,14 +273,26 @@ export function finishRunningRelease(
   }
   if (row.status !== "running") throw new Error("发布任务不在执行中");
   const payload = readReleasePayload(row.detail);
-  return markReleased(identity, row.project_id, {
-    trigger: payload.trigger,
-    bugIds: payload.bugIds === null ? undefined : payload.bugIds,
-    headSha: input.headSha,
-    detail: input.detail ?? payload.detail ?? undefined,
-    result: input.result,
-    dispatchId: input.dispatchId,
-  });
+  const bugIds = payload.bugIds === null ? undefined : payload.bugIds;
+  try {
+    return markReleased(identity, row.project_id, {
+      trigger: payload.trigger,
+      bugIds,
+      headSha: input.headSha,
+      detail: input.detail ?? payload.detail ?? undefined,
+      result: input.result,
+      dispatchId: input.dispatchId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "发布失败";
+    abandonRunningRelease(identity, row.project_id, input.dispatchId, {
+      trigger: payload.trigger,
+      bugIds,
+      headSha: typeof input.headSha === "string" ? input.headSha : undefined,
+      detail: message,
+    });
+    throw error;
+  }
 }
 
 function listReadyToReleaseIds(projectId: number) {
@@ -318,6 +335,64 @@ function expireStaleRunningReleases(now = Date.now()) {
          AND COALESCE(NULLIF(claimed_at, ''), created_at) < ?`
     )
     .run(STALE_RELEASE, cutoff);
+}
+
+function readySubset(projectId: number, bugIds: number[]) {
+  const ids = [...new Set(bugIds.filter((id) => Number.isInteger(id) && id > 0))].sort(
+    (a, b) => a - b
+  );
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = getDb()
+    .prepare(
+      `SELECT id FROM bugs
+       WHERE project_id = ? AND status = 'ready_to_release' AND id IN (${placeholders})`
+    )
+    .all(projectId, ...ids) as { id: number }[];
+  const ready = new Set(rows.map((row) => row.id));
+  return ids.filter((id) => ready.has(id));
+}
+
+function releaseInFlight(projectId: number) {
+  return getDb()
+    .prepare(
+      `SELECT id FROM agent_dispatches
+       WHERE project_id = ? AND target = 'release_runner' AND reason = 'release'
+         AND status IN ('queued', 'running')
+       LIMIT 1`
+    )
+    .get(projectId) as { id: number } | undefined;
+}
+
+function abandonRunningRelease(
+  identity: Identity,
+  projectId: number,
+  dispatchId: number,
+  input: {
+    trigger: ReleaseTrigger;
+    bugIds?: number[];
+    headSha?: string;
+    detail: string;
+  }
+) {
+  try {
+    markReleased(identity, projectId, {
+      trigger: input.trigger,
+      bugIds: input.bugIds,
+      headSha: input.headSha,
+      detail: input.detail,
+      result: "failed",
+      dispatchId,
+    });
+    return;
+  } catch {
+    // The failure row could not be written. The claim still has to close.
+  }
+  try {
+    closeRunningRelease(projectId, dispatchId, "failed", input.detail);
+  } catch {
+    // Already closed, or no longer running.
+  }
 }
 
 function insertQueuedRelease(projectId: number, payload: unknown) {

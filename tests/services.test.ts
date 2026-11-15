@@ -1266,6 +1266,49 @@ describe("services integration", () => {
     expect(after.public_id).toBe(`SEC${day}001`);
   });
 
+  it("keeps the fixer as handler when an api key publishes", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-handler", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const qa = await services.createUser(adminId, {
+      username: "qa-handler",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, { name: "柜台", code: "SOC" });
+    services.addMember(adminId, project.id, qa.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+    const key = services.createApiKey(adminId, { name: "release-bot", role: "admin" });
+    const keyId = {
+      kind: "api_key" as const,
+      apiKeyId: key.id,
+      role: "admin" as const,
+      name: "release-bot",
+      projectIds: [] as number[],
+    };
+    const bug = services.createBug(qaId, { projectId: project.id, title: "按钮没反应" });
+    services.transitionBug(adminId, bug.id, "start_fix");
+    services.transitionBug(adminId, bug.id, "submit_fix", "已改");
+    services.transitionBug(keyId, bug.id, "release_fixes");
+
+    expect(services.getBug(adminId, bug.id).status).toBe("awaiting_confirm");
+    expect(services.getBugHandlerLabel(services.getBug(adminId, bug.id))).toBe("admin-handler");
+    expect(
+      services.listBugs(adminId, project.id).find((row) => row.id === bug.id)?.handler_label
+    ).toBe("admin-handler");
+  });
+
   it("counts pending work for admins and own confirmations for reporters", async () => {
     const services = await import("../src/lib/services");
     const admin = await services.setupAdmin("admin-counts", "secret1");

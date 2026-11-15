@@ -10,6 +10,7 @@ import {
   ACTION_LABEL,
   type TransitionAction,
 } from "@/lib/state-machine";
+import { bugPageActions } from "./bug-page-actions";
 import type { Priority } from "@/lib/types";
 
 const NOTE_ACTIONS = new Set<TransitionAction>([
@@ -64,6 +65,7 @@ export function BugActions({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [priority, setPriority] = useState<Priority>(currentPriority);
+  const pageActions = bugPageActions(actions);
 
   function openNoted(action: ActiveAction) {
     setActive(action);
@@ -162,15 +164,15 @@ export function BugActions({
     }
   }
 
-  if (actions.length === 0 && !canSupplement && !isAdmin) {
+  if (pageActions.length === 0 && !canSupplement && !isAdmin) {
     return <p className="bb-muted" style={{ margin: 0 }}>当前无需你操作，可查看时间线。</p>;
   }
 
   return (
     <div>
-      {actions.length > 0 || canSupplement ? (
+      {pageActions.length > 0 || canSupplement ? (
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          {actions.map((a) => (
+          {pageActions.map((a) => (
             <button
               key={a}
               type="button"

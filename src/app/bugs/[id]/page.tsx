@@ -23,6 +23,7 @@ import { STATUS_LABEL } from "@/lib/types";
 import { WakeBugButton } from "@/components/AgentDispatch";
 import { latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
 import { BugActions } from "./BugActions";
+import { bugPageActions } from "./bug-page-actions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
 import { Prose } from "@/components/Prose";
 import { bugListQueryFromUnknown } from "@/lib/bug-list-query";
@@ -198,7 +199,7 @@ export default async function BugDetailPage({
   const projects = listProjects(identity);
   const events = getBugEvents(identity, bug.id);
   const attachments = getAttachments("bug", bug.id);
-  const actions = bugActions(identity, bug);
+  const actions = bugPageActions(bugActions(identity, bug));
   const canSupplement = canAddSupplement(identity, bug);
   const canHandleBugs = isProjectAdmin(identity, bug.project_id);
   const isAdmin = isAdminRole(identity.role);

@@ -174,6 +174,17 @@ describe("changes and release routes", () => {
     expect(row.status).toBe("queued");
     expect(JSON.parse(row.detail).bugIds).toEqual([bug.id]);
 
+    const second = await POST(
+      request("POST", `http://test/api/projects/${project.id}/release`, adminKey, {
+        mode: "run",
+        trigger: "manual",
+        bugIds: [bug.id],
+      }),
+      ctx
+    );
+    expect(second.status).toBe(400);
+    expect(((await second.json()) as { error: string }).error).toMatch(/排队或执行/);
+
     getDb()
       .prepare("UPDATE agent_dispatches SET created_at = ? WHERE id = ?")
       .run(new Date(Date.now() - 180_000).toISOString(), body.dispatchId);

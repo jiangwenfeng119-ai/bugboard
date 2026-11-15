@@ -300,6 +300,91 @@ describe("release runner queue", () => {
     expect(row.detail).toContain("未提交");
   });
 
+  it("refuses a second run while that project is queued or running", async () => {
+    const { release, adminId, project } = await setup();
+    const first = release.requestRunRelease(adminId, project.id, { trigger: "manual" });
+    expect(() => release.requestRunRelease(adminId, project.id, { trigger: "manual" })).toThrow(
+      /排队或执行/
+    );
+    const job = release.claimQueuedRelease(adminId, "SOC");
+    expect(job?.dispatchId).toBe(first.dispatchId);
+    expect(() => release.requestRunRelease(adminId, project.id, { trigger: "manual" })).toThrow(
+      /排队或执行/
+    );
+    release.finishRunningRelease(adminId, {
+      dispatchId: job!.dispatchId,
+      result: "success",
+    });
+    const again = release.requestRunRelease(adminId, project.id, { trigger: "manual" });
+    expect(again.queued).toBe(true);
+    expect(again.dispatchId).not.toBe(first.dispatchId);
+  });
+
+  it("advances only bugs still waiting for release and closes the claim", async () => {
+    const { services, release, adminId, qaId, project } = await setup();
+    const keep = await readyBug(services, qaId, adminId, project.id, "留下发布");
+    const dropped = await readyBug(services, qaId, adminId, project.id, "先撤回");
+    release.requestRunRelease(adminId, project.id, {
+      trigger: "manual",
+      bugIds: [keep.id, dropped.id],
+    });
+    services.transitionBug(adminId, dropped.id, "withdraw_fix", "还要再改一处");
+    const job = release.claimQueuedRelease(adminId, "SOC");
+    const done = release.finishRunningRelease(adminId, {
+      dispatchId: job!.dispatchId,
+      result: "success",
+      headSha: "abc1234def",
+    });
+    expect(done.bugIds).toEqual([keep.id]);
+    expect(done.release.result).toBe("success");
+    expect(services.getBug(adminId, keep.id).status).toBe("awaiting_confirm");
+    expect(services.getBug(adminId, dropped.id).status).toBe("fixing");
+    const { getDb } = await import("../src/lib/db");
+    const row = getDb()
+      .prepare("SELECT status FROM agent_dispatches WHERE id = ?")
+      .get(job!.dispatchId) as { status: string };
+    expect(row.status).toBe("sent");
+  });
+
+  it("closes the claim and records a failed release when finishing throws", async () => {
+    const { services, release, adminId, qaId, project } = await setup();
+    const bug = await readyBug(services, qaId, adminId, project.id, "记账会失败");
+    release.requestRunRelease(adminId, project.id, { trigger: "manual", bugIds: [bug.id] });
+    const job = release.claimQueuedRelease(adminId, "SOC");
+    const { getDb } = await import("../src/lib/db");
+    getDb().exec(`
+      CREATE TRIGGER block_awaiting_confirm
+      BEFORE UPDATE OF status ON bugs
+      WHEN NEW.status = 'awaiting_confirm'
+      BEGIN
+        SELECT RAISE(ABORT, 'blocked release');
+      END;
+    `);
+    expect(() =>
+      release.finishRunningRelease(adminId, {
+        dispatchId: job!.dispatchId,
+        result: "success",
+        headSha: "deadbeef",
+      })
+    ).toThrow(/blocked release/);
+    const claim = getDb()
+      .prepare("SELECT status FROM agent_dispatches WHERE id = ?")
+      .get(job!.dispatchId) as { status: string };
+    expect(claim.status).toBe("failed");
+    expect(services.getBug(adminId, bug.id).status).toBe("ready_to_release");
+    const recorded = getDb()
+      .prepare(
+        "SELECT result, detail FROM project_changes WHERE project_id = ? AND kind = 'release'"
+      )
+      .all(project.id) as { result: string; detail: string | null }[];
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].result).toBe("failed");
+    expect(recorded[0].detail).toContain("blocked release");
+    expect(release.requestRunRelease(adminId, project.id, { trigger: "manual" }).queued).toBe(
+      true
+    );
+  });
+
   it("fails a running claim after 45 minutes so the next night can queue", async () => {
     const { dispatch, release, adminId, project } = await setup();
     dispatch.saveDispatchSettings(adminId, project.id, {
