@@ -175,6 +175,49 @@ describe("wake agent launch", () => {
     expect(payload.error).toMatch(/不能用这个命令/);
   });
 
+  it("starts the release runner for a queued release and does not launch a coding agent", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wake-release-"));
+    const spawned: string[] = [];
+    const config = {
+      listen: "127.0.0.1:0",
+      agent: "cursor",
+      argv: null,
+      allowLan: false,
+      applyEdits: true,
+      secrets: ["whsec_test"],
+      cwd: "",
+      projects: { SOC: root },
+      sessionFile: path.join(root, "sessions.json"),
+      runDir: path.join(root, "runs"),
+      spawnRelease: () => {
+        spawned.push("release-runner");
+      },
+    };
+    const server = createWakeServer(config);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const body = JSON.stringify({
+      event: "release.queued",
+      dispatchId: 4,
+      project: { code: "SOC", slug: "counter", id: 1, name: "柜台" },
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/wake`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Bugboard-Signature": `sha256=${sign("whsec_test", body)}`,
+      },
+      body,
+    });
+    const payload = (await res.json()) as { spawned?: boolean };
+    server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(res.status).toBe(202);
+    expect(payload.spawned).toBe(true);
+    expect(spawned).toEqual(["release-runner"]);
+  });
+
   it("reuses a saved session id for the same bug", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wake-session-"));
     const file = path.join(dir, "wake.sessions.json");

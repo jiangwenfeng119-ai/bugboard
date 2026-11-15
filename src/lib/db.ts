@@ -155,6 +155,9 @@ CREATE TABLE IF NOT EXISTS project_dispatch (
   webhook_url TEXT NOT NULL DEFAULT '',
   webhook_secret TEXT NOT NULL DEFAULT '',
   cursor_enabled INTEGER NOT NULL DEFAULT 0,
+  deploy_mode TEXT NOT NULL DEFAULT 'none',
+  deploy_command TEXT NOT NULL DEFAULT '',
+  release_schedule TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
@@ -218,6 +221,7 @@ function migrateSchema(db: Database.Database) {
   ensurePublicIds(db);
   ensureCaptureSchema(db);
   ensureLocalAgents(db);
+  ensureReleaseConfig(db);
   ensureEventKind(db);
   ensureProjectChanges(db);
 }
@@ -381,6 +385,19 @@ function ensureLocalAgents(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_local_agents_project ON project_local_agents(project_id, sort_index);
   `);
+}
+
+function ensureReleaseConfig(db: Database.Database) {
+  const cols = new Set(columnNames(db, "project_dispatch"));
+  if (!cols.has("deploy_mode")) {
+    db.exec("ALTER TABLE project_dispatch ADD COLUMN deploy_mode TEXT NOT NULL DEFAULT 'none'");
+  }
+  if (!cols.has("deploy_command")) {
+    db.exec("ALTER TABLE project_dispatch ADD COLUMN deploy_command TEXT NOT NULL DEFAULT ''");
+  }
+  if (!cols.has("release_schedule")) {
+    db.exec("ALTER TABLE project_dispatch ADD COLUMN release_schedule TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 function ensureProjectLogo(db: Database.Database) {

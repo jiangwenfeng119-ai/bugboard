@@ -167,6 +167,22 @@ Cursor 云端只参加修理。在同一套配置里勾选「分派给 Cursor �
 
 同一张单、同一个原因，一分钟内只自动分派一次。详情页的 **再次分派去修理** 不受这限制。
 
+### 夜间发布
+
+发布在有代码仓的电脑上跑，不在 Bugboard 容器里跑。管理后台「分派给 Agent」里每个项目可以填三样：发布方式（不自动部署 / 本机重启 / 云上部署）、发布命令、定时（如 `22:00`，留空则不参加定时）。`projects` 仍用项目缩写或 slug 对上绝对路径。`bugboardUrl` 指向 Bugboard，`releaseKey` 填一把管理员级 API Key。
+
+紧急发布（网页「立即发布」或 MCP `run_release`）只入队。若该项目配了本机地址，叫醒服务会再拉起一次 `scripts/release-runner.mjs` 把队列领走。没配本机地址时，要等下面的 cron，或手动执行 `npm run release`。
+
+Mac Studio 在 22:00 跑定时发布（路径按你的机器改）：
+
+```cron
+0 22 * * * cd /Users/你/Apps/bugboard && /绝对路径/node scripts/release-runner.mjs --schedule >> /Users/你/Apps/bugboard-wake/release.log 2>&1
+```
+
+`--schedule` 用上海时间对上 `22:00`，给发布方式不是「不自动部署」的项目入队，然后做同一套事：检查目录是 git 且 origin 与代码仓一致，按快进、推送或未推送提交的 rebase 同步，执行发布命令，再回调把待发布报障标成待确认。工作区有未提交改动，或本地提交已经推送后又和远端分叉，会中止并记一条失败的发布，报障保持待发布。
+
+想让紧急发布在没开叫醒服务时也能很快被领走，可以另加一条每分钟的 `node scripts/release-runner.mjs`（不带 `--schedule`）。
+
 工具权限、配置示例和冒烟脚本见 [`docs/mcp-examples.md`](docs/mcp-examples.md)。本机不依赖 Cursor 界面时，可以跑：
 
 ```bash

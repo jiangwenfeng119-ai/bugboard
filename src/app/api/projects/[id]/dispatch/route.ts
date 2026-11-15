@@ -33,6 +33,12 @@ export async function PUT(
       repairLocalEnabled: typeof body.repairLocalEnabled === "boolean" ? body.repairLocalEnabled : undefined,
       rotateSecret: Boolean(body.rotateSecret),
       localAgents: Array.isArray(body.localAgents) ? body.localAgents : undefined,
+      deployMode:
+        body.deployMode === "none" || body.deployMode === "restart" || body.deployMode === "ecs_deploy"
+          ? body.deployMode
+          : undefined,
+      deployCommand: typeof body.deployCommand === "string" ? body.deployCommand : undefined,
+      releaseSchedule: typeof body.releaseSchedule === "string" ? body.releaseSchedule : undefined,
     });
     return json({ settings });
   });

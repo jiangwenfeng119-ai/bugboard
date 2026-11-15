@@ -3,6 +3,8 @@
   "agent": "cursor",
   "applyEdits": false,
   "secrets": ["把项目叫醒设置里的密钥贴在这里"],
+  "bugboardUrl": "http://127.0.0.1:3080",
+  "releaseKey": "一把管理员级 API Key，只给本机发布任务",
   "projects": {
     "SOC": "/绝对路径/目标代码仓"
   }

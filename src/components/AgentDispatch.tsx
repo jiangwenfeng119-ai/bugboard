@@ -70,6 +70,13 @@ const STATUS_LABEL: Record<DispatchRecent["status"], string> = {
   failed: "失败",
   skipped: "未发送",
   queued: "排队中",
+  running: "执行中",
+};
+
+const DEPLOY_LABEL: Record<DispatchSettings["deployMode"], string> = {
+  none: "不自动部署",
+  restart: "本机重启",
+  ecs_deploy: "云上部署",
 };
 
 function explainDetail(detail: string) {
@@ -279,6 +286,12 @@ function DispatchList({
                           {item.webhookUrl}
                         </span>
                       ) : null}
+                      {item.deployMode !== "none" || item.releaseSchedule ? (
+                        <span className="bb-dispatch-sub">
+                          发布：{DEPLOY_LABEL[item.deployMode]}
+                          {item.releaseSchedule ? ` · ${item.releaseSchedule}` : ""}
+                        </span>
+                      ) : null}
                       {latest ? (
                         <span className="bb-dispatch-sub">
                           最近一次结果：{latest.head}
@@ -370,6 +383,9 @@ function DispatchEditor({
   const [organizeEnabled, setOrganizeEnabled] = useState(initial?.organizeEnabled ?? true);
   const [repairLocalEnabled, setRepairLocalEnabled] = useState(initial?.repairLocalEnabled ?? true);
   const [cursorEnabled, setCursorEnabled] = useState(initial?.cursorEnabled ?? false);
+  const [deployMode, setDeployMode] = useState<DispatchSettings["deployMode"]>(initial?.deployMode ?? "none");
+  const [deployCommand, setDeployCommand] = useState(initial?.deployCommand ?? "");
+  const [releaseSchedule, setReleaseSchedule] = useState(initial?.releaseSchedule ?? "");
   const [agents, setAgents] = useState<AgentDraft[]>(() => (initial ? agentDrafts(initial) : blankAgents()));
   const [settings, setSettings] = useState<DispatchSettings | null>(initial);
   const [error, setError] = useState("");
@@ -417,6 +433,9 @@ function DispatchEditor({
           repairLocalEnabled,
           cursorEnabled,
           rotateSecret,
+          deployMode,
+          deployCommand,
+          releaseSchedule,
           localAgents: agents.map((item) => ({
             name: item.name,
             kind: item.kind,
@@ -438,6 +457,9 @@ function DispatchEditor({
       setOrganizeEnabled(data.settings.organizeEnabled);
       setRepairLocalEnabled(data.settings.repairLocalEnabled);
       setCursorEnabled(data.settings.cursorEnabled);
+      setDeployMode(data.settings.deployMode);
+      setDeployCommand(data.settings.deployCommand);
+      setReleaseSchedule(data.settings.releaseSchedule);
       setAgents(agentDrafts(data.settings));
       setNotice(rotateSecret ? "已更换签名密钥，旧密钥立即失效" : "已保存");
       if (mode === "create") {
@@ -749,6 +771,58 @@ function DispatchEditor({
               添加自定义命令
             </button>
           </div>
+        </div>
+      </fieldset>
+
+      <fieldset className="bb-dispatch-channel" disabled={mode === "create" && projects.length === 0}>
+        <legend>发布</legend>
+        <div className="bb-field">
+          <label className="bb-label" htmlFor="bb-deploy-mode">
+            发布方式
+          </label>
+          <select
+            id="bb-deploy-mode"
+            className="bb-select"
+            value={deployMode}
+            onChange={(event) => setDeployMode(event.target.value as DispatchSettings["deployMode"])}
+          >
+            {(Object.keys(DEPLOY_LABEL) as DispatchSettings["deployMode"][]).map((choice) => (
+              <option key={choice} value={choice}>
+                {DEPLOY_LABEL[choice]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="bb-field">
+          <label className="bb-label" htmlFor="bb-deploy-command">
+            发布命令
+          </label>
+          <input
+            id="bb-deploy-command"
+            className="bb-input"
+            value={deployCommand}
+            onChange={(event) => setDeployCommand(event.target.value)}
+            placeholder="docker compose up -d --build"
+            spellCheck={false}
+          />
+        </div>
+        <div className="bb-field">
+          <label className="bb-label" htmlFor="bb-release-schedule">
+            定时
+          </label>
+          <input
+            id="bb-release-schedule"
+            className="bb-input"
+            value={releaseSchedule}
+            onChange={(event) => setReleaseSchedule(event.target.value)}
+            placeholder="22:00"
+            spellCheck={false}
+          />
+          <p className="bb-field-hint">
+            留空则不参加定时。在有代码仓的电脑上用 cron 于 22:00 执行{" "}
+            <code>node scripts/release-runner.mjs --schedule</code>
+            。Bugboard 在 Docker 里时不要在容器内跑这条命令。
+          </p>
         </div>
       </fieldset>
 

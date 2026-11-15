@@ -38,7 +38,9 @@ export type LocalAgentInput = {
 
 export type DispatchTarget = "webhook" | "cursor" | "release_runner";
 
-export type DispatchStatus = "pending" | "sent" | "failed" | "skipped" | "queued";
+export type DispatchStatus = "pending" | "sent" | "failed" | "skipped" | "queued" | "running";
+
+export type DeployMode = "none" | "restart" | "ecs_deploy";
 
 export type DispatchRecent = {
   id: number;
@@ -63,6 +65,9 @@ export type DispatchSettings = {
   repoUrl: string;
   localAgents: LocalAgent[];
   localAgentsSaved: boolean;
+  deployMode: DeployMode;
+  deployCommand: string;
+  releaseSchedule: string;
   recent: DispatchRecent[];
 };
 
@@ -75,6 +80,8 @@ export type DispatchOverview = {
   cursorEnabled: boolean;
   agentsSaved: boolean;
   agents: { name: string; kind: LocalAgentKind; enabled: boolean }[];
+  deployMode: DeployMode;
+  releaseSchedule: string;
   latest: DispatchRecent | null;
 };
 
@@ -91,11 +98,39 @@ type ConfigRow = {
   organize_enabled?: number;
   repair_local_enabled?: number;
   local_agents_saved?: number;
+  deploy_mode?: string;
+  deploy_command?: string;
+  release_schedule?: string;
   updated_at: string;
 };
 
 function localJobEnabled(url: string, flag: number | undefined) {
   return Boolean(url) && flag !== 0;
+}
+
+export function deployModeOf(value: unknown): DeployMode {
+  return value === "restart" || value === "ecs_deploy" ? value : "none";
+}
+
+export function assertDeployMode(value: string): DeployMode {
+  if (value === "none" || value === "restart" || value === "ecs_deploy") return value;
+  throw new Error("发布方式无效");
+}
+
+export function assertReleaseSchedule(value: string) {
+  const text = value.trim();
+  if (!text) return "";
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(text)) {
+    throw new Error("定时要写成 22:00 这样的时间，或留空");
+  }
+  return text;
+}
+
+function assertDeployCommand(mode: DeployMode, command: string) {
+  const text = command.trim();
+  if (text.length > 400 || /[\r\n\0]/.test(text)) throw new Error("发布命令无效");
+  if (mode !== "none" && !text) throw new Error("填写发布命令");
+  return text;
 }
 
 type DispatchLogRow = {
@@ -360,6 +395,9 @@ export function getDispatchSettings(identity: Identity, projectId: number): Disp
     repoUrl: project.github_url || "",
     localAgentsSaved: Boolean(row?.local_agents_saved),
     localAgents: localAgentsForSettings(projectId, Boolean(row?.local_agents_saved)),
+    deployMode: deployModeOf(row?.deploy_mode),
+    deployCommand: row?.deploy_command || "",
+    releaseSchedule: row?.release_schedule || "",
     recent: recent.map(present),
   };
 }
@@ -372,11 +410,15 @@ export function listDispatchOverviews(identity: Identity): DispatchOverview[] {
               d.webhook_url, d.cursor_enabled,
               IFNULL(d.organize_enabled, 1) AS organize_enabled,
               IFNULL(d.repair_local_enabled, 1) AS repair_local_enabled,
-              IFNULL(d.local_agents_saved, 0) AS local_agents_saved
+              IFNULL(d.local_agents_saved, 0) AS local_agents_saved,
+              IFNULL(d.deploy_mode, 'none') AS deploy_mode,
+              IFNULL(d.release_schedule, '') AS release_schedule
        FROM project_dispatch d
        JOIN projects p ON p.id = d.project_id
        WHERE (d.webhook_url != '' AND (IFNULL(d.organize_enabled, 1) = 1 OR IFNULL(d.repair_local_enabled, 1) = 1))
           OR d.cursor_enabled = 1
+          OR IFNULL(d.deploy_mode, 'none') != 'none'
+          OR IFNULL(d.release_schedule, '') != ''
        ORDER BY p.name, p.id`
     )
     .all() as {
@@ -387,6 +429,8 @@ export function listDispatchOverviews(identity: Identity): DispatchOverview[] {
     organize_enabled: number;
     repair_local_enabled: number;
     local_agents_saved: number;
+    deploy_mode: string;
+    release_schedule: string;
   }[];
   const latestStmt = getDb().prepare(
     `SELECT d.*, b.public_id AS public_id
@@ -416,6 +460,8 @@ export function listDispatchOverviews(identity: Identity): DispatchOverview[] {
               enabled: agent.enabled,
             }))
           : [],
+        deployMode: deployModeOf(row.deploy_mode),
+        releaseSchedule: row.release_schedule || "",
         latest: latest ? present(latest) : null,
       },
     ];
@@ -438,19 +484,33 @@ export function saveDispatchSettings(
     repairLocalEnabled?: boolean;
     rotateSecret?: boolean;
     localAgents?: LocalAgentInput[];
+    deployMode?: DeployMode;
+    deployCommand?: string;
+    releaseSchedule?: string;
   }
 ) {
   requireProjectAdmin(identity, projectId);
+  const existing = readConfig(projectId);
+  const deployMode =
+    input.deployMode === undefined ? deployModeOf(existing?.deploy_mode) : assertDeployMode(input.deployMode);
+  const releaseSchedule =
+    input.releaseSchedule === undefined
+      ? existing?.release_schedule || ""
+      : assertReleaseSchedule(input.releaseSchedule);
+  const deployCommand = assertDeployCommand(
+    deployMode,
+    input.deployCommand === undefined ? existing?.deploy_command || "" : input.deployCommand
+  );
   const webhookUrl = assertWebhookUrl(input.webhookUrl);
   const organizeEnabled = input.organizeEnabled ?? Boolean(webhookUrl);
   const repairLocalEnabled = input.repairLocalEnabled ?? Boolean(webhookUrl);
   if ((organizeEnabled || repairLocalEnabled) && !webhookUrl) {
     throw new Error("发给本机 Agent 时，先填本机地址");
   }
-  if (!organizeEnabled && !repairLocalEnabled && !input.cursorEnabled) {
+  const releaseConfigured = deployMode !== "none" || releaseSchedule !== "" || deployCommand !== "";
+  if (!organizeEnabled && !repairLocalEnabled && !input.cursorEnabled && !releaseConfigured) {
     throw new Error("至少启用一件活：整理走查，或修理报障");
   }
-  const existing = readConfig(projectId);
   let secret = existing?.webhook_secret || "";
   if (!secret || input.rotateSecret) secret = `whsec_${randomBytes(24).toString("base64url")}`;
   const t = nowIso();
@@ -458,15 +518,19 @@ export function saveDispatchSettings(
     .prepare(
       `INSERT INTO project_dispatch (
          project_id, webhook_url, webhook_secret, cursor_enabled,
-         organize_enabled, repair_local_enabled, updated_at
+         organize_enabled, repair_local_enabled,
+         deploy_mode, deploy_command, release_schedule, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(project_id) DO UPDATE SET
          webhook_url = excluded.webhook_url,
          webhook_secret = excluded.webhook_secret,
          cursor_enabled = excluded.cursor_enabled,
          organize_enabled = excluded.organize_enabled,
          repair_local_enabled = excluded.repair_local_enabled,
+         deploy_mode = excluded.deploy_mode,
+         deploy_command = excluded.deploy_command,
+         release_schedule = excluded.release_schedule,
          updated_at = excluded.updated_at`
     )
     .run(
@@ -476,6 +540,9 @@ export function saveDispatchSettings(
       input.cursorEnabled ? 1 : 0,
       organizeEnabled ? 1 : 0,
       repairLocalEnabled ? 1 : 0,
+      deployMode,
+      deployCommand,
+      releaseSchedule,
       t
     );
   if (input.localAgents) {
@@ -998,6 +1065,44 @@ function noteOrganizeStatus(sessionId: number, status: string, detail: string) {
        WHERE id = ?`
     )
     .run(status, detail, status, t, t, sessionId);
+}
+
+/** 叫醒宿主机上的发布任务去领队列。失败不影响已经入队的记录。 */
+export function pokeReleaseRunner(projectId: number, dispatchId: number) {
+  const config = readConfig(projectId);
+  if (!config?.webhook_url || !config.webhook_secret) return;
+  const project = getDb()
+    .prepare("SELECT id, name, code, slug FROM projects WHERE id = ?")
+    .get(projectId) as { id: number; name: string; code: string; slug: string } | undefined;
+  if (!project) return;
+  const payload = {
+    event: "release.queued" as const,
+    dispatchId,
+    sentAt: nowIso(),
+    project: {
+      id: project.id,
+      name: project.name,
+      code: project.code,
+      slug: project.slug,
+    },
+  };
+  const body = JSON.stringify(payload);
+  const signature = signDispatchBody(config.webhook_secret, body);
+  enqueue(async () => {
+    try {
+      await postJson(
+        config.webhook_url,
+        {
+          "Content-Type": "application/json",
+          "X-Bugboard-Event": "release.queued",
+          "X-Bugboard-Signature": `sha256=${signature}`,
+        },
+        body
+      );
+    } catch {
+      // 队列还在。cron 或下一次叫醒会再领。
+    }
+  });
 }
 
 export function sendDispatchTest(identity: Identity, projectId: number) {

@@ -355,6 +355,18 @@ export function createWakeServer(config) {
       send(res, 200, { ok: true, spawned: false });
       return;
     }
+    if (payload.event === "release.queued") {
+      try {
+        if (typeof config.spawnRelease === "function") config.spawnRelease(payload);
+        else spawnReleaseRunner();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "没有拉起发布任务";
+        send(res, 500, { error: message });
+        return;
+      }
+      send(res, 202, { ok: true, spawned: true });
+      return;
+    }
     if (payload.event !== "bug.needs_agent" && payload.event !== "capture.needs_organize") {
       send(res, 400, { error: "不认识的事件" });
       return;
@@ -455,6 +467,18 @@ export function createWakeServer(config) {
     }
     send(res, 500, { error: lastError });
   });
+}
+
+export function spawnReleaseRunner() {
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "release-runner.mjs");
+  if (!fs.existsSync(script)) throw new Error("找不到发布任务脚本");
+  const child = spawn(process.execPath, [script], {
+    detached: true,
+    stdio: "ignore",
+    cwd: process.cwd(),
+    env: process.env,
+  });
+  child.unref();
 }
 
 function main() {
