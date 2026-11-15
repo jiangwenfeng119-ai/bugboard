@@ -6,12 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { isAdminRole, roleLabel } from "@/lib/roles";
 import { BrandMark } from "./BrandMark";
 import {
-  IconChanges,
   IconChevronDown,
   IconKey,
   IconLogout,
   IconMessage,
   IconShield,
+  IconStamp,
 } from "./Icons";
 
 type Props = {
@@ -112,7 +112,7 @@ export function AppShell({
                   className={`bb-user-menu-item${pathname === "/changelog" ? " is-active" : ""}`}
                   onClick={() => setOpen(false)}
                 >
-                  <IconChanges size={15} />
+                  <IconStamp size={15} />
                   版本与更新日志
                 </Link>
                 <div className="bb-user-menu-sep" role="separator" />
