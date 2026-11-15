@@ -107,6 +107,12 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("commit 并 push");
     expect(ADMIN_AGENT_PROMPT).toContain("record_change（kind=fix");
     expect(ADMIN_AGENT_PROMPT).toContain("默认不要调用 run_release");
+    expect(ADMIN_AGENT_PROMPT).toContain("入队等待本机发布任务");
+    expect(ADMIN_AGENT_PROMPT).toContain("真正上线由发布 runner 完成后才会 markReleased");
+    expect(ADMIN_AGENT_PROMPT).toContain("进待确认");
+    expect(ADMIN_AGENT_PROMPT).toContain("不要说已发布");
+    expect(ADMIN_AGENT_PROMPT).toContain("变成 awaiting_confirm");
+    expect(ADMIN_AGENT_PROMPT).not.toContain("马上跑发布");
     expect(USER_AGENT_PROMPT).toContain("验收只处理 awaiting_confirm");
     expect(USER_AGENT_PROMPT).toContain("不要对待发布确认");
     expect(USER_AGENT_PROMPT).toContain("ready_to_release");

@@ -90,7 +90,7 @@ MCP 只注册了工具。项目、报障正文、时间线和 actions 都要调�
 - list_changes：查看项目变更和发布记录。
 - list_pending_release：查看待发布报障，以及还没挂上某次发布的变更。
 - mark_released：人明确说已经在外面发完时才用。写发布记录，并把这次包含的待发布推进到待确认。
-- run_release：马上跑发布。默认不要调用 run_release。只有我明确要求紧急发布时才用。
+- run_release：入队等待本机发布任务，不会马上上线。真正上线由发布 runner 完成后才会 markReleased，报障才会进待确认。默认不要调用 run_release。只有我明确要求紧急发布时才用。调用后不要说已发布，要等这些报障变成 awaiting_confirm。
 - mark_invalid：待处理或修复中 → 不属实，note 必填。只用于现象不存在、已经有这个功能但没用对、配置不对、符合现有做法，或和另一张单重复。
 - request_product：待处理或修复中 → 待产品经理确认，note 必填。要一个现在没有的能力，而且还没和产品经理确认时使用。
 - decline_product：待产品经理确认 → 不属实，note 必填。只有我明确说这张不做时才用。

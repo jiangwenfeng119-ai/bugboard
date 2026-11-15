@@ -613,7 +613,7 @@ server.tool(
 
 server.tool(
   "run_release",
-  "把一次发布放进队列（管理员级 Key）。不在这里跑 git 或部署。默认不要调用，只有人明确要求紧急发布时才用。返回 queued。",
+  "入队等待本机发布任务（管理员级 Key）。不在这里跑 git 或部署，也不会马上上线。真正上线由发布 runner 完成后才会 markReleased，报障才会进待确认。默认不要调用，只有人明确要求紧急发布时才用。在报障变为 awaiting_confirm 之前不要说已发布。返回 queued。",
   {
     projectId: z.number().int().positive(),
     trigger: z

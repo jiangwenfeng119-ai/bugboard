@@ -508,4 +508,25 @@ describe("agent wake", () => {
     expect(calls).toEqual([]);
     expect(captures.getCaptureSession(identity, again.id).organizeStatus).toBe("skipped");
   });
+
+  it("keeps a queued release runner row out of the local wake timeout", async () => {
+    const { dispatch, identity, project } = await setup();
+    const { getDb } = await import("../src/lib/db");
+    const stale = new Date(Date.now() - 180_000).toISOString();
+    getDb()
+      .prepare(
+        `INSERT INTO agent_dispatches
+           (project_id, bug_id, reason, target, status, detail, created_at)
+         VALUES (?, NULL, 'manual', 'webhook', 'pending', '', ?),
+                (?, NULL, 'release', 'release_runner', 'queued', ?, ?)`
+      )
+      .run(project.id, stale, project.id, JSON.stringify({ mode: "run" }), stale);
+
+    const recent = dispatch.getDispatchSettings(identity, project.id).recent;
+    const wake = recent.find((item) => item.reason === "manual");
+    const release = recent.find((item) => item.reason === "release");
+    expect(wake).toMatchObject({ target: "webhook", status: "failed", detail: "发送中断" });
+    expect(release).toMatchObject({ target: "release_runner", status: "queued" });
+    expect(release?.detail).toContain("run");
+  });
 });

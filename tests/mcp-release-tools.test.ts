@@ -37,6 +37,12 @@ describe("release MCP tools", () => {
       expect(byName.get("list_bugs")?.description).toContain("待发布");
       expect(JSON.stringify(byName.get("list_bugs")?.inputSchema)).toContain("ready_to_release");
       expect(byName.get("withdraw_fix")?.description).toContain("待发布 → 修复中");
+      const runRelease = byName.get("run_release")?.description || "";
+      expect(runRelease).toContain("入队等待本机发布任务");
+      expect(runRelease).toContain("发布 runner");
+      expect(runRelease).toContain("也不会马上上线");
+      expect(runRelease).toContain("awaiting_confirm");
+      expect(runRelease).not.toContain("马上跑");
     } finally {
       await client.close();
     }

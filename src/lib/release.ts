@@ -90,7 +90,7 @@ export function listPendingRelease(identity: Identity, projectId: number) {
   };
 }
 
-/** 先入队，不跑 git 或部署。后续 runner 读取这条 agent_dispatches。 */
+/** 入队等待本机发布任务，不跑 git 或部署。发布 runner 读取这条 agent_dispatches。 */
 export function requestRunRelease(
   identity: Identity,
   projectId: number,
@@ -116,7 +116,7 @@ export function requestRunRelease(
     .prepare(
       `INSERT INTO agent_dispatches
          (project_id, bug_id, reason, target, status, detail, created_at)
-       VALUES (?, NULL, 'release', 'webhook', 'pending', ?, ?)`
+       VALUES (?, NULL, 'release', 'release_runner', 'queued', ?, ?)`
     )
     .run(projectId, JSON.stringify(payload), nowIso());
   return { queued: true as const, dispatchId: Number(info.lastInsertRowid) };

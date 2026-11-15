@@ -20,11 +20,13 @@ const REASON_LABEL: Record<string, string> = {
   manual: "手动",
   test: "测试",
   organize: "整理走查",
+  release: "发布",
 };
 
 const TARGET_LABEL: Record<string, string> = {
   webhook: "本机",
   cursor: "云端",
+  release_runner: "发布任务",
 };
 
 const KIND_LABEL: Record<LocalAgentKind, string> = {
@@ -67,6 +69,7 @@ const STATUS_LABEL: Record<DispatchRecent["status"], string> = {
   sent: "已送达",
   failed: "失败",
   skipped: "未发送",
+  queued: "排队中",
 };
 
 function explainDetail(detail: string) {

@@ -36,7 +36,9 @@ export type LocalAgentInput = {
   enabled: boolean;
 };
 
-export type DispatchTarget = "webhook" | "cursor";
+export type DispatchTarget = "webhook" | "cursor" | "release_runner";
+
+export type DispatchStatus = "pending" | "sent" | "failed" | "skipped" | "queued";
 
 export type DispatchRecent = {
   id: number;
@@ -44,7 +46,7 @@ export type DispatchRecent = {
   publicId: string | null;
   reason: string;
   target: DispatchTarget;
-  status: "pending" | "sent" | "failed" | "skipped";
+  status: DispatchStatus;
   detail: string;
   createdAt: string;
 };
@@ -102,7 +104,7 @@ type DispatchLogRow = {
   bug_id: number | null;
   reason: string;
   target: DispatchTarget;
-  status: "pending" | "sent" | "failed" | "skipped";
+  status: DispatchStatus;
   detail: string;
   created_at: string;
   public_id?: string | null;
@@ -287,10 +289,16 @@ function requireProjectAdmin(identity: Identity, projectId: number) {
   return project;
 }
 
+const IN_FLIGHT_WAKE = new Set<DispatchTarget>(["webhook", "cursor"]);
+
 function present(row: DispatchLogRow): DispatchRecent {
   let status = row.status;
   let detail = row.detail;
-  if (status === "pending" && Date.now() - Date.parse(row.created_at) > 120_000) {
+  if (
+    status === "pending" &&
+    IN_FLIGHT_WAKE.has(row.target) &&
+    Date.now() - Date.parse(row.created_at) > 120_000
+  ) {
     status = "failed";
     detail = detail || "发送中断";
   }
@@ -821,6 +829,8 @@ async function deliverOne(
       markDispatch(rowId, "sent", `HTTP ${res.status}`);
       return;
     }
+
+    if (target === "release_runner") return;
 
     const runtime = cursorRuntime();
     if (!runtime.apiKey) {

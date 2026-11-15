@@ -167,11 +167,21 @@ describe("changes and release routes", () => {
     expect(services.getBug(adminId, bug.id).status).toBe("ready_to_release");
 
     const row = getDb()
-      .prepare("SELECT reason, status, detail FROM agent_dispatches WHERE id = ?")
-      .get(body.dispatchId) as { reason: string; status: string; detail: string };
+      .prepare("SELECT reason, target, status, detail FROM agent_dispatches WHERE id = ?")
+      .get(body.dispatchId) as { reason: string; target: string; status: string; detail: string };
     expect(row.reason).toBe("release");
-    expect(row.status).toBe("pending");
+    expect(row.target).toBe("release_runner");
+    expect(row.status).toBe("queued");
     expect(JSON.parse(row.detail).bugIds).toEqual([bug.id]);
+
+    getDb()
+      .prepare("UPDATE agent_dispatches SET created_at = ? WHERE id = ?")
+      .run(new Date(Date.now() - 180_000).toISOString(), body.dispatchId);
+    const dispatch = await import("../src/lib/dispatch");
+    const listed = dispatch
+      .getDispatchSettings(adminId, project.id)
+      .recent.find((item) => item.id === body.dispatchId);
+    expect(listed).toMatchObject({ target: "release_runner", status: "queued", reason: "release" });
 
     const pending = await GET(
       request("GET", `http://test/api/projects/${project.id}/release`, adminKey),
