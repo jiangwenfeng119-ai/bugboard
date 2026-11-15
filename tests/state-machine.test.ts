@@ -198,16 +198,16 @@ describe("state machine", () => {
   });
 
   it("lets an admin withdraw a submitted fix without confirming it", () => {
-    expect(allowedActions(admin, "awaiting_confirm", "user", 2)).toEqual([
-      "withdraw_fix",
-    ]);
-    expect(allowedActions(reporter, "awaiting_confirm", "user", 2)).not.toContain(
+    expect(allowedActions(admin, "ready_to_release", "user", 2)).toEqual(
+      expect.arrayContaining(["withdraw_fix"])
+    );
+    expect(allowedActions(reporter, "ready_to_release", "user", 2)).not.toContain(
       "withdraw_fix"
     );
 
     const good = validateTransition({
       action: "withdraw_fix",
-      from: "awaiting_confirm",
+      from: "ready_to_release",
       identity: admin,
       reporterType: "user",
       reporterId: 2,
@@ -318,5 +318,31 @@ describe("state machine", () => {
       note: "done",
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("submit_fix goes to ready_to_release; release_fixes then awaiting_confirm", () => {
+    const submitted = validateTransition({
+      action: "submit_fix",
+      from: "fixing",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "已修好",
+    });
+    expect(submitted.ok && submitted.to).toBe("ready_to_release");
+
+    const released = validateTransition({
+      action: "release_fixes",
+      from: "ready_to_release",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+    });
+    expect(released.ok && released.to).toBe("awaiting_confirm");
+
+    expect(allowedActions(admin, "ready_to_release", "user", 2)).toEqual(
+      expect.arrayContaining(["release_fixes", "withdraw_fix"])
+    );
+    expect(allowedActions(reporter, "ready_to_release", "user", 2)).toEqual([]);
   });
 });

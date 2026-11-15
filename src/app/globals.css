@@ -19,6 +19,7 @@
   --status-fixing: #1f6feb;
   --status-needs: #0f766e;
   --status-product: #9a3412;
+  --status-ready: #0d9488;
   --status-awaiting: #5b4bb5;
   --status-confirmed: #1b7f4a;
   --status-acknowledged: #3d5c4e;
@@ -855,6 +856,11 @@ legend.bb-label + * {
   color: var(--status-product);
   background: color-mix(in srgb, var(--status-product) 12%, white);
   border-color: color-mix(in srgb, var(--status-product) 25%, white);
+}
+.bb-badge-ready_to_release {
+  color: var(--status-ready);
+  background: color-mix(in srgb, var(--status-ready) 12%, white);
+  border-color: color-mix(in srgb, var(--status-ready) 25%, white);
 }
 .bb-badge-awaiting_confirm {
   color: var(--status-awaiting);
