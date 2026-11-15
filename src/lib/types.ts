@@ -149,6 +149,28 @@ export type ReporterAnalytics = {
   trend: AnalyticsTrend;
 };
 
+export type ProjectChangeKind = "fix" | "feature" | "chore" | "release";
+export type ReleaseTrigger = "scheduled" | "manual" | "external";
+export type ReleaseResult = "success" | "failed";
+
+export type ProjectChangeRow = {
+  id: number;
+  project_id: number;
+  kind: ProjectChangeKind;
+  title: string;
+  summary: string | null;
+  commit_shas: string[];
+  branch: string | null;
+  bug_ids: number[];
+  release_change_id: number | null;
+  trigger: ReleaseTrigger | null;
+  result: ReleaseResult | null;
+  detail: string | null;
+  actor_type: ActorType;
+  actor_id: number;
+  created_at: string;
+};
+
 export type StatusEventKind = "transition" | "supplement";
 
 export type StatusEventRow = {

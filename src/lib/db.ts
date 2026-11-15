@@ -5,6 +5,29 @@ import { allocateProjectCode, nextPublicId } from "./ticket-id";
 
 let _db: Database.Database | null = null;
 
+const PROJECT_CHANGES_SCHEMA = `
+CREATE TABLE IF NOT EXISTS project_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('fix','feature','chore','release')),
+  title TEXT NOT NULL,
+  summary TEXT,
+  commit_shas TEXT NOT NULL DEFAULT '[]',
+  branch TEXT,
+  bug_ids TEXT,
+  release_change_id INTEGER,
+  trigger TEXT CHECK(trigger IS NULL OR trigger IN ('scheduled','manual','external')),
+  result TEXT CHECK(result IS NULL OR result IN ('success','failed')),
+  detail TEXT,
+  actor_type TEXT NOT NULL CHECK(actor_type IN ('user','api_key')),
+  actor_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_changes_project ON project_changes(project_id, id);
+`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -158,6 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_events_bug_id ON bug_status_events(bug_id, id);
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id);
 CREATE INDEX IF NOT EXISTS idx_dispatches_bug ON agent_dispatches(bug_id, id);
 CREATE INDEX IF NOT EXISTS idx_dispatches_project ON agent_dispatches(project_id, id);
+${PROJECT_CHANGES_SCHEMA}
 `;
 
 export function getDb() {
@@ -195,6 +219,28 @@ function migrateSchema(db: Database.Database) {
   ensureCaptureSchema(db);
   ensureLocalAgents(db);
   ensureEventKind(db);
+  ensureProjectChanges(db);
+}
+
+function ensureProjectChanges(db: Database.Database) {
+  db.exec(PROJECT_CHANGES_SCHEMA);
+  const cols = new Set(columnNames(db, "project_changes"));
+  const adds: [string, string][] = [
+    ["summary", "TEXT"],
+    ["commit_shas", "TEXT NOT NULL DEFAULT '[]'"],
+    ["branch", "TEXT"],
+    ["bug_ids", "TEXT"],
+    ["release_change_id", "INTEGER"],
+    ["trigger", "TEXT"],
+    ["result", "TEXT"],
+    ["detail", "TEXT"],
+    ["actor_type", "TEXT"],
+    ["actor_id", "INTEGER"],
+    ["created_at", "TEXT"],
+  ];
+  for (const [name, ddl] of adds) {
+    if (!cols.has(name)) db.exec(`ALTER TABLE project_changes ADD COLUMN ${name} ${ddl}`);
+  }
 }
 
 function ensureEventKind(db: Database.Database) {
