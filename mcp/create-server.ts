@@ -109,7 +109,7 @@ server.tool(
 
 server.tool(
   "list_bugs",
-  "列出项目内报障",
+  "列出项目内报障。status=ready_to_release 是待发布：已提交修复，尚未上线，不能确认。",
   {
     projectId: z.number().int().positive(),
     status: z
@@ -118,12 +118,14 @@ server.tool(
         "fixing",
         "needs_info",
         "needs_product",
+        "ready_to_release",
         "awaiting_confirm",
         "confirmed",
         "acknowledged",
         "invalid",
       ])
-      .optional(),
+      .optional()
+      .describe("ready_to_release 为待发布"),
     priority: z.enum(["p1", "p2", "p3"]).optional(),
     q: z.string().optional().describe("标题或报障 ID 关键词"),
   },
@@ -391,7 +393,7 @@ server.tool(
 
 server.tool(
   "submit_fix",
-  "提交修复说明：修复中 → 待确认（管理员级 Key，note 必填）。说明写给报障人，用界面上能看到的话，不要写文件名、函数名或接口。",
+  "提交修复说明：修复中 → 待发布（管理员级 Key，note 必填）。调用前须已 commit 并 push。说明写给报障人，用界面上能看到的话，不要写文件名、函数名或接口。提交后再 record_change（kind=fix）。默认不要 run_release。",
   {
     bugId: z.number().int().positive(),
     note: z
@@ -473,7 +475,7 @@ server.tool(
 
 server.tool(
   "accept_product",
-  "可以做：待产品经理确认 → 修复中（管理员级 Key）。只有人明确说这张可以做时才调用。做完再 submit_fix，让报障人确认。",
+  "可以做：待产品经理确认 → 修复中（管理员级 Key）。只有人明确说这张可以做时才调用。做完先 commit 并 push，再 submit_fix，进入待发布。默认不要 run_release。",
   { bugId: z.number().int().positive(), note: transitionNote },
   async ({ bugId, note }) => {
     try {
@@ -526,7 +528,7 @@ server.tool(
 
 server.tool(
   "withdraw_fix",
-  "撤回修复提交：待确认 → 修复中（管理员级 Key，note 必填）。修复说明交早或还要继续改时使用。不能用来确认已修复。",
+  "撤回修复提交：待发布 → 修复中（管理员级 Key，note 必填）。修复说明交早或还要继续改时使用。不能用来确认已修复。",
   {
     bugId: z.number().int().positive(),
     note: z
@@ -539,6 +541,131 @@ server.tool(
   async ({ bugId, note }) => {
     try {
       return textResult(await transition("withdraw_fix", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "record_change",
+  "登记一次已 push 的代码变更（管理员级 Key）。修报障用 kind=fix，并带上 bugIds 和 commitShas。没有报障单的功能用 feature。",
+  {
+    projectId: z.number().int().positive(),
+    kind: z.enum(["fix", "feature", "chore"]),
+    title: z.string().min(1),
+    summary: z.string().optional(),
+    commitShas: z.array(z.string().min(1)).min(1).describe("已 push 的 commit SHA"),
+    branch: z.string().optional(),
+    bugIds: z.array(z.number().int().positive()).optional(),
+  },
+  async ({ projectId, kind, title, summary, commitShas, branch, bugIds }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/changes`, {
+          method: "POST",
+          body: JSON.stringify({ kind, title, summary, commitShas, branch, bugIds }),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "list_changes",
+  "分页列出项目变更和发布记录。kind 可用 fix、feature、chore、release，或 code（前三种）。项目成员可查看。",
+  {
+    projectId: z.number().int().positive(),
+    kind: z.enum(["fix", "feature", "chore", "release", "code"]).optional(),
+    limit: z.number().int().positive().max(100).optional(),
+    offset: z.number().int().min(0).optional(),
+  },
+  async ({ projectId, kind, limit, offset }) => {
+    try {
+      const sp = new URLSearchParams();
+      if (kind) sp.set("kind", kind);
+      if (limit !== undefined) sp.set("limit", String(limit));
+      if (offset !== undefined) sp.set("offset", String(offset));
+      const qs = sp.toString();
+      return textResult(
+        await api(`/api/projects/${projectId}/changes${qs ? `?${qs}` : ""}`)
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "list_pending_release",
+  "列出某项目待发布的报障，以及还没挂上发布的代码变更（管理员级 Key）。",
+  { projectId: z.number().int().positive() },
+  async ({ projectId }) => {
+    try {
+      return textResult(await api(`/api/projects/${projectId}/release`));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "run_release",
+  "把一次发布放进队列（管理员级 Key）。不在这里跑 git 或部署。默认不要调用，只有人明确要求紧急发布时才用。返回 queued。",
+  {
+    projectId: z.number().int().positive(),
+    trigger: z
+      .enum(["scheduled", "manual", "external"])
+      .optional()
+      .describe("默认 manual"),
+    bugIds: z
+      .array(z.number().int().positive())
+      .optional()
+      .describe("不传则发布时包含当时全部待发布"),
+    headSha: z.string().optional(),
+    detail: z.string().optional(),
+  },
+  async ({ projectId, trigger, bugIds, headSha, detail }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/release`, {
+          method: "POST",
+          body: JSON.stringify({
+            mode: "run",
+            trigger: trigger ?? "manual",
+            bugIds,
+            headSha,
+            detail,
+          }),
+        })
+      );
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
+  "mark_released",
+  "外部已经发布完成：写发布记录，并把待发布推进到待确认（管理员级 Key）。不跑部署。",
+  {
+    projectId: z.number().int().positive(),
+    trigger: z.enum(["scheduled", "manual", "external"]),
+    bugIds: z.array(z.number().int().positive()).optional(),
+    headSha: z.string().optional(),
+    detail: z.string().optional(),
+    result: z.enum(["success", "failed"]).optional(),
+  },
+  async ({ projectId, trigger, bugIds, headSha, detail, result }) => {
+    try {
+      return textResult(
+        await api(`/api/projects/${projectId}/release`, {
+          method: "POST",
+          body: JSON.stringify({ mode: "mark", trigger, bugIds, headSha, detail, result }),
+        })
+      );
     } catch (e) {
       return errResult(e);
     }

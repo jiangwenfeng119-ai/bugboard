@@ -100,4 +100,16 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("## 请这样重测");
     expect(ADMIN_AGENT_PROMPT).toContain("Markdown");
   });
+
+  it("queues a pushed fix and keeps QA on awaiting confirm", () => {
+    expect(ADMIN_AGENT_PROMPT).toContain("ready_to_release");
+    expect(ADMIN_AGENT_PROMPT).toContain("修复中 → 待发布");
+    expect(ADMIN_AGENT_PROMPT).toContain("commit 并 push");
+    expect(ADMIN_AGENT_PROMPT).toContain("record_change（kind=fix");
+    expect(ADMIN_AGENT_PROMPT).toContain("默认不要调用 run_release");
+    expect(USER_AGENT_PROMPT).toContain("验收只处理 awaiting_confirm");
+    expect(USER_AGENT_PROMPT).toContain("不要对待发布确认");
+    expect(USER_AGENT_PROMPT).toContain("ready_to_release");
+    expect(USER_AGENT_PROMPT).toContain("run_release、mark_released");
+  });
 });

@@ -63,11 +63,17 @@ export function recordChange(
 export function listChanges(
   identity: Identity,
   projectId: number,
-  opts?: { kind?: ProjectChangeKind | "code"; limit?: number; offset?: number }
+  opts?: {
+    kind?: ProjectChangeKind | "code";
+    limit?: number;
+    offset?: number;
+    unreleased?: boolean;
+  }
 ) {
   assertProjectVisible(identity, projectId);
   const where = ["project_id = ?"];
   const params: Array<number | string> = [projectId];
+  if (opts?.unreleased) where.push("release_change_id IS NULL");
   if (opts?.kind === "code") {
     where.push("kind IN ('fix','feature','chore')");
   } else if (opts?.kind) {
