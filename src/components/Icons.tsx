@@ -275,3 +275,14 @@ export function IconCircleCheck({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+export function IconChanges({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path d="M4.6 3.2h8.2M4.6 8h8.2M4.6 12.8h5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="2.7" cy="3.2" r="1" fill="currentColor" />
+      <circle cx="2.7" cy="8" r="1" fill="currentColor" />
+      <circle cx="2.7" cy="12.8" r="1" fill="currentColor" />
+    </svg>
+  );
+}

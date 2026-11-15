@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCapture, IconChart, IconTicket, IconUsers } from "@/components/Icons";
+import { IconCapture, IconChanges, IconChart, IconTicket, IconUsers } from "@/components/Icons";
 
 export function ProjectTabs({
   projectId,
@@ -42,6 +42,12 @@ export function ProjectTabs({
           },
         ]
       : []),
+    {
+      href: `${base}/changes`,
+      label: "变更",
+      icon: <IconChanges size={15} />,
+      match: (p: string) => p.startsWith(`${base}/changes`),
+    },
   ];
 
   return (
