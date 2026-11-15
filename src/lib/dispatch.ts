@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import fs from "fs";
 import path from "path";
 import { ADMIN_AGENT_PROMPT, applyProjectName } from "./agent-prompts";
+import { assertDeployExecutable } from "./deploy-command";
 import { getDb, nowIso } from "./db";
 import { glossaryPrompt } from "./glossary";
 import { canAccessProject, requireAdmin } from "./permissions";
@@ -128,9 +129,11 @@ export function assertReleaseSchedule(value: string) {
 
 function assertDeployCommand(mode: DeployMode, command: string) {
   const text = command.trim();
-  if (text.length > 400 || /[\r\n\0]/.test(text)) throw new Error("发布命令无效");
-  if (mode !== "none" && !text) throw new Error("填写发布命令");
-  return text;
+  if (!text) {
+    if (mode !== "none") throw new Error("填写发布命令");
+    return "";
+  }
+  return assertDeployExecutable(text);
 }
 
 type DispatchLogRow = {

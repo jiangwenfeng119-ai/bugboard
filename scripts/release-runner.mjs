@@ -15,8 +15,26 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DIRTY = "工作区有未提交改动";
-const DIVERGED = "本地提交已经 push 后又与远端分叉";
+const DIVERGED = "本地与远端已经分叉，需要人工处理";
 const UNKNOWN = "无法判断 Git 状态";
+const SHELLS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "dash",
+  "ksh",
+  "csh",
+  "tcsh",
+  "osascript",
+  "python",
+  "python3",
+  "node",
+  "perl",
+  "ruby",
+]);
+const DEPLOY_ROOTS = ["/Users", "/opt", "/usr", "/homebrew"];
+const SAFE_DEPLOY_PATH = /^\/(?:[\w.+@-]{1,80}\/)*[\w.+@-]{1,120}$/;
 
 export function planGitSync(input) {
   if (input.dirty) return { action: "abort", reason: DIRTY };
@@ -26,12 +44,31 @@ export function planGitSync(input) {
   }
   if (behind > 0 && ahead === 0) return { action: "ff_pull" };
   if (ahead > 0 && behind === 0) return { action: "push" };
-  if (ahead > 0 && behind > 0 && !input.remoteContainsLocalHead) return { action: "rebase_pull" };
-  if (ahead > 0 && behind > 0 && input.remoteContainsLocalHead) {
-    return { action: "abort", reason: DIVERGED };
-  }
+  // 分叉需要人工处理。ahead > 0 时 HEAD 不可能是远端祖先，不能靠 merge-base 区分已推送分叉，所以不自动 rebase。
+  if (ahead > 0 && behind > 0) return { action: "abort", reason: DIVERGED };
   if (ahead === 0 && behind === 0) return { action: "up_to_date" };
   return { action: "abort", reason: UNKNOWN };
+}
+
+/** One absolute executable. No shell, pipeline, or `bash -c`. Workspace may hold the script. */
+export function assertDeployExecutable(command, workspace) {
+  const text = String(command || "").trim();
+  if (!text || text.length > 400 || /[\s\r\n\0|&;<>`$(){}[\]!#*?~\\'"]/.test(text) || text.includes("..")) {
+    throw new Error("发布命令必须是绝对路径，不能包含管道或 shell");
+  }
+  if (!SAFE_DEPLOY_PATH.test(text)) throw new Error("发布命令必须是绝对路径，不能包含管道或 shell");
+  const base = text.split("/").pop() || "";
+  if (SHELLS.has(base)) throw new Error("发布命令不能是 shell");
+  const resolved = path.resolve(text);
+  const roots = [...DEPLOY_ROOTS];
+  if (workspace && String(workspace).trim()) roots.push(path.resolve(workspace));
+  const allowed = roots.some((root) => resolved.startsWith(`${root}${path.sep}`));
+  if (!allowed) throw new Error("发布命令必须放在 /Users、/opt、/usr 或工作区里");
+  return text;
+}
+
+export function deploySpawnPlan(command, workspace) {
+  return { cmd: assertDeployExecutable(command, workspace), args: [], shell: false };
 }
 
 export function parseAheadBehind(output) {
@@ -87,12 +124,6 @@ export function gitSteps(action, branch) {
   const name = assertBranch(branch);
   if (action === "ff_pull") return [["pull", "--ff-only", "origin", name]];
   if (action === "push") return [["push", "origin", "HEAD"]];
-  if (action === "rebase_pull") {
-    return [
-      ["pull", "--rebase", "origin", name],
-      ["push", "origin", "HEAD"],
-    ];
-  }
   if (action === "up_to_date" || action === "abort") return [];
   throw new Error(UNKNOWN);
 }
@@ -144,11 +175,19 @@ function failed(detail) {
 async function executeJob(job, config, { git, exec, stat }) {
   if (job.deployMode === "none") return failed("该项目不自动部署");
   if (job.deployMode !== "restart" && job.deployMode !== "ecs_deploy") return failed("发布方式无效");
-  if (!String(job.deployCommand || "").trim()) return failed("没有发布命令");
+  const rawCommand = String(job.deployCommand || "").trim();
+  if (!rawCommand) return failed("没有发布命令");
 
   const dir = workspaceFor(config.projects, job);
   const looked = dir ? stat(dir) : { exists: false, isDirectory: false };
   if (!looked.exists || !looked.isDirectory) return failed("工作区不存在");
+
+  let deployCommand;
+  try {
+    deployCommand = assertDeployExecutable(rawCommand, dir);
+  } catch (error) {
+    return failed(error instanceof Error ? error.message : "发布命令无效");
+  }
 
   const inside = git(dir, ["rev-parse", "--is-inside-work-tree"]);
   if (inside.code !== 0 || inside.stdout.trim() !== "true") return failed("工作区不是 git 仓库");
@@ -157,20 +196,22 @@ async function executeJob(job, config, { git, exec, stat }) {
     return failed("origin 与代码仓地址不一致");
   }
 
-  const fetched = git(dir, ["fetch", "origin"]);
-  if (fetched.code !== 0) return failed(fetched.stderr || "git fetch 失败");
-
-  let branch = String(job.defaultBranch || "").trim();
-  if (!branch) {
-    const head = git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]);
-    if (head.code !== 0) return failed("无法判断当前分支");
-    branch = head.stdout.trim();
-  }
+  const expectedRaw = String(job.defaultBranch || "").trim();
+  if (!expectedRaw) return failed("项目没有默认分支");
+  const headName = git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (headName.code !== 0) return failed("无法判断当前分支");
+  let branch;
+  let current;
   try {
-    assertBranch(branch);
+    branch = assertBranch(expectedRaw);
+    current = assertBranch(headName.stdout.trim());
   } catch (error) {
     return failed(error instanceof Error ? error.message : "分支名无效");
   }
+  if (current !== branch) return failed("当前分支不是项目默认分支");
+
+  const fetched = git(dir, ["fetch", "origin"]);
+  if (fetched.code !== 0) return failed(fetched.stderr || "git fetch 失败");
 
   const porcelain = git(dir, ["status", "--porcelain"]);
   if (porcelain.code !== 0) return failed("无法判断 Git 状态");
@@ -178,13 +219,10 @@ async function executeJob(job, config, { git, exec, stat }) {
   if (counts.code !== 0) return failed("无法比较远端分支");
   const parsed = parseAheadBehind(counts.stdout);
   if (!parsed) return failed(UNKNOWN);
-  const ancestor = git(dir, ["merge-base", "--is-ancestor", "HEAD", `origin/${branch}`]);
-  if (ancestor.code !== 0 && ancestor.code !== 1) return failed(UNKNOWN);
   const plan = planGitSync({
     dirty: parseDirty(porcelain.stdout),
     ahead: parsed.ahead,
     behind: parsed.behind,
-    remoteContainsLocalHead: ancestor.code === 0,
   });
   if (plan.action === "abort") return failed(plan.reason);
 
@@ -197,7 +235,7 @@ async function executeJob(job, config, { git, exec, stat }) {
   const headSha = head.stdout.trim();
   if (head.code !== 0 || !/^[0-9a-f]{7,64}$/i.test(headSha)) return failed("读不到当前提交");
 
-  const deployed = exec(String(job.deployCommand).trim(), dir);
+  const deployed = exec(deployCommand, dir);
   if (deployed.code !== 0) return failed(deployed.stderr || deployed.stdout || "发布命令失败");
   return { result: "success", headSha, detail: "" };
 }
@@ -253,7 +291,22 @@ function defaultGit(cwd, args) {
 }
 
 function defaultExec(command, cwd) {
-  const result = spawnSync(command, { cwd, encoding: "utf8", shell: true, timeout: 600000 });
+  let plan;
+  try {
+    plan = deploySpawnPlan(command, cwd);
+  } catch (error) {
+    return {
+      code: 1,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : "发布命令无效",
+    };
+  }
+  const result = spawnSync(plan.cmd, plan.args, {
+    cwd,
+    encoding: "utf8",
+    shell: plan.shell,
+    timeout: 600000,
+  });
   return {
     code: result.status ?? 1,
     stdout: result.stdout || "",

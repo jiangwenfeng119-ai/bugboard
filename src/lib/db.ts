@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS agent_dispatches (
   status TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
+  claimed_at TEXT,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY (bug_id) REFERENCES bugs(id) ON DELETE CASCADE
 );
@@ -397,6 +398,10 @@ function ensureReleaseConfig(db: Database.Database) {
   }
   if (!cols.has("release_schedule")) {
     db.exec("ALTER TABLE project_dispatch ADD COLUMN release_schedule TEXT NOT NULL DEFAULT ''");
+  }
+  const dispatchCols = new Set(columnNames(db, "agent_dispatches"));
+  if (!dispatchCols.has("claimed_at")) {
+    db.exec("ALTER TABLE agent_dispatches ADD COLUMN claimed_at TEXT");
   }
 }
 

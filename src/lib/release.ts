@@ -14,6 +14,10 @@ export type { ReleaseResult, ReleaseTrigger };
 
 const TRIGGERS = new Set<ReleaseTrigger>(["scheduled", "manual", "external"]);
 
+/** A crashed runner leaves the claim running. After 45 minutes it is failed so the next nightly enqueue is not blocked. */
+const RELEASE_RUNNING_TIMEOUT_MS = 45 * 60 * 1000;
+const STALE_RELEASE = "发布任务超时未完成，已释放";
+
 /** 不跑部署：写 release 行 + 批量 release_fixes + 挂 release_change_id。失败只记账，不改报障状态。 */
 export function markReleased(
   identity: Identity,
@@ -146,6 +150,7 @@ export function claimQueuedRelease(identity: Identity, projectKey?: string): Rel
   const key = projectKey?.trim() || "";
   const folded = key.toLowerCase();
   return getDb().transaction(() => {
+    expireStaleRunningReleases();
     const rows = getDb()
       .prepare(
         `SELECT d.id, d.project_id, d.detail,
@@ -176,8 +181,10 @@ export function claimQueuedRelease(identity: Identity, projectKey?: string): Rel
     });
     if (!row) return null;
     const updated = getDb()
-      .prepare("UPDATE agent_dispatches SET status = 'running' WHERE id = ? AND status = 'queued'")
-      .run(row.id);
+      .prepare(
+        "UPDATE agent_dispatches SET status = 'running', claimed_at = ? WHERE id = ? AND status = 'queued'"
+      )
+      .run(nowIso(), row.id);
     if (updated.changes !== 1) return null;
     const payload = readReleasePayload(row.detail);
     const deployMode: DeployMode =
@@ -213,6 +220,7 @@ export function enqueueScheduledReleases(identity: Identity, at: string) {
     .all(at) as { id: number; code: string }[];
   const created: { projectId: number; dispatchId: number; code: string }[] = [];
   getDb().transaction(() => {
+    expireStaleRunningReleases();
     for (const row of rows) {
       if (!isProjectAdmin(identity, row.id)) continue;
       const pending = getDb()
@@ -298,6 +306,18 @@ function explicitBugIds(projectId: number, bugIds: number[], result: ReleaseResu
     throw new Error("只有待发布的报障可以随发布推进");
   }
   return ids;
+}
+
+function expireStaleRunningReleases(now = Date.now()) {
+  const cutoff = new Date(now - RELEASE_RUNNING_TIMEOUT_MS).toISOString();
+  getDb()
+    .prepare(
+      `UPDATE agent_dispatches
+       SET status = 'failed', detail = ?
+       WHERE target = 'release_runner' AND reason = 'release' AND status = 'running'
+         AND COALESCE(NULLIF(claimed_at, ''), created_at) < ?`
+    )
+    .run(STALE_RELEASE, cutoff);
 }
 
 function insertQueuedRelease(projectId: number, payload: unknown) {

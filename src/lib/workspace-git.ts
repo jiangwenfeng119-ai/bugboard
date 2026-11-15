@@ -1,12 +1,11 @@
 export type GitSyncPlan =
   | { action: "ff_pull" }
   | { action: "push" }
-  | { action: "rebase_pull" }
   | { action: "up_to_date" }
   | { action: "abort"; reason: string };
 
 const DIRTY = "工作区有未提交改动";
-const DIVERGED = "本地提交已经 push 后又与远端分叉";
+const DIVERGED = "本地与远端已经分叉，需要人工处理";
 const UNKNOWN = "无法判断 Git 状态";
 
 /** Decide how a clean release may sync with origin. Does not run git. */
@@ -14,7 +13,6 @@ export function planGitSync(input: {
   dirty: boolean;
   ahead: number;
   behind: number;
-  remoteContainsLocalHead: boolean;
 }): GitSyncPlan {
   if (input.dirty) return { action: "abort", reason: DIRTY };
   const { ahead, behind } = input;
@@ -23,10 +21,9 @@ export function planGitSync(input: {
   }
   if (behind > 0 && ahead === 0) return { action: "ff_pull" };
   if (ahead > 0 && behind === 0) return { action: "push" };
-  if (ahead > 0 && behind > 0 && !input.remoteContainsLocalHead) return { action: "rebase_pull" };
-  if (ahead > 0 && behind > 0 && input.remoteContainsLocalHead) {
-    return { action: "abort", reason: DIVERGED };
-  }
+  // Divergent histories need a human. Auto-rebase is out: ahead > 0 already
+  // means HEAD is not an ancestor of origin, so that check cannot detect a diverge.
+  if (ahead > 0 && behind > 0) return { action: "abort", reason: DIVERGED };
   if (ahead === 0 && behind === 0) return { action: "up_to_date" };
   return { action: "abort", reason: UNKNOWN };
 }

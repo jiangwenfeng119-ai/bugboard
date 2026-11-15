@@ -802,9 +802,12 @@ function DispatchEditor({
             className="bb-input"
             value={deployCommand}
             onChange={(event) => setDeployCommand(event.target.value)}
-            placeholder="docker compose up -d --build"
+            placeholder="/usr/local/bin/deploy.sh"
             spellCheck={false}
           />
+          <p className="bb-field-hint">
+            填绝对路径脚本，例如 /Users/你/bin/deploy.sh。不能写管道、bash -c 或其他 shell 命令。
+          </p>
         </div>
         <div className="bb-field">
           <label className="bb-label" htmlFor="bb-release-schedule">

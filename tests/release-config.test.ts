@@ -83,11 +83,11 @@ describe("release deploy config", () => {
       organizeEnabled: false,
       repairLocalEnabled: false,
       deployMode: "restart",
-      deployCommand: "docker compose up -d --build",
+      deployCommand: "/usr/local/bin/counter-deploy",
       releaseSchedule: "22:00",
     });
     expect(saved.deployMode).toBe("restart");
-    expect(saved.deployCommand).toBe("docker compose up -d --build");
+    expect(saved.deployCommand).toBe("/usr/local/bin/counter-deploy");
     expect(saved.releaseSchedule).toBe("22:00");
 
     dispatch.saveDispatchSettings(adminId, project.id, {
@@ -96,7 +96,7 @@ describe("release deploy config", () => {
       organizeEnabled: false,
       repairLocalEnabled: false,
       deployMode: "restart",
-      deployCommand: "docker compose up -d --build",
+      deployCommand: "/usr/local/bin/counter-deploy",
       releaseSchedule: "22:00",
     });
     const again = dispatch.saveDispatchSettings(adminId, project.id, {
@@ -104,7 +104,7 @@ describe("release deploy config", () => {
       cursorEnabled: false,
     });
     expect(again.deployMode).toBe("restart");
-    expect(again.deployCommand).toBe("docker compose up -d --build");
+    expect(again.deployCommand).toBe("/usr/local/bin/counter-deploy");
     expect(again.releaseSchedule).toBe("22:00");
 
     const listed = dispatch.listDispatchOverviews(adminId);
@@ -137,6 +137,38 @@ describe("release deploy config", () => {
       })
     ).toThrow(/定时/);
   });
+
+  it("rejects shell pipelines for the deploy command", async () => {
+    const { dispatch, adminId, project, adminKey } = await setup();
+    for (const deployCommand of ["bash -c 'echo hi'", "foo && bar"]) {
+      expect(() =>
+        dispatch.saveDispatchSettings(adminId, project.id, {
+          webhookUrl: "",
+          cursorEnabled: false,
+          organizeEnabled: false,
+          repairLocalEnabled: false,
+          deployMode: "restart",
+          deployCommand,
+          releaseSchedule: "",
+        })
+      ).toThrow(/发布命令/);
+    }
+    const { PUT } = await import("../src/app/api/projects/[id]/dispatch/route");
+    const ctx = { params: Promise.resolve({ id: String(project.id) }) };
+    const denied = await PUT(
+      request("PUT", `http://test/api/projects/${project.id}/dispatch`, adminKey, {
+        webhookUrl: "",
+        cursorEnabled: false,
+        deployMode: "restart",
+        deployCommand: "foo && bar",
+        releaseSchedule: "",
+      }),
+      ctx
+    );
+    expect(denied.status).toBe(400);
+    const body = (await denied.json()) as { error: string };
+    expect(body.error).toMatch(/发布命令/);
+  });
 });
 
 describe("release runner queue", () => {
@@ -151,7 +183,7 @@ describe("release runner queue", () => {
       webhookUrl: "http://127.0.0.1:3099/wake",
       cursorEnabled: false,
       deployMode: "restart",
-      deployCommand: "docker compose up -d",
+      deployCommand: "/usr/local/bin/counter-deploy",
       releaseSchedule: "22:00",
     });
     const queued = release.requestRunRelease(adminId, project.id, {
@@ -190,13 +222,13 @@ describe("release runner queue", () => {
     dispatch.saveDispatchSettings(adminId, project.id, {
       ...releaseOnly,
       deployMode: "restart",
-      deployCommand: "docker compose up -d",
+      deployCommand: "/usr/local/bin/counter-deploy",
       releaseSchedule: "22:00",
     });
     dispatch.saveDispatchSettings(adminId, later.id, {
       ...releaseOnly,
       deployMode: "ecs_deploy",
-      deployCommand: "ecs deploy",
+      deployCommand: "/opt/acme/ecs-deploy",
       releaseSchedule: "23:00",
     });
     dispatch.saveDispatchSettings(adminId, idle.id, {
@@ -219,7 +251,7 @@ describe("release runner queue", () => {
       githubUrl: "https://github.com/acme/counter",
       defaultBranch: "main",
       deployMode: "restart",
-      deployCommand: "docker compose up -d",
+      deployCommand: "/usr/local/bin/counter-deploy",
       trigger: "scheduled",
       bugIds: null,
     });
@@ -247,7 +279,7 @@ describe("release runner queue", () => {
       organizeEnabled: false,
       repairLocalEnabled: false,
       deployMode: "restart",
-      deployCommand: "docker compose up -d",
+      deployCommand: "/usr/local/bin/counter-deploy",
       releaseSchedule: "",
     });
     const bug = await readyBug(services, qaId, adminId, project.id, "列表空白");
@@ -266,6 +298,38 @@ describe("release runner queue", () => {
       .get(job!.dispatchId) as { status: string; detail: string };
     expect(row.status).toBe("failed");
     expect(row.detail).toContain("未提交");
+  });
+
+  it("fails a running claim after 45 minutes so the next night can queue", async () => {
+    const { dispatch, release, adminId, project } = await setup();
+    dispatch.saveDispatchSettings(adminId, project.id, {
+      webhookUrl: "",
+      cursorEnabled: false,
+      organizeEnabled: false,
+      repairLocalEnabled: false,
+      deployMode: "restart",
+      deployCommand: "/usr/local/bin/counter-deploy",
+      releaseSchedule: "22:00",
+    });
+    const first = release.enqueueScheduledReleases(adminId, "22:00");
+    const job = release.claimQueuedRelease(adminId, "SOC");
+    expect(job?.dispatchId).toBe(first[0].dispatchId);
+    const { getDb } = await import("../src/lib/db");
+    getDb()
+      .prepare("UPDATE agent_dispatches SET claimed_at = ? WHERE id = ?")
+      .run(new Date(Date.now() - 20 * 60 * 1000).toISOString(), job!.dispatchId);
+    expect(release.enqueueScheduledReleases(adminId, "22:00")).toEqual([]);
+
+    getDb()
+      .prepare("UPDATE agent_dispatches SET claimed_at = ? WHERE id = ?")
+      .run(new Date(Date.now() - 46 * 60 * 1000).toISOString(), job!.dispatchId);
+    const again = release.enqueueScheduledReleases(adminId, "22:00");
+    expect(again.map((item) => item.projectId)).toEqual([project.id]);
+    const stale = getDb()
+      .prepare("SELECT status, detail FROM agent_dispatches WHERE id = ?")
+      .get(job!.dispatchId) as { status: string; detail: string };
+    expect(stale.status).toBe("failed");
+    expect(stale.detail).toContain("超时");
   });
 
   it("claims through the runner route for an admin key only", async () => {

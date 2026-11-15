@@ -9,45 +9,40 @@ import {
 
 describe("planGitSync", () => {
   it("aborts when the worktree is dirty, even if the branch is behind", () => {
-    expect(
-      planGitSync({ dirty: true, ahead: 0, behind: 3, remoteContainsLocalHead: true })
-    ).toEqual({ action: "abort", reason: "工作区有未提交改动" });
+    expect(planGitSync({ dirty: true, ahead: 0, behind: 3 })).toEqual({
+      action: "abort",
+      reason: "工作区有未提交改动",
+    });
   });
 
   it("fast-forwards when the branch is only behind", () => {
-    expect(
-      planGitSync({ dirty: false, ahead: 0, behind: 2, remoteContainsLocalHead: true })
-    ).toEqual({ action: "ff_pull" });
+    expect(planGitSync({ dirty: false, ahead: 0, behind: 2 })).toEqual({ action: "ff_pull" });
   });
 
   it("pushes when the branch is only ahead", () => {
-    expect(
-      planGitSync({ dirty: false, ahead: 1, behind: 0, remoteContainsLocalHead: false })
-    ).toEqual({ action: "push" });
+    expect(planGitSync({ dirty: false, ahead: 1, behind: 0 })).toEqual({ action: "push" });
   });
 
-  it("rebases when local commits are unpushed and the remote is also ahead", () => {
-    expect(
-      planGitSync({ dirty: false, ahead: 2, behind: 1, remoteContainsLocalHead: false })
-    ).toEqual({ action: "rebase_pull" });
-  });
-
-  it("aborts a diverge whose local tip is already on the remote", () => {
-    expect(
-      planGitSync({ dirty: false, ahead: 1, behind: 1, remoteContainsLocalHead: true })
-    ).toEqual({ action: "abort", reason: "本地提交已经 push 后又与远端分叉" });
+  it("aborts when local and remote have diverged", () => {
+    expect(planGitSync({ dirty: false, ahead: 2, behind: 1 })).toEqual({
+      action: "abort",
+      reason: "本地与远端已经分叉，需要人工处理",
+    });
+    expect(planGitSync({ dirty: false, ahead: 1, behind: 1 })).toEqual({
+      action: "abort",
+      reason: "本地与远端已经分叉，需要人工处理",
+    });
   });
 
   it("does nothing when the branch already matches the remote", () => {
-    expect(
-      planGitSync({ dirty: false, ahead: 0, behind: 0, remoteContainsLocalHead: true })
-    ).toEqual({ action: "up_to_date" });
+    expect(planGitSync({ dirty: false, ahead: 0, behind: 0 })).toEqual({ action: "up_to_date" });
   });
 
   it("aborts when the ahead or behind counts are not usable", () => {
-    expect(
-      planGitSync({ dirty: false, ahead: -1, behind: 0, remoteContainsLocalHead: false })
-    ).toEqual({ action: "abort", reason: "无法判断 Git 状态" });
+    expect(planGitSync({ dirty: false, ahead: -1, behind: 0 })).toEqual({
+      action: "abort",
+      reason: "无法判断 Git 状态",
+    });
   });
 });
 

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { assertDeployExecutable } from "@/lib/deploy-command";
 import {
   clearDispatchSettings,
   getDispatchSettings,
@@ -26,6 +27,9 @@ export async function PUT(
   return withAuth(req, async (identity) => {
     const { id } = await ctx.params;
     const body = await req.json();
+    if (typeof body.deployCommand === "string" && body.deployCommand.trim()) {
+      assertDeployExecutable(body.deployCommand);
+    }
     const settings = saveDispatchSettings(identity, Number(id), {
       webhookUrl: typeof body.webhookUrl === "string" ? body.webhookUrl : "",
       cursorEnabled: Boolean(body.cursorEnabled),
