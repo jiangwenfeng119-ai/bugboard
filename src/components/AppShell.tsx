@@ -5,7 +5,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAdminRole, roleLabel } from "@/lib/roles";
 import { BrandMark } from "./BrandMark";
-import { IconChevronDown, IconKey, IconLogout, IconShield } from "./Icons";
+import {
+  IconChanges,
+  IconChevronDown,
+  IconKey,
+  IconLogout,
+  IconMessage,
+  IconShield,
+} from "./Icons";
 
 type Props = {
   username: string;
@@ -92,6 +99,23 @@ export function AppShell({
             </button>
             {open ? (
               <div id={menuId} className="bb-user-menu-panel">
+                <Link
+                  href="/help"
+                  className={`bb-user-menu-item${pathname === "/help" ? " is-active" : ""}`}
+                  onClick={() => setOpen(false)}
+                >
+                  <IconMessage size={15} />
+                  产品手册
+                </Link>
+                <Link
+                  href="/changelog"
+                  className={`bb-user-menu-item${pathname === "/changelog" ? " is-active" : ""}`}
+                  onClick={() => setOpen(false)}
+                >
+                  <IconChanges size={15} />
+                  版本与更新日志
+                </Link>
+                <div className="bb-user-menu-sep" role="separator" />
                 <Link
                   href="/account"
                   className={`bb-user-menu-item${pathname === "/account" ? " is-active" : ""}`}
