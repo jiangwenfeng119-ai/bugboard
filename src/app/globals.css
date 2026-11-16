@@ -408,9 +408,9 @@ body.bb-sheet-open .bb-main {
   white-space: nowrap;
 }
 
-.bb-create-project {
-  width: min(20rem, 100%);
-  padding: 0.9rem;
+.bb-create-project-modal {
+  width: min(52rem, 100%);
+  max-height: min(48rem, calc(100dvh - 2.5rem));
 }
 
 @media (max-width: 640px) {
@@ -423,10 +423,6 @@ body.bb-sheet-open .bb-main {
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-  }
-
-  .bb-create-project {
-    width: 100%;
   }
 }
 

@@ -349,6 +349,45 @@ describe("services integration", () => {
     ).toThrow(/项目名称必填/);
   });
 
+  it("accepts optional project profile fields when creating a project", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-create-profile", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+
+    const project = services.createProject(adminId, {
+      name: "新建带资料",
+      description: "简要说明",
+      code: "NEWP",
+      product_manager: "  周产品  ",
+      github_url: "https://github.com/acme/newp",
+      default_branch: "main",
+      tech_stack: "Next.js",
+      verify_env: "dev",
+      agent_notes: "  可先空着，后续按仓库补  ",
+    });
+
+    expect(project.product_manager).toBe("周产品");
+    expect(project.github_url).toBe("https://github.com/acme/newp");
+    expect(project.default_branch).toBe("main");
+    expect(project.tech_stack).toBe("Next.js");
+    expect(project.verify_env).toBe("dev");
+    expect(project.agent_notes).toBe("可先空着，后续按仓库补");
+    expect(project.experience_officer).toBe("");
+    expect(project.dev_url).toBe("");
+
+    expect(() =>
+      services.createProject(adminId, {
+        name: "坏验收环境",
+        verify_env: "staging",
+      })
+    ).toThrow(/默认验收环境无效/);
+  });
+
   it("stores the project profile people and agents both read", async () => {
     const services = await import("../src/lib/services");
     const admin = await services.setupAdmin("admin-profile", "secret1");

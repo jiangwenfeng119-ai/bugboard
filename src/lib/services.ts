@@ -50,7 +50,12 @@ import type {
   UserRow,
 } from "./types";
 import { STATUS_LABEL } from "./types";
-import { applyProfilePatch, profileFromRow, type ProjectProfile } from "./project-profile";
+import {
+  applyProfilePatch,
+  emptyProfile,
+  profileFromRow,
+  type ProjectProfile,
+} from "./project-profile";
 import { allocateProjectCode, assertUsableCode, nextPublicId } from "./ticket-id";
 import { absoluteAttachmentPath } from "./uploads";
 
@@ -135,7 +140,8 @@ function takenProjectCodes(exceptId?: number) {
 
 export function createProject(
   identity: Identity,
-  data: { name: string; description?: string; slug?: string; code?: string }
+  data: { name: string; description?: string; slug?: string; code?: string } &
+    Partial<ProjectProfile>
 ) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   const name = data.name.trim();
@@ -148,13 +154,40 @@ export function createProject(
   const code = data.code?.trim()
     ? assertUsableCode(data.code, takenProjectCodes())
     : allocateProjectCode(name, slug, takenProjectCodes());
+  const profile = applyProfilePatch(emptyProfile(), data);
   const t = nowIso();
   const info = getDb()
     .prepare(
-      `INSERT INTO projects (name, slug, code, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (
+        name, slug, code, description,
+        product_manager, experience_officer,
+        github_url, default_branch, tech_stack,
+        design_url, docs_url,
+        dev_url, test_url, prod_url,
+        verify_env, agent_notes,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(name, slug, code, data.description?.trim() || "", t, t);
+    .run(
+      name,
+      slug,
+      code,
+      data.description?.trim() || "",
+      profile.product_manager,
+      profile.experience_officer,
+      profile.github_url,
+      profile.default_branch,
+      profile.tech_stack,
+      profile.design_url,
+      profile.docs_url,
+      profile.dev_url,
+      profile.test_url,
+      profile.prod_url,
+      profile.verify_env,
+      profile.agent_notes,
+      t,
+      t
+    );
   return getDb()
     .prepare("SELECT * FROM projects WHERE id = ?")
     .get(info.lastInsertRowid) as ProjectRow;
