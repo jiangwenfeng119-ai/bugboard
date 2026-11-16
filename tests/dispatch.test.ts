@@ -232,6 +232,19 @@ describe("agent wake", () => {
     await dispatch.flushDispatches();
     expect(calls).toHaveLength(afterCreate + 2);
 
+    const inFlight = services.createBug(identity, {
+      projectId: project.id,
+      title: "还在发送中",
+    });
+    await dispatch.flushDispatches();
+    dispatch.setDispatchTransportForTests(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return { status: 204, text: "" };
+    });
+    dispatch.wakeBugNow(identity, inFlight.id);
+    expect(() => dispatch.wakeBugNow(identity, inFlight.id)).toThrow(/进行中/);
+    await dispatch.flushDispatches();
+
     const claimed = services.createBug(identity, {
       projectId: project.id,
       title: "合计不对",

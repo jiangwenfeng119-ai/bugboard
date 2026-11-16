@@ -11,6 +11,7 @@ import type {
 } from "@/lib/dispatch";
 import { explainDispatchDetail } from "@/lib/dispatch-detail";
 import { formatDateTimeShort } from "@/lib/time";
+import { wakeButtonView } from "@/lib/wake-ui";
 
 const REASON_LABEL: Record<string, string> = {
   created: "新建",
@@ -610,7 +611,9 @@ function DispatchEditor({
           分派给 Cursor 云端 Agent 修理
         </label>
         <div className="bb-dispatch-guide">
-          <p>进入待处理时触发。确认已修复和接单不会分派。两处都开时，同一张报障各发一次。</p>
+          <p>
+            本机或云端开着，行为页里勾中的时机才会发到这里。两处都开时，同一张报障各发一次。
+          </p>
         </div>
         <p className="bb-field-hint">{cursorHint}</p>
       </fieldset>
@@ -884,9 +887,26 @@ export function WakeBugButton({
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const latest = initial ? resultText(initial) : null;
+  const [latestRow, setLatestRow] = useState(initial);
+  const latestKey = initial
+    ? `${initial.id}:${initial.status}:${initial.detail}:${initial.createdAt}`
+    : "";
+
+  useEffect(() => {
+    setLatestRow(initial);
+  }, [initial, latestKey]);
+
+  const latest = latestRow ? resultText(latestRow) : null;
+  const button = wakeButtonView(latestRow, loading);
+
+  useEffect(() => {
+    if (!button.inFlight || loading) return;
+    const id = window.setInterval(() => router.refresh(), 2500);
+    return () => window.clearInterval(id);
+  }, [button.inFlight, loading, router]);
 
   async function wake() {
+    if (button.disabled) return;
     setLoading(true);
     setError("");
     try {
@@ -896,6 +916,20 @@ export function WakeBugButton({
         setError(data.error || "没能分派去修理");
         return;
       }
+      setLatestRow((prev) =>
+        prev
+          ? { ...prev, status: "pending", detail: "" }
+          : {
+              id: 0,
+              bugId,
+              publicId: null,
+              reason: "manual",
+              target: "webhook",
+              status: "pending",
+              detail: "",
+              createdAt: new Date().toISOString(),
+            }
+      );
       router.refresh();
     } finally {
       setLoading(false);
@@ -922,8 +956,13 @@ export function WakeBugButton({
       )}
       {hold ? <p className="bb-muted">{hold}</p> : null}
       {canWake ? (
-        <button type="button" className="bb-btn bb-btn-secondary" onClick={wake} disabled={loading}>
-          {loading ? "发送中…" : latest ? "再次分派去修理" : "分派去修理"}
+        <button
+          type="button"
+          className="bb-btn bb-btn-secondary"
+          onClick={wake}
+          disabled={button.disabled}
+        >
+          {button.label}
         </button>
       ) : null}
       {error ? <p className="bb-error">{error}</p> : null}
