@@ -452,6 +452,14 @@ describe("release runner queue", () => {
       .get(job!.dispatchId) as { status: string; detail: string };
     expect(stale.status).toBe("failed");
     expect(stale.detail).toContain("超时");
+    const logged = getDb()
+      .prepare(
+        "SELECT title, result, detail FROM project_changes WHERE project_id = ? AND kind = 'release' ORDER BY id DESC LIMIT 1"
+      )
+      .get(project.id) as { title: string; result: string; detail: string };
+    expect(logged.title).toBe("发布超时");
+    expect(logged.result).toBe("failed");
+    expect(logged.detail).toBe(stale.detail);
   });
 
   it("claims through the runner route for an admin key only", async () => {

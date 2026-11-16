@@ -255,11 +255,22 @@ function numericIpv4(host: string) {
   ].join(".");
 }
 
+function ipv4FromHextets(high: string, low: string) {
+  const hi = parseInt(high, 16);
+  const lo = parseInt(low, 16);
+  return `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+}
+
 function isMetadataAddress(address: string) {
   const normalized = address.toLowerCase().replace(/^\[|\]$/g, "");
   if (normalized === "fd00:ec2::254" || normalized.endsWith(":fd00:ec2::254")) return true;
-  const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  const ipv4 = mapped ? mapped[1] : normalized;
+  const dotted = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const hexMapped = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  const ipv4 = dotted
+    ? dotted[1]
+    : hexMapped
+      ? ipv4FromHextets(hexMapped[1], hexMapped[2])
+      : normalized;
   const parts = ipv4.split(".").map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
     return false;
