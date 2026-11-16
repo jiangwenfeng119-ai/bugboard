@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuthStory } from "@/components/AuthStory";
 import { BrandMark } from "@/components/BrandMark";
 import { PasswordField } from "@/components/PasswordField";
 
@@ -50,10 +49,19 @@ export default function LoginPage() {
               <BrandMark size={32} />
               Bugboard
             </div>
-            <h2>Agent 先处理，人在关键处把关</h2>
-            <p>提报之后由 Agent 接单、修复并排队发布。做不做交给产品经理，上线结果由原报障人确认。</p>
+            <h2>把报障闭环收进一张清晰的工单台账</h2>
+            <p>
+              Agent 自动处理，关键节点由人把关；提报、修复、确认同屏可见，状态可审计。
+            </p>
           </div>
-          <AuthStory />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="bb-auth-visual-art"
+            src="/brand/auth-hero.svg"
+            alt=""
+            width={420}
+            height={315}
+          />
         </aside>
         <form className="bb-auth-card" onSubmit={onSubmit}>
           <h1>欢迎回来</h1>
