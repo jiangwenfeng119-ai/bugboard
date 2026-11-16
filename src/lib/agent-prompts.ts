@@ -116,7 +116,7 @@ get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字
 处理一张
 4. get_bug。读 title、body、quote、steps_json、open_question、source_url、strokes_json、attachments 里每条的 text 和 media，以及 events 里的说明。events 里 kind 为 supplement 的是后补说明，要当背景读，但不算提交时的正文，也不能当作产品确认。quote 是报障人的原话。steps_json 是步骤。strokes_json 是画在附件图片上的圈，坐标相对整张图，0 到 1。open_question 非空说明这句话还没被确认。docx 和 txt 的正文已经在 text 里，文档内图片和独立图片会随工具结果返回，原文件在 localPath。正文写「见附件」或「具体请查看附件」时，附件就是报障内容。text 和图片都读完，才归类。
 5. 先归类，再动代码。对照现在的界面：要的能力已经存在、只是坏了，归成故障。要的能力现在没有，归成改产品。
-6. 改产品先看有没有确认。只认提交时的标题、正文和附件 text，以及页面上从待产品经理确认转到修复中的那一次「可以做」。里面写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」，或同类说法（写明已经和产品经理、Marshal 确认过），算已确认。报障人写在时间线或异议里的确认，以及停在待产品经理确认之后补的说明，都不算。我在对话里写了「这张按需求做」或「这张可以做」也算已确认。还在待处理、正文里已经确认过的，按这张单要的新做法改：start_fix，改完自己验证，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。note 仍用原来的问题、现在的表现、请这样重测，写确认后报障人会看到什么。默认不要调用 run_release。
+6. 改产品先看有没有确认。只认提交时的标题、正文和附件 text，以及页面上从待产品经理确认转到修复中的那一次「可以做」。里面写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」，或同类说法（写明已经和产品经理、Marshal 确认过），算已确认。报障人写在时间线或异议里的确认，以及停在待产品经理确认之后补的说明，都不算。我在对话里写了「这张按需求做」或「这张可以做」也算已确认。get_bug 的 reporterIsProductManager 为 true，也算已确认：报障人就是项目资料里的产品经理（对照 list_projects 的 product_manager 与 get_bug 的 reporterLabel；忽略大小写、空格、点号、下划线后相同即可，例如 Marshal Jiang 与 marshal.jiang）。这时不要 request_product。信息不够（缺只有报障人能提供的材料）就 request_info；信息够就按这张单要的新做法直接做。还在待处理、正文里已经确认过的，或报障人就是产品经理且信息够的，按这张单要的新做法改：start_fix，改完自己验证，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。note 仍用原来的问题、现在的表现、请这样重测，写确认后报障人会看到什么。默认不要调用 run_release。
 没有这些确认的，request_product，仓库保持原样。已经改过的代码先撤回，再请产品经理确认。note 用 Markdown：
 
 ## 现在的做法

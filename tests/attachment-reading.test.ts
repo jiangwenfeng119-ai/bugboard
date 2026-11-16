@@ -127,6 +127,7 @@ describe("enrichBugDetail", () => {
     expect(detail.events[0].attachments[0].text).toBe("时间线说明");
     expect(detail.reading).toContain("text");
     expect(detail.reading).toContain("不要");
+    expect(detail.reading).toContain("reporterIsProductManager");
     expect(images.map((img) => img.label)).toContain(
       "附件 soc修复后仍存在的问题.docx / image1.png"
     );

@@ -67,6 +67,12 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("已经和产品经理沟通确认");
     expect(ADMIN_AGENT_PROMPT).toContain("已经和 Marshal 确认");
     expect(ADMIN_AGENT_PROMPT).toContain("已经沟通确认");
+    expect(ADMIN_AGENT_PROMPT).toContain("reporterIsProductManager");
+    expect(ADMIN_AGENT_PROMPT).toContain("报障人就是项目资料里的产品经理");
+    expect(ADMIN_AGENT_PROMPT).toContain("marshal.jiang");
+    expect(ADMIN_AGENT_PROMPT).toContain("信息不够");
+    expect(ADMIN_AGENT_PROMPT).toContain("request_info");
+    expect(ADMIN_AGENT_PROMPT).toContain("信息够就按这张单要的新做法直接做");
     expect(ADMIN_AGENT_PROMPT).toContain("范围内每张单都有了结果");
     expect(ADMIN_AGENT_PROMPT).toContain("继续下一张");
     expect(ADMIN_AGENT_PROMPT).not.toContain("做完并回报后再做下一张");

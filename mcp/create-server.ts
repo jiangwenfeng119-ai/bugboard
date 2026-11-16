@@ -160,7 +160,7 @@ server.tool(
 
 server.tool(
   "get_bug",
-  "获取报障详情（含时间线与可执行动作）。docx/txt 正文在 attachments[].text，文档内图片在 media，图片随结果返回。正文写「见附件」时以附件为准，没读完不要标不属实，也不要要求补充。",
+  "获取报障详情（含时间线与可执行动作）。bug.reporterIsProductManager 表示报障人是否就是项目资料里的产品经理。docx/txt 正文在 attachments[].text，文档内图片在 media，图片随结果返回。正文写「见附件」时以附件为准，没读完不要标不属实，也不要要求补充。",
   { bugId: z.number().int().positive() },
   async ({ bugId }) => {
     try {

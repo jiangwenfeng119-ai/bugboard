@@ -8,9 +8,11 @@ import {
   getBug,
   getBugEvents,
   getBugHandlerLabel,
+  getProject,
   resolveActorLabel,
   updateBugPriority,
 } from "@/lib/services";
+import { matchesProductManager } from "@/lib/product-manager-match";
 import { STATUS_LABEL } from "@/lib/types";
 import type { Priority } from "@/lib/types";
 
@@ -23,6 +25,8 @@ export async function GET(
   return withAuth(req, async (identity) => {
     const { id } = await ctx.params;
     const bug = getBug(identity, Number(id));
+    const project = getProject(identity, bug.project_id);
+    const reporterLabel = resolveActorLabel(bug.reporter_type, bug.reporter_id);
     const events = getBugEvents(identity, bug.id).map((e) => ({
       ...e,
       actorLabel: resolveActorLabel(e.actor_type, e.actor_id),
@@ -35,8 +39,12 @@ export async function GET(
       bug: {
         ...bug,
         statusLabel: STATUS_LABEL[bug.status],
-        reporterLabel: resolveActorLabel(bug.reporter_type, bug.reporter_id),
+        reporterLabel,
         handlerLabel: getBugHandlerLabel(bug),
+        reporterIsProductManager: matchesProductManager(
+          reporterLabel,
+          project.product_manager || ""
+        ),
       },
       events,
       attachments,
