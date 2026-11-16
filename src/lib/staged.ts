@@ -6,7 +6,7 @@ import { actorFromIdentity } from "./auth";
 import { getDb, nowIso } from "./db";
 import { uploadsRoot } from "./paths";
 import type { Identity } from "./types";
-import { MAX_ATTACHMENTS, assertAllowedUpload, mimeForFilename } from "./uploads";
+import { MAX_ATTACHMENTS, absoluteAttachmentPath, assertAllowedUpload, mimeForFilename } from "./uploads";
 
 export type StagedRow = {
   id: number;
@@ -20,11 +20,30 @@ export type StagedRow = {
   created_at: string;
 };
 
+const STAGED_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function sweepStagedUploads(maxAgeMs = STAGED_TTL_MS) {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  const rows = getDb()
+    .prepare("SELECT id, storage_path FROM staged_uploads WHERE created_at < ?")
+    .all(cutoff) as { id: number; storage_path: string }[];
+  const remove = getDb().prepare("DELETE FROM staged_uploads WHERE id = ?");
+  for (const row of rows) {
+    remove.run(row.id);
+    try {
+      fs.unlinkSync(absoluteAttachmentPath(row.storage_path));
+    } catch {
+      // 过期文件已经不在磁盘上
+    }
+  }
+}
+
 export function stageUpload(
   identity: Identity,
   projectId: number,
   file: { filename: string; buffer: Buffer }
 ) {
+  sweepStagedUploads();
   assertAllowedUpload(file.filename, file.buffer.length);
   const actor = actorFromIdentity(identity);
   const safeName = file.filename.replace(/[^\w.\-\u4e00-\u9fff]+/g, "_");

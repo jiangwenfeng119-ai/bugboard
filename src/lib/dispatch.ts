@@ -1,9 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { lookupSync } from "dns";
+import { isIP } from "net";
 import fs from "fs";
 import path from "path";
 import { ADMIN_AGENT_PROMPT, applyProjectName } from "./agent-prompts";
 import { readBehavior } from "./behavior";
-import { assertDeployExecutable } from "./deploy-command";
+import { assertDeployExecutable, DEPLOY_SHELLS } from "./deploy-command";
 import { getDb, nowIso } from "./db";
 import { glossaryPrompt } from "./glossary";
 import { canAccessProject, requireAdmin } from "./permissions";
@@ -216,13 +218,56 @@ export function assertWebhookUrl(raw: string) {
   }
   if (parsed.username || parsed.password) throw new Error("本机地址不能带账号密码");
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "169.254.169.254" || host === "metadata.google.internal" || host === "fd00:ec2::254") {
-    throw new Error("本机地址不能指向元数据服务");
+  for (const address of resolveWebhookHosts(host)) {
+    if (isMetadataAddress(address)) throw new Error("本机地址不能指向元数据服务");
   }
   return url;
 }
 
-const SHELLS = new Set(["sh", "bash", "zsh", "fish", "osascript", "python", "python3", "node", "perl", "ruby"]);
+function resolveWebhookHosts(host: string) {
+  if (host === "metadata.google.internal" || host.endsWith(".metadata.google.internal")) {
+    throw new Error("本机地址不能指向元数据服务");
+  }
+  const numeric = numericIpv4(host);
+  if (numeric) return [numeric];
+  if (isIP(host)) return [host];
+  try {
+    const found = lookupSync(host, { all: true, verbatim: true });
+    if (!found.length) throw new Error("本机地址无法解析");
+    return found.map((item) => item.address);
+  } catch (error) {
+    if (error instanceof Error && error.message === "本机地址不能指向元数据服务") throw error;
+    if (error instanceof Error && error.message === "本机地址无法解析") throw error;
+    throw new Error("本机地址无法解析");
+  }
+}
+
+function numericIpv4(host: string) {
+  const source = /^0x[0-9a-f]+$/i.test(host) ? String(parseInt(host, 16)) : host;
+  if (!/^\d+$/.test(source)) return "";
+  const value = Number(source);
+  if (!Number.isSafeInteger(value) || value < 0 || value > 0xffffffff) return "";
+  return [
+    (value >>> 24) & 255,
+    (value >>> 16) & 255,
+    (value >>> 8) & 255,
+    value & 255,
+  ].join(".");
+}
+
+function isMetadataAddress(address: string) {
+  const normalized = address.toLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "fd00:ec2::254" || normalized.endsWith(":fd00:ec2::254")) return true;
+  const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const ipv4 = mapped ? mapped[1] : normalized;
+  const parts = ipv4.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  return parts[0] === 169 && parts[1] === 254;
+}
+
+const SHELLS = new Set<string>(DEPLOY_SHELLS);
 
 export function assertLocalAgentCommand(command: string) {
   const value = command.trim();
@@ -750,7 +795,7 @@ async function postJson(url: string, headers: Record<string, string>, body: stri
     method: "POST",
     headers,
     body,
-    redirect: "manual",
+    redirect: "error",
     signal: AbortSignal.timeout(8000),
   });
   return { status: res.status, text: await res.text() };
@@ -881,6 +926,7 @@ async function deliverOne(
               },
             }
           : wakePayload(project, bug, reason);
+      assertWebhookUrl(config.webhook_url);
       const body = JSON.stringify(payload);
       const signature = signDispatchBody(config.webhook_secret, body);
       const res = await postJson(
@@ -1015,7 +1061,6 @@ export function scheduleAgentWake(
   if (!config) return;
   const repairLocal = localJobEnabled(config.webhook_url, config.repair_local_enabled);
   if (!repairLocal && !config.cursor_enabled) return;
-  if (!opts?.force && recentlySent(bug.id, reason)) return;
   const project = getDb()
     .prepare("SELECT * FROM projects WHERE id = ?")
     .get(bug.project_id) as ProjectRow | undefined;
@@ -1024,16 +1069,21 @@ export function scheduleAgentWake(
   if (localJobEnabled(config.webhook_url, config.repair_local_enabled)) targets.push("webhook");
   if (config.cursor_enabled) targets.push("cursor");
   const t = nowIso();
-  const ids = targets.map((target) => {
-    const info = getDb()
-      .prepare(
-        `INSERT INTO agent_dispatches
-           (project_id, bug_id, reason, target, status, detail, created_at)
-         VALUES (?, ?, ?, ?, 'pending', '', ?)`
-      )
-      .run(bug.project_id, bug.id, reason, target, t);
-    return { id: Number(info.lastInsertRowid), target };
+  const reserve = getDb().transaction(() => {
+    if (!opts?.force && recentlySent(bug.id, reason)) return [];
+    return targets.map((target) => {
+      const info = getDb()
+        .prepare(
+          `INSERT INTO agent_dispatches
+             (project_id, bug_id, reason, target, status, detail, created_at)
+           VALUES (?, ?, ?, ?, 'pending', '', ?)`
+        )
+        .run(bug.project_id, bug.id, reason, target, t);
+      return { id: Number(info.lastInsertRowid), target };
+    });
   });
+  const ids = reserve.immediate();
+  if (ids.length === 0) return;
   enqueue(async () => {
     for (const item of ids) {
       await deliverOne(item.id, item.target, config, project, bug, reason);

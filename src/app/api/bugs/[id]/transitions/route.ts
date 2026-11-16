@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { withAuth, json } from "@/lib/http";
 import { transitionBug } from "@/lib/services";
 import type { TransitionAction } from "@/lib/state-machine";
-import { assertUploadsReady, saveUploadedFile } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 
@@ -37,17 +36,13 @@ export async function POST(
       note = body.note;
     }
 
-    assertUploadsReady(files, 0);
-    const { bug, eventId } = transitionBug(identity, Number(id), action, note);
-    for (const f of files) {
-      saveUploadedFile({
-        ownerType: "status_event",
-        ownerId: eventId,
-        filename: f.filename,
-        mime: f.mime,
-        buffer: f.buffer,
-      });
-    }
+    const { bug, eventId } = transitionBug(
+      identity,
+      Number(id),
+      action,
+      note,
+      files.map((file) => ({ filename: file.filename, buffer: file.buffer }))
+    );
     return json({ bug, eventId });
   });
 }

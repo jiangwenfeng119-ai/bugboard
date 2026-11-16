@@ -5,17 +5,6 @@
   var token = source.searchParams.get("token");
   if (!token) return;
   var endpoint = source.origin + "/api/widget/" + encodeURIComponent(token) + "/bugs";
-  var logs = [];
-  ["error", "warn"].forEach(function (level) {
-    var original = console[level];
-    if (!original) return;
-    console[level] = function () {
-      var text = Array.prototype.slice.call(arguments).map(String).join(" ").slice(0, 300);
-      logs.push(level + ": " + text);
-      if (logs.length > 20) logs.shift();
-      return original.apply(console, arguments);
-    };
-  });
 
   var style = document.createElement("style");
   style.textContent =
@@ -176,7 +165,6 @@
         form.set("pageUrl", location.href);
         form.set("viewport", window.innerWidth + "x" + window.innerHeight);
         form.set("userAgent", navigator.userAgent);
-        form.set("console", logs.join("\n"));
         if (png) form.set("file", new File([png], "圈选.png", { type: "image/png" }));
         fetch(endpoint, { method: "POST", body: form })
           .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })

@@ -74,6 +74,7 @@ export type UserRow = {
   password_hash: string;
   role: Role;
   active: number;
+  session_version: number;
   created_at: string;
   updated_at: string;
 };

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('user','admin','superadmin')),
   active INTEGER NOT NULL DEFAULT 1,
+  session_version INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -185,6 +186,13 @@ CREATE INDEX IF NOT EXISTS idx_events_bug_id ON bug_status_events(bug_id, id);
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id);
 CREATE INDEX IF NOT EXISTS idx_dispatches_bug ON agent_dispatches(bug_id, id);
 CREATE INDEX IF NOT EXISTS idx_dispatches_project ON agent_dispatches(project_id, id);
+
+CREATE TABLE IF NOT EXISTS rate_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bucket TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_events_bucket ON rate_events(bucket, at);
 ${PROJECT_CHANGES_SCHEMA}
 `;
 
@@ -216,6 +224,7 @@ function migrateSchema(db: Database.Database) {
   }
   ensureSuperAdminRole(db);
   ensureMemberRoles(db);
+  ensureSessionVersion(db);
   ensureProjectCodes(db);
   ensureProjectProfile(db);
   ensureProjectLogo(db);
@@ -460,6 +469,16 @@ function ensureMemberRoles(db: Database.Database) {
   db.exec(
     "ALTER TABLE project_members ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin'))"
   );
+  db.exec(
+    `UPDATE project_members
+     SET role = 'admin'
+     WHERE user_id IN (SELECT id FROM users WHERE role IN ('admin', 'superadmin'))`
+  );
+}
+
+function ensureSessionVersion(db: Database.Database) {
+  if (columnNames(db, "users").includes("session_version")) return;
+  db.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
 }
 
 function ensureProjectCodes(db: Database.Database) {
@@ -561,7 +580,30 @@ function ensureSuperAdminRole(db: Database.Database) {
   );
 }
 
+let _usageDb: Database.Database | null = null;
+
+/** 使用次数写在另一条连接上，锁冲突时放弃这次计数，不让鉴权失败。 */
+export function recordApiKeyUse(id: number) {
+  try {
+    if (!_usageDb) {
+      _usageDb = new Database(dbPath(), { timeout: 50 });
+      _usageDb.pragma("journal_mode = WAL");
+    }
+    _usageDb
+      .prepare(
+        "UPDATE api_keys SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?"
+      )
+      .run(nowIso(), id);
+  } catch {
+    // 主连接正占着写锁时，这次计数可以丢，Key 仍然有效
+  }
+}
+
 export function resetDbForTests() {
+  if (_usageDb) {
+    _usageDb.close();
+    _usageDb = null;
+  }
   if (_db) {
     _db.close();
     _db = null;

@@ -16,7 +16,7 @@ const admin: Identity = {
 
 describe("bug page actions", () => {
   it("hides release_fixes on the bug page and keeps withdraw_fix", () => {
-    const allowed = allowedActions(admin, "ready_to_release", "user", 2);
+    const allowed = allowedActions(admin, "ready_to_release", "user", 2, admin.role !== "user");
     expect(allowed).toContain("release_fixes");
     expect(allowed).toContain("withdraw_fix");
     const shown = bugPageActions(allowed);

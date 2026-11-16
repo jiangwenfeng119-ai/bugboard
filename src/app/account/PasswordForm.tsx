@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { PasswordField } from "@/components/PasswordField";
 
 export function PasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -42,53 +43,33 @@ export function PasswordForm() {
 
   return (
     <form onSubmit={onSubmit}>
-      <div className="bb-field">
-        <label className="bb-label" htmlFor="current-password">
-          当前密码
-        </label>
-        <input
-          id="current-password"
-          className="bb-input"
-          type="password"
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-      </div>
-      <div className="bb-field">
-        <label className="bb-label" htmlFor="new-password">
-          新密码
-        </label>
-        <input
-          id="new-password"
-          className="bb-input"
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          autoComplete="new-password"
-          minLength={6}
-          required
-        />
-        <p className="bb-field-hint" style={{ margin: "0.35rem 0 0" }}>
-          至少 6 位
-        </p>
-      </div>
-      <div className="bb-field">
-        <label className="bb-label" htmlFor="confirm-password">
-          确认新密码
-        </label>
-        <input
-          id="confirm-password"
-          className="bb-input"
-          type="password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          autoComplete="new-password"
-          minLength={6}
-          required
-        />
-      </div>
+      <PasswordField
+        id="current-password"
+        label="当前密码"
+        value={currentPassword}
+        onChange={setCurrentPassword}
+        autoComplete="current-password"
+        required
+      />
+      <PasswordField
+        id="new-password"
+        label="新密码"
+        value={newPassword}
+        onChange={setNewPassword}
+        autoComplete="new-password"
+        minLength={6}
+        required
+        hint="至少 6 位"
+      />
+      <PasswordField
+        id="confirm-password"
+        label="确认新密码"
+        value={confirmPassword}
+        onChange={setConfirmPassword}
+        autoComplete="new-password"
+        minLength={6}
+        required
+      />
       {error ? <p className="bb-error">{error}</p> : null}
       {success ? (
         <p className="bb-success" role="status">

@@ -136,7 +136,9 @@ export function MembersManager({
       <section className="bb-members-list-block" aria-labelledby="members-list-heading">
         <div className="bb-members-block-head">
           <h3 id="members-list-heading">当前成员</h3>
-          <p className="bb-muted">改角色即时生效；移除后对方将看不到本项目报障。</p>
+          <p className="bb-muted">
+            改角色即时生效。移除后，普通用户将看不到本项目；账号管理员仍能打开，但不能再改报障状态。
+          </p>
         </div>
         {members.length === 0 ? (
           <div className="bb-empty">暂无成员。先在上方添加，或到管理后台开户后再回来。</div>

@@ -27,19 +27,18 @@ const other: Identity = {
 };
 
 describe("state machine", () => {
-  it("treats superadmin as an admin for transitions", () => {
+  it("requires the caller to pass asAdmin instead of inferring it from the account role", () => {
     const superadmin: Identity = { ...admin, role: "superadmin" };
-    expect(allowedActions(superadmin, "pending", "user", 2)).toContain(
-      "start_fix"
-    );
+    expect(allowedActions(superadmin, "pending", "user", 2, false)).not.toContain("start_fix");
+    expect(allowedActions(superadmin, "pending", "user", 2, true)).toContain("start_fix");
   });
 
   it("sends an unconfirmed new capability to the product manager", () => {
-    expect(allowedActions(admin, "pending", "user", 2)).toContain("request_product");
-    expect(allowedActions(reporter, "needs_product", "user", 2)).not.toContain(
+    expect(allowedActions(admin, "pending", "user", 2, admin.role !== "user")).toContain("request_product");
+    expect(allowedActions(reporter, "needs_product", "user", 2, reporter.role !== "user")).not.toContain(
       "decline_product"
     );
-    expect(allowedActions(admin, "needs_product", "user", 2)).toEqual(
+    expect(allowedActions(admin, "needs_product", "user", 2, admin.role !== "user")).toEqual(
       expect.arrayContaining(["decline_product", "accept_product"])
     );
 
@@ -49,6 +48,7 @@ describe("state machine", () => {
       identity: admin,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: admin.role !== "user",
     });
     expect(missing.ok).toBe(false);
 
@@ -59,6 +59,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "这次不做",
+      asAdmin: admin.role !== "user",
     });
     if (declined.ok) expect(declined.to).toBe("invalid");
 
@@ -68,36 +69,37 @@ describe("state machine", () => {
       identity: admin,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: admin.role !== "user",
     });
     if (accepted.ok) expect(accepted.to).toBe("fixing");
   });
 
   it("allows admin to start fix from pending", () => {
-    const actions = allowedActions(admin, "pending", "user", 2);
+    const actions = allowedActions(admin, "pending", "user", 2, admin.role !== "user");
     expect(actions).toContain("start_fix");
     expect(actions).toContain("mark_invalid");
   });
 
   it("only reporter can confirm", () => {
-    expect(allowedActions(reporter, "awaiting_confirm", "user", 2)).toContain(
+    expect(allowedActions(reporter, "awaiting_confirm", "user", 2, reporter.role !== "user")).toContain(
       "confirm_fix"
     );
-    expect(allowedActions(other, "awaiting_confirm", "user", 2)).not.toContain(
+    expect(allowedActions(other, "awaiting_confirm", "user", 2, other.role !== "user")).not.toContain(
       "confirm_fix"
     );
-    expect(allowedActions(admin, "awaiting_confirm", "user", 2)).not.toContain(
+    expect(allowedActions(admin, "awaiting_confirm", "user", 2, admin.role !== "user")).not.toContain(
       "confirm_fix"
     );
   });
 
   it("lets an admin withdraw a wrong invalid mark back to pending", () => {
-    expect(allowedActions(admin, "invalid", "user", 2)).toContain(
+    expect(allowedActions(admin, "invalid", "user", 2, admin.role !== "user")).toContain(
       "reopen_invalid"
     );
-    expect(allowedActions(reporter, "invalid", "user", 2)).not.toContain(
+    expect(allowedActions(reporter, "invalid", "user", 2, reporter.role !== "user")).not.toContain(
       "reopen_invalid"
     );
-    expect(allowedActions(reporter, "invalid", "user", 2)).toContain(
+    expect(allowedActions(reporter, "invalid", "user", 2, reporter.role !== "user")).toContain(
       "dispute_invalid"
     );
 
@@ -108,6 +110,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "  ",
+      asAdmin: admin.role !== "user",
     });
     expect(missing.ok).toBe(false);
 
@@ -118,6 +121,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "我想收回",
+      asAdmin: reporter.role !== "user",
     });
     expect(denied.ok).toBe(false);
 
@@ -128,19 +132,20 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "漏看了附件里的报错截图",
+      asAdmin: admin.role !== "user",
     });
     expect(good.ok).toBe(true);
     if (good.ok) expect(good.to).toBe("pending");
   });
 
   it("lets the reporter accept an invalid bug into a terminal state", () => {
-    expect(allowedActions(reporter, "invalid", "user", 2)).toContain(
+    expect(allowedActions(reporter, "invalid", "user", 2, reporter.role !== "user")).toContain(
       "accept_invalid"
     );
-    expect(allowedActions(admin, "invalid", "user", 2)).not.toContain(
+    expect(allowedActions(admin, "invalid", "user", 2, admin.role !== "user")).not.toContain(
       "accept_invalid"
     );
-    expect(allowedActions(other, "invalid", "user", 2)).not.toContain(
+    expect(allowedActions(other, "invalid", "user", 2, other.role !== "user")).not.toContain(
       "accept_invalid"
     );
 
@@ -150,6 +155,7 @@ describe("state machine", () => {
       identity: reporter,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: reporter.role !== "user",
     });
     expect(accepted.ok).toBe(true);
     if (accepted.ok) expect(accepted.to).toBe("acknowledged");
@@ -160,6 +166,7 @@ describe("state machine", () => {
       identity: admin,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: admin.role !== "user",
     });
     expect(denied.ok).toBe(false);
 
@@ -169,11 +176,12 @@ describe("state machine", () => {
       identity: reporter,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: reporter.role !== "user",
     });
     expect(wrongStatus.ok).toBe(false);
 
     expect(
-      allowedActions(reporter, "acknowledged", "user", 2)
+      allowedActions(reporter, "acknowledged", "user", 2, reporter.role !== "user")
     ).toEqual([]);
     expect(
       validateTransition({
@@ -183,7 +191,8 @@ describe("state machine", () => {
         reporterType: "user",
         reporterId: 2,
         note: "还是有问题",
-      }).ok
+        asAdmin: reporter.role !== "user",
+    }).ok
     ).toBe(false);
     expect(
       validateTransition({
@@ -193,15 +202,16 @@ describe("state machine", () => {
         reporterType: "user",
         reporterId: 2,
         note: "判错了",
-      }).ok
+        asAdmin: admin.role !== "user",
+    }).ok
     ).toBe(false);
   });
 
   it("lets an admin withdraw a submitted fix without confirming it", () => {
-    expect(allowedActions(admin, "ready_to_release", "user", 2)).toEqual(
+    expect(allowedActions(admin, "ready_to_release", "user", 2, admin.role !== "user")).toEqual(
       expect.arrayContaining(["withdraw_fix"])
     );
-    expect(allowedActions(reporter, "ready_to_release", "user", 2)).not.toContain(
+    expect(allowedActions(reporter, "ready_to_release", "user", 2, reporter.role !== "user")).not.toContain(
       "withdraw_fix"
     );
 
@@ -212,6 +222,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "说明写早了，列表上还有一处要改",
+      asAdmin: admin.role !== "user",
     });
     expect(good.ok).toBe(true);
     if (good.ok) expect(good.to).toBe("fixing");
@@ -222,23 +233,24 @@ describe("state machine", () => {
       identity: admin,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: admin.role !== "user",
     });
     expect(confirmed.ok).toBe(false);
   });
 
   it("lets an admin ask for missing reporter material and only the reporter send it back", () => {
-    expect(allowedActions(admin, "pending", "user", 2)).toContain("request_info");
-    expect(allowedActions(admin, "fixing", "user", 2)).toContain("request_info");
-    expect(allowedActions(reporter, "pending", "user", 2)).not.toContain(
+    expect(allowedActions(admin, "pending", "user", 2, admin.role !== "user")).toContain("request_info");
+    expect(allowedActions(admin, "fixing", "user", 2, admin.role !== "user")).toContain("request_info");
+    expect(allowedActions(reporter, "pending", "user", 2, reporter.role !== "user")).not.toContain(
       "request_info"
     );
-    expect(allowedActions(reporter, "needs_info", "user", 2)).toEqual([
+    expect(allowedActions(reporter, "needs_info", "user", 2, reporter.role !== "user")).toEqual([
       "provide_info",
     ]);
-    expect(allowedActions(other, "needs_info", "user", 2)).not.toContain(
+    expect(allowedActions(other, "needs_info", "user", 2, other.role !== "user")).not.toContain(
       "provide_info"
     );
-    expect(allowedActions(admin, "needs_info", "user", 2)).not.toContain(
+    expect(allowedActions(admin, "needs_info", "user", 2, admin.role !== "user")).not.toContain(
       "provide_info"
     );
 
@@ -249,6 +261,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: " ",
+      asAdmin: admin.role !== "user",
     });
     expect(missing.ok).toBe(false);
 
@@ -259,6 +272,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "闪退只出现在这一台手机上，还缺崩溃记录",
+      asAdmin: admin.role !== "user",
     });
     expect(asked.ok).toBe(true);
     if (asked.ok) expect(asked.to).toBe("needs_info");
@@ -270,6 +284,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "补上了同型号闪退时的崩溃记录",
+      asAdmin: reporter.role !== "user",
     });
     expect(supplied.ok).toBe(true);
     if (supplied.ok) expect(supplied.to).toBe("pending");
@@ -281,6 +296,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "还缺步骤",
+      asAdmin: admin.role !== "user",
     });
     expect(tooSoon.ok).toBe(false);
   });
@@ -293,6 +309,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "",
+      asAdmin: admin.role !== "user",
     });
     expect(bad.ok).toBe(false);
 
@@ -303,6 +320,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "无法复现",
+      asAdmin: admin.role !== "user",
     });
     expect(good.ok).toBe(true);
     if (good.ok) expect(good.to).toBe("invalid");
@@ -316,6 +334,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "done",
+      asAdmin: admin.role !== "user",
     });
     expect(result.ok).toBe(false);
   });
@@ -328,6 +347,7 @@ describe("state machine", () => {
       reporterType: "user",
       reporterId: 2,
       note: "已修好",
+      asAdmin: admin.role !== "user",
     });
     expect(submitted.ok && submitted.to).toBe("ready_to_release");
 
@@ -337,12 +357,13 @@ describe("state machine", () => {
       identity: admin,
       reporterType: "user",
       reporterId: 2,
+      asAdmin: admin.role !== "user",
     });
     expect(released.ok && released.to).toBe("awaiting_confirm");
 
-    expect(allowedActions(admin, "ready_to_release", "user", 2)).toEqual(
+    expect(allowedActions(admin, "ready_to_release", "user", 2, admin.role !== "user")).toEqual(
       expect.arrayContaining(["release_fixes", "withdraw_fix"])
     );
-    expect(allowedActions(reporter, "ready_to_release", "user", 2)).toEqual([]);
+    expect(allowedActions(reporter, "ready_to_release", "user", 2, reporter.role !== "user")).toEqual([]);
   });
 });

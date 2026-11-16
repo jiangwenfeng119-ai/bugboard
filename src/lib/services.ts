@@ -1,4 +1,3 @@
-import fs from "fs";
 import { getDb, isSetupComplete, nowIso } from "./db";
 import { buildAnalyticsTrend } from "./analytics-trend";
 import {
@@ -15,6 +14,7 @@ import { recentShanghaiDateKeys, shanghaiDaySql, shanghaiDayStartIso, shanghaiYy
 import {
   actorFromIdentity,
   generateApiKey,
+  getUserById,
   hashApiKey,
   hashPassword,
   verifyPassword,
@@ -65,7 +65,7 @@ import {
   type ProjectProfile,
 } from "./project-profile";
 import { allocateProjectCode, assertUsableCode, nextPublicId } from "./ticket-id";
-import { absoluteAttachmentPath } from "./uploads";
+import { discardAttachmentFile, unlinkStoredPaths, writeAttachmentFile } from "./uploads";
 
 function slugify(name: string) {
   const base = name
@@ -83,12 +83,17 @@ export async function setupAdmin(username: string, password: string) {
   }
   const hash = await hashPassword(password);
   const t = nowIso();
-  const info = getDb()
-    .prepare(
-      `INSERT INTO users (username, password_hash, role, active, created_at, updated_at)
-       VALUES (?, ?, 'superadmin', 1, ?, ?)`
-    )
-    .run(username.trim(), hash, t, t);
+  const insert = getDb().transaction(() => {
+    const existing = getDb().prepare("SELECT COUNT(*) AS c FROM users").get() as { c: number };
+    if (existing.c > 0) throw new Error("系统已完成首装");
+    return getDb()
+      .prepare(
+        `INSERT INTO users (username, password_hash, role, active, created_at, updated_at)
+         VALUES (?, ?, 'superadmin', 1, ?, ?)`
+      )
+      .run(username.trim(), hash, t, t);
+  });
+  const info = insert.immediate();
   return getDb().prepare("SELECT * FROM users WHERE id = ?").get(info.lastInsertRowid) as UserRow;
 }
 
@@ -118,9 +123,13 @@ export async function changeOwnPassword(
   if (newPassword.length < 6) throw new Error("新密码至少 6 位");
   if (newPassword === currentPassword) throw new Error("新密码不能与当前密码相同");
   const hash = await hashPassword(newPassword);
+  const next = user.session_version + 1;
   getDb()
-    .prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
-    .run(hash, nowIso(), user.id);
+    .prepare(
+      "UPDATE users SET password_hash = ?, session_version = ?, updated_at = ? WHERE id = ?"
+    )
+    .run(hash, next, nowIso(), user.id);
+  return next;
 }
 
 export function listProjects(identity: Identity): ProjectRow[] {
@@ -154,48 +163,56 @@ export function createProject(
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   const name = data.name.trim();
   if (!name) throw new Error("项目名称必填");
-  let slug = (data.slug || slugify(name)).trim();
-  const exists = getDb()
-    .prepare("SELECT id FROM projects WHERE slug = ?")
-    .get(slug);
-  if (exists) slug = `${slug}-${Date.now().toString(36)}`;
-  const code = data.code?.trim()
-    ? assertUsableCode(data.code, takenProjectCodes())
-    : allocateProjectCode(name, slug, takenProjectCodes());
+  const requestedSlug = (data.slug || slugify(name)).trim();
   const profile = applyProfilePatch(emptyProfile(), data);
   const t = nowIso();
-  const info = getDb()
-    .prepare(
-      `INSERT INTO projects (
-        name, slug, code, description,
-        product_manager, experience_officer,
-        github_url, default_branch, tech_stack,
-        design_url, docs_url,
-        dev_url, test_url, prod_url,
-        verify_env, agent_notes,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      name,
-      slug,
-      code,
-      data.description?.trim() || "",
-      profile.product_manager,
-      profile.experience_officer,
-      profile.github_url,
-      profile.default_branch,
-      profile.tech_stack,
-      profile.design_url,
-      profile.docs_url,
-      profile.dev_url,
-      profile.test_url,
-      profile.prod_url,
-      profile.verify_env,
-      profile.agent_notes,
-      t,
-      t
-    );
+  const insert = getDb().transaction(() => {
+    let slug = requestedSlug;
+    const exists = getDb().prepare("SELECT id FROM projects WHERE slug = ?").get(slug);
+    if (exists) slug = `${slug}-${Date.now().toString(36)}`;
+    const code = data.code?.trim()
+      ? assertUsableCode(data.code, takenProjectCodes())
+      : allocateProjectCode(name, slug, takenProjectCodes());
+    try {
+      return getDb()
+        .prepare(
+          `INSERT INTO projects (
+            name, slug, code, description,
+            product_manager, experience_officer,
+            github_url, default_branch, tech_stack,
+            design_url, docs_url,
+            dev_url, test_url, prod_url,
+            verify_env, agent_notes,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          name,
+          slug,
+          code,
+          data.description?.trim() || "",
+          profile.product_manager,
+          profile.experience_officer,
+          profile.github_url,
+          profile.default_branch,
+          profile.tech_stack,
+          profile.design_url,
+          profile.docs_url,
+          profile.dev_url,
+          profile.test_url,
+          profile.prod_url,
+          profile.verify_env,
+          profile.agent_notes,
+          t,
+          t
+        );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (/UNIQUE/i.test(message)) throw new Error("项目名称或缩写冲突，请重试");
+      throw error;
+    }
+  });
+  const info = insert.immediate();
   return getDb()
     .prepare("SELECT * FROM projects WHERE id = ?")
     .get(info.lastInsertRowid) as ProjectRow;
@@ -239,13 +256,7 @@ export function deleteProject(identity: Identity, projectId: number) {
     return files.map((f) => f.storage_path);
   })();
 
-  for (const rel of paths) {
-    try {
-      fs.unlinkSync(absoluteAttachmentPath(rel));
-    } catch {
-      // 文件已不在磁盘上时，库记录仍然删除
-    }
-  }
+  unlinkStoredPaths(paths);
 }
 
 export function getProject(identity: Identity, projectId: number) {
@@ -341,11 +352,17 @@ export function addMember(
   const projectRole = assertProjectRole(role);
   const user = getDb().prepare("SELECT id FROM users WHERE id = ?").get(userId);
   if (!user) throw new Error("用户不存在");
-  getDb()
-    .prepare(
-      "INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)"
-    )
-    .run(projectId, userId, projectRole);
+  try {
+    getDb()
+      .prepare(
+        "INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)"
+      )
+      .run(projectId, userId, projectRole);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/UNIQUE/i.test(message)) throw new Error("已是成员，请改用角色变更");
+    throw error;
+  }
   getDb()
     .prepare("UPDATE projects SET updated_at = ? WHERE id = ?")
     .run(nowIso(), projectId);
@@ -536,7 +553,8 @@ export async function updateUser(
       const hash = await hashPassword(password);
       getDb()
         .prepare(
-          `UPDATE users SET username = ?, role = ?, password_hash = ?, updated_at = ?
+          `UPDATE users SET username = ?, role = ?, password_hash = ?,
+             session_version = session_version + 1, updated_at = ?
            WHERE id = ?`
         )
         .run(username, role, hash, t, userId);
@@ -581,6 +599,11 @@ export function deleteUser(identity: Identity, userId: number) {
 
   const db = getDb();
   const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE projects
+       SET widget_token = NULL, widget_owner_user_id = NULL, updated_at = ?
+       WHERE widget_owner_user_id = ?`
+    ).run(nowIso(), userId);
     // api_keys.created_by_user_id 无 ON DELETE CASCADE，先清掉
     db.prepare("DELETE FROM api_keys WHERE created_by_user_id = ?").run(userId);
     db.prepare("DELETE FROM users WHERE id = ?").run(userId);
@@ -605,7 +628,8 @@ export function createBug(
     priority?: Priority;
     evidence?: BugEvidenceInput;
     wakeSource?: WakeSource;
-  }
+  },
+  options?: { deferWake?: boolean }
 ) {
   getProject(identity, data.projectId);
   const title = data.title.trim();
@@ -697,7 +721,7 @@ export function createBug(
   }
   const bug = getBug(identity, bugId);
   const source = wakeSourceFor(identity, data.wakeSource);
-  if (wakesOnCreate(readBehavior(data.projectId), source)) {
+  if (!options?.deferWake && wakesOnCreate(readBehavior(data.projectId), source)) {
     try {
       scheduleAgentWake(bug, "created");
     } catch (error) {
@@ -902,13 +926,7 @@ export function deleteBug(identity: Identity, bugId: number) {
     return files.map((f) => f.storage_path);
   })();
 
-  for (const rel of paths) {
-    try {
-      fs.unlinkSync(absoluteAttachmentPath(rel));
-    } catch {
-      // 文件已不在磁盘上时，库记录仍然删除
-    }
-  }
+  unlinkStoredPaths(paths);
 }
 
 export function getBug(identity: Identity, bugId: number) {
@@ -954,29 +972,48 @@ export function getAttachments(
     .all(ownerType, ownerId) as AttachmentRow[];
 }
 
+function boundedNote(note?: string | null) {
+  const text = note?.trim() ?? "";
+  if (text.length > BUG_BODY_MAX) throw new Error(`说明不能超过 ${BUG_BODY_MAX} 字`);
+  return text;
+}
+
 export function transitionBug(
   identity: Identity,
   bugId: number,
   action: TransitionAction,
-  note?: string | null
+  note?: string | null,
+  files: { filename: string; buffer: Buffer }[] = []
 ) {
   const bug = getBug(identity, bugId);
+  const noteText = boundedNote(note);
   const result = validateTransition({
     action,
     from: bug.status,
     identity,
     reporterType: bug.reporter_type,
     reporterId: bug.reporter_id,
-    note,
+    note: noteText,
     asAdmin: isProjectAdmin(identity, bug.project_id),
   });
   if (!result.ok) throw new Error(result.error);
+  if (files.length > 20) throw new Error("单条附件不能超过 20 个");
+  const written = files.map((file) =>
+    writeAttachmentFile(`status_event/${bugId}`, file.filename, file.buffer)
+  );
   const t = nowIso();
   const actor = actorFromIdentity(identity);
   const tx = getDb().transaction(() => {
-    getDb()
-      .prepare("UPDATE bugs SET status = ?, updated_at = ? WHERE id = ?")
-      .run(result.to, t, bugId);
+    const current = getDb()
+      .prepare("SELECT status FROM bugs WHERE id = ?")
+      .get(bugId) as { status: string } | undefined;
+    if (!current || current.status !== bug.status) {
+      throw new Error("报障状态已变化，请刷新后再试");
+    }
+    const updated = getDb()
+      .prepare("UPDATE bugs SET status = ?, updated_at = ? WHERE id = ? AND status = ?")
+      .run(result.to, t, bugId, bug.status);
+    if (updated.changes !== 1) throw new Error("报障状态已变化，请刷新后再试");
     const info = getDb()
       .prepare(
         `INSERT INTO bug_status_events
@@ -989,12 +1026,26 @@ export function transitionBug(
         result.to,
         actor.actorType,
         actor.actorId,
-        note?.trim() || ACTION_LABEL[action],
+        noteText || ACTION_LABEL[action],
         t
       );
-    return Number(info.lastInsertRowid);
+    const eventId = Number(info.lastInsertRowid);
+    const insertFile = getDb().prepare(
+      `INSERT INTO attachments (owner_type, owner_id, filename, mime, size, storage_path, created_at)
+       VALUES ('status_event', ?, ?, ?, ?, ?, ?)`
+    );
+    for (const file of written) {
+      insertFile.run(eventId, file.filename, file.mime, file.size, file.rel, t);
+    }
+    return eventId;
   });
-  const eventId = tx();
+  let eventId = 0;
+  try {
+    eventId = tx.immediate();
+  } catch (error) {
+    for (const file of written) discardAttachmentFile(file.rel);
+    throw error;
+  }
   const updated = getBug(identity, bugId);
   const wakeActor = identity.kind === "api_key" ? "api_key" : "user";
   const allowed = new Set(readBehavior(bug.project_id).wakeActions);
@@ -1021,7 +1072,7 @@ export function addBugSupplement(
   bugId: number,
   note: string
 ) {
-  const text = note.trim();
+  const text = boundedNote(note);
   if (!text) throw new Error("请填写补充说明");
   const bug = getBug(identity, bugId);
   if (!canAddSupplement(identity, bug)) {
@@ -1468,6 +1519,12 @@ export function listApiKeys(identity: Identity) {
     .all() as Omit<ApiKeyRow, "key_hash">[];
 }
 
+function assertSuperAdminUser(identity: Identity, message: string) {
+  if (identity.kind !== "user") throw new Error(message);
+  const user = getUserById(identity.userId);
+  if (!user || user.role !== "superadmin") throw new Error(message);
+}
+
 function getApiKeyOrThrow(keyId: number) {
   const row = getDb()
     .prepare(
@@ -1503,6 +1560,7 @@ export function createApiKey(
   if (data.role !== "user" && data.role !== "admin") {
     throw new Error("API Key 角色无效");
   }
+  if (data.role === "admin") assertSuperAdminUser(identity, "只有超级管理员可以创建管理员级 Key");
   if (data.role === "user" && (!data.projectIds || data.projectIds.length === 0)) {
     throw new Error("用户级 Key 必须绑定至少一个项目");
   }
@@ -1551,6 +1609,10 @@ export function updateApiKey(
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   if (identity.kind !== "user") {
     throw new Error("仅人类管理员可管理 API Key");
+  }
+  const existingRole = getApiKeyOrThrow(keyId).role;
+  if (existingRole === "admin" || patch.role === "admin") {
+    assertSuperAdminUser(identity, "只有超级管理员可以管理管理员级 Key");
   }
   if (patch.role !== undefined && patch.role !== "user" && patch.role !== "admin") {
     throw new Error("API Key 角色无效");
@@ -1631,7 +1693,10 @@ export function updateApiKey(
 
 export function deleteApiKey(identity: Identity, keyId: number) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
-  getApiKeyOrThrow(keyId);
+  const row = getApiKeyOrThrow(keyId);
+  if (row.role === "admin") {
+    assertSuperAdminUser(identity, "只有超级管理员可以管理管理员级 Key");
+  }
   getDb().prepare("DELETE FROM api_keys WHERE id = ?").run(keyId);
 }
 

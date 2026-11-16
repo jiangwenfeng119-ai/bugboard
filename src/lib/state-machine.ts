@@ -156,7 +156,7 @@ export function allowedActions(
   status: BugStatus,
   reporterType: ActorType,
   reporterId: number,
-  asAdmin = isAdminRole(identity.role)
+  asAdmin: boolean
 ): TransitionAction[] {
   const admin = asAdmin;
   const reporter = isReporter(identity, reporterType, reporterId);
@@ -174,13 +174,13 @@ export function validateTransition(params: {
   reporterType: ActorType;
   reporterId: number;
   note?: string | null;
-  asAdmin?: boolean;
+  asAdmin: boolean;
 }): { ok: true; to: BugStatus } | { ok: false; error: string } {
   const spec = findTransition(params.action, params.from);
   if (!spec) {
     return { ok: false, error: "当前状态不允许该操作" };
   }
-  const admin = params.asAdmin ?? isAdminRole(params.identity.role);
+  const admin = params.asAdmin;
   if (spec.who === "admin" && !admin) {
     return { ok: false, error: "需要管理员权限" };
   }

@@ -376,7 +376,34 @@ function expireStaleRunningReleases(now = Date.now()) {
      SET status = 'failed', detail = ?
      WHERE id = ? AND status = 'running'`
   );
-  for (const row of stale) update.run(STALE_RELEASE, row.id);
+  for (const row of stale) {
+    const changed = update.run(STALE_RELEASE, row.id);
+    if (changed.changes === 1) recordTimeoutRelease(row.project_id);
+  }
+}
+
+function recordTimeoutRelease(projectId: number) {
+  const project = getDb()
+    .prepare("SELECT default_branch FROM projects WHERE id = ?")
+    .get(projectId) as { default_branch: string } | undefined;
+  const actor = getDb()
+    .prepare("SELECT id FROM users WHERE role = 'superadmin' ORDER BY id LIMIT 1")
+    .get() as { id: number } | undefined;
+  if (!project || !actor) return;
+  getDb()
+    .prepare(
+      `INSERT INTO project_changes (
+         project_id, kind, title, summary, commit_shas, branch, bug_ids,
+         release_change_id, trigger, result, detail, actor_type, actor_id, created_at
+       ) VALUES (?, 'release', '发布超时', NULL, '[]', ?, '[]', NULL, 'manual', 'failed', ?, 'user', ?, ?)`
+    )
+    .run(
+      projectId,
+      project.default_branch.trim() || null,
+      STALE_RELEASE,
+      actor.id,
+      nowIso()
+    );
 }
 
 function readySubset(projectId: number, bugIds: number[]) {

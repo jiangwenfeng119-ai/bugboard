@@ -79,7 +79,22 @@ export function sessionKeyFor(event, projectCode, rawId) {
   return `${prefix}:${code}:${id}`;
 }
 
-const SHELLS = new Set(["sh", "bash", "zsh", "fish", "osascript", "python", "python3", "node", "perl", "ruby"]);
+const SHELLS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "dash",
+  "ksh",
+  "csh",
+  "tcsh",
+  "osascript",
+  "python",
+  "python3",
+  "node",
+  "perl",
+  "ruby",
+]);
 
 export function assertAgentCommand(command) {
   const value = String(command || "").trim();
@@ -140,7 +155,7 @@ export function writeSession(file, key, sessionId) {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     if (data && typeof data === "object" && !Array.isArray(data)) {
       for (const [savedKey, savedId] of Object.entries(data)) {
-        if (!/^bug:[A-Z][A-Z0-9]{1,7}:\d{1,12}$/.test(savedKey)) continue;
+        if (!/^(?:bug|capture):[A-Z][A-Z0-9]{1,7}:\d{1,12}$/.test(savedKey)) continue;
         const usable = usableSessionId(savedId);
         if (usable) next[savedKey] = usable;
       }

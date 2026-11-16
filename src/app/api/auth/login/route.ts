@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     clearLoginFailures(username);
     const session = await getSession();
     session.userId = user.id;
+    session.sessionVersion = user.session_version ?? 0;
     await session.save();
     return json({
       user: {

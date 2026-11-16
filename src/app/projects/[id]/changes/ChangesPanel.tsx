@@ -66,7 +66,6 @@ export function ChangesPanel({
   releaseFeedback: ReleaseFeedback;
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<number[]>([]);
   const [confirming, setConfirming] = useState<null | "run" | "mark">(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -112,8 +111,6 @@ export function ChangesPanel({
     };
   }, [canRelease, jobInFlight, projectId, router]);
 
-  const pendingIds = new Set(pendingBugs.map((bug) => bug.id));
-  const chosen = selected.filter((id) => pendingIds.has(id));
   const canRunRelease = canImmediateRelease(pendingBugs.length, jobInFlight);
   const banner = canRelease
     ? releaseStatusBanner({
@@ -123,24 +120,17 @@ export function ChangesPanel({
       })
     : null;
 
-  function toggle(id: number) {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
-    setConfirming(null);
-  }
-
   async function submit(mode: "run" | "mark") {
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const bugIds = chosen.length > 0 ? chosen : undefined;
       const res = await fetch(`/api/projects/${projectId}/release`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
           trigger: mode === "run" ? "manual" : "external",
-          ...(bugIds ? { bugIds } : {}),
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -151,7 +141,6 @@ export function ChangesPanel({
         setError(data.error || `发布失败（HTTP ${res.status}）`);
         return;
       }
-      setSelected([]);
       setConfirming(null);
       setNotice(releaseSubmitNotice(mode, feedback.advancesBugs));
       if (mode === "run") {
@@ -260,7 +249,7 @@ export function ChangesPanel({
 
       {canRelease && confirming ? (
         <div className="bb-card bb-section-card bb-change-confirm">
-          <p>{confirmCopy(confirming, chosen.length, pendingBugs.length, feedback.advancesBugs)}</p>
+          <p>{confirmCopy(confirming, pendingBugs.length, feedback.advancesBugs)}</p>
           <button
             type="button"
             className="bb-btn"
@@ -284,22 +273,15 @@ export function ChangesPanel({
         <section className="bb-card bb-section-card bb-change-pending" aria-labelledby="pending-release-heading">
           <h2 id="pending-release-heading">待发布报障</h2>
           <p className="bb-muted">
-            勾选后只发布选中的报障。都不勾选则包含当前全部待发布报障。
+            发布会带上当前全部待发布报障，并一起记入这次变更。
           </p>
-          <div className="bb-select bb-multi-select bb-change-checks">
+          <ul className="bb-change-pending-list">
             {pendingBugs.map((bug) => (
-              <label key={bug.id} className="bb-multi-select-option">
-                <input
-                  type="checkbox"
-                  checked={chosen.includes(bug.id)}
-                  onChange={() => toggle(bug.id)}
-                />
-                <span>
-                  {bug.publicId} {bug.title}
-                </span>
-              </label>
+              <li key={bug.id}>
+                <span className="bb-bug-id">{bug.publicId}</span> {bug.title}
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       ) : null}
 
@@ -419,18 +401,8 @@ function toneClass(tone: ChangeListItem["onlineTone"]) {
   return "bb-muted";
 }
 
-function confirmCopy(
-  mode: "run" | "mark",
-  chosenCount: number,
-  pendingCount: number,
-  advancesBugs: boolean
-) {
-  const scope =
-    chosenCount > 0
-      ? `选中的 ${chosenCount} 条`
-      : pendingCount > 0
-        ? `全部 ${pendingCount} 条`
-        : "";
+function confirmCopy(mode: "run" | "mark", pendingCount: number, advancesBugs: boolean) {
+  const scope = pendingCount > 0 ? `全部 ${pendingCount} 条` : "";
   if (mode === "run") {
     const statusLine = advancesBugs
       ? "成功后对应报障进入待确认；失败则留在待发布，本页会显示失败原因，可重新发布。"

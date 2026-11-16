@@ -3,23 +3,40 @@ import { getDb, nowIso } from "./db";
 import { readBehavior } from "./behavior";
 import { createBug, getProject } from "./services";
 import type { Identity, Role } from "./types";
-import { saveUploadedFile } from "./uploads";
+import { stageUpload } from "./staged";
 
 const WINDOW_MS = 10 * 60 * 1000;
-const MAX_HITS = 30;
-const hits = new Map<string, number[]>();
+const MAX_PER_TOKEN = 60;
+const MAX_PER_IP = 30;
 
 export function resetWidgetRateForTests() {
-  hits.clear();
+  getDb().prepare("DELETE FROM rate_events WHERE bucket LIKE 'widget:%'").run();
+}
+
+function widgetCount(bucket: string, now: number) {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS c FROM rate_events WHERE bucket = ? AND at > ?")
+    .get(bucket, now - WINDOW_MS) as { c: number };
+  return row.c;
 }
 
 export function assertWidgetRate(token: string, ip: string) {
   const now = Date.now();
-  const key = `${token.slice(0, 12)}:${ip}`;
-  const recent = (hits.get(key) || []).filter((at) => now - at < WINDOW_MS);
-  if (recent.length >= MAX_HITS) throw new Error("提交过于频繁，请稍后再试");
-  recent.push(now);
-  hits.set(key, recent);
+  const check = getDb().transaction(() => {
+    getDb().prepare("DELETE FROM rate_events WHERE bucket LIKE 'widget:%' AND at <= ?").run(now - WINDOW_MS);
+    const tokenBucket = `widget:token:${token}`;
+    if (widgetCount(tokenBucket, now) >= MAX_PER_TOKEN) {
+      throw new Error("提交过于频繁，请稍后再试");
+    }
+    const ipBucket = ip === "direct" ? "" : `widget:ip:${token}:${ip}`;
+    if (ipBucket && widgetCount(ipBucket, now) >= MAX_PER_IP) {
+      throw new Error("提交过于频繁，请稍后再试");
+    }
+    const insert = getDb().prepare("INSERT INTO rate_events (bucket, at) VALUES (?, ?)");
+    insert.run(tokenBucket, now);
+    if (ipBucket) insert.run(ipBucket, now);
+  });
+  check.immediate();
 }
 
 function requireAdminUser(identity: Identity) {
@@ -100,20 +117,26 @@ export function createWidgetReport(
   if (pageUrl && !/^https?:\/\//i.test(pageUrl)) throw new Error("页面地址无效");
   const viewport = (input.viewport || "").trim().slice(0, 80);
   const userAgent = (input.userAgent || "").trim().slice(0, 300);
-  const consoleText = (input.consoleText || "").trim().slice(0, 4000);
   if (!note && !input.file) throw new Error("写一句现象，或附上截图");
 
   const behavior = readBehavior(project.id);
   const title = (input.title || note || "网页上报").trim().slice(0, 200) || "网页上报";
   const blocks = [note, pageUrl ? `页面：${pageUrl}` : "", viewport ? `视口：${viewport}` : "", userAgent ? `浏览器：${userAgent}` : ""].filter(Boolean);
-  if (consoleText) blocks.push("控制台：", consoleText);
   const identity: Identity = {
     kind: "user",
     userId: owner.id,
     role: owner.role,
     username: owner.username,
   };
-  const bug = createBug(identity, {
+  const attachmentIds = input.file
+    ? [
+        stageUpload(identity, project.id, {
+          filename: input.file.filename,
+          buffer: input.file.buffer,
+        }).id,
+      ]
+    : [];
+  return createBug(identity, {
     projectId: project.id,
     title,
     body: blocks.join("\n\n"),
@@ -122,16 +145,7 @@ export function createWidgetReport(
     evidence: {
       quote: note,
       sourceUrl: pageUrl,
+      attachmentIds,
     },
   });
-  if (input.file) {
-    saveUploadedFile({
-      ownerType: "bug",
-      ownerId: bug.id,
-      filename: input.file.filename,
-      mime: input.file.mime,
-      buffer: input.file.buffer,
-    });
-  }
-  return bug;
 }

@@ -25,7 +25,7 @@ export default async function MembersPage({
         <div>
           <h2>项目成员</h2>
           <p className="bb-muted bb-members-lead">
-            谁能看见并处理这个项目的报障，由这里的名单决定。项目角色只管本项目；开户、停用账号仍在管理后台。
+            普通用户只有在这份名单里才能看见本项目。改报障状态，要在本项目里是管理员。账号管理员可以打开全部项目，并维护这份名单。开户和停用账号仍在管理后台。
           </p>
         </div>
         <p className="bb-members-count" aria-live="polite">
@@ -45,7 +45,7 @@ export default async function MembersPage({
         </div>
         <div>
           <dt>管理员</dt>
-          <dd>可改本项目报障状态、处理成员与发布相关操作。</dd>
+          <dd>可改本项目的报障状态。立即发布和标记已发布也要这个角色。本机发布任务来领队列时，用的 Key 还得是管理员级。</dd>
         </div>
       </dl>
 

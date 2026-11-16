@@ -2,7 +2,8 @@ import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
 import { actorFromIdentity } from "./auth";
-import { readBehavior } from "./behavior";
+import { readBehavior, wakeSourceFor, wakesOnCreate } from "./behavior";
+import { scheduleAgentWake } from "./dispatch";
 import { getDb, nowIso } from "./db";
 import { parseBugEvidence } from "./evidence";
 import { BUG_TITLE_MAX } from "./limits";
@@ -522,43 +523,75 @@ export async function commitCaptureSession(
   if (drafts.some((draft) => draft.status === "draft")) {
     throw new Error("还有没看过的草稿");
   }
-  const kept = drafts.filter((draft) => draft.status === "kept");
+  const kept = drafts.filter((draft) => draft.status === "kept" && !draft.bug_id);
   const { createBug } = await import("./services");
-  const bugs = [];
-  for (const draft of kept) {
-    const intake = readBehavior(row.project_id);
-    const bug = createBug(identity, {
-      projectId: row.project_id,
-      title: draft.title,
-      body: draft.body,
-      priority: intake.intakePriority,
-      wakeSource: "capture",
-      evidence: {
-        quote: draft.quote,
-        steps: JSON.parse(draft.steps_json) as string[],
-        evidenceSec: draft.evidence_sec,
-        strokes: JSON.parse(draft.strokes_json) as Stroke[],
-        confidence: draft.confidence,
-        openQuestion: draft.question,
-        captureSessionId: row.id,
-      },
-    });
-    if (draft.frame_path && draft.frame_filename) {
-      const buffer = fs.readFileSync(absoluteAttachmentPath(draft.frame_path));
-      saveUploadedFile({
-        ownerType: "bug",
-        ownerId: bug.id,
-        filename: draft.frame_filename,
-        mime: draft.frame_mime || "image/png",
-        buffer,
-      });
+  const db = getDb();
+  const commit = db.transaction(() => {
+    const current = db.prepare("SELECT status, organize_status FROM capture_sessions WHERE id = ?").get(sessionId) as
+      | { status: string; organize_status: string }
+      | undefined;
+    if (!current || current.status !== "review") throw new Error("这次走查已经整理完");
+    if (current.organize_status === "organizing") throw new Error("本机 agent 还在整理");
+    const claimed = db
+      .prepare(
+        "UPDATE capture_sessions SET status = 'done', updated_at = ? WHERE id = ? AND status = 'review'"
+      )
+      .run(nowIso(), sessionId);
+    if (claimed.changes !== 1) throw new Error("这次走查已经整理完");
+    const bugs = [];
+    for (const draft of kept) {
+      const fresh = db.prepare("SELECT bug_id FROM capture_drafts WHERE id = ?").get(draft.id) as
+        | { bug_id: number | null }
+        | undefined;
+      if (fresh?.bug_id) continue;
+      const intake = readBehavior(row.project_id);
+      const bug = createBug(
+        identity,
+        {
+          projectId: row.project_id,
+          title: draft.title,
+          body: draft.body,
+          priority: intake.intakePriority,
+          wakeSource: "capture",
+          evidence: {
+            quote: draft.quote,
+            steps: JSON.parse(draft.steps_json) as string[],
+            evidenceSec: draft.evidence_sec,
+            strokes: JSON.parse(draft.strokes_json) as Stroke[],
+            confidence: draft.confidence,
+            openQuestion: draft.question,
+            captureSessionId: row.id,
+          },
+        },
+        { deferWake: true }
+      );
+      if (draft.frame_path && draft.frame_filename) {
+        const buffer = fs.readFileSync(absoluteAttachmentPath(draft.frame_path));
+        saveUploadedFile({
+          ownerType: "bug",
+          ownerId: bug.id,
+          filename: draft.frame_filename,
+          mime: draft.frame_mime || "image/png",
+          buffer,
+        });
+      }
+      db.prepare("UPDATE capture_drafts SET bug_id = ? WHERE id = ?").run(bug.id, draft.id);
+      bugs.push(bug);
     }
-    getDb().prepare("UPDATE capture_drafts SET bug_id = ? WHERE id = ?").run(bug.id, draft.id);
-    bugs.push(bug);
+    return bugs;
+  });
+  const bugs = commit.immediate();
+  const intake = readBehavior(row.project_id);
+  const source = wakeSourceFor(identity, "capture");
+  if (wakesOnCreate(intake, source)) {
+    for (const bug of bugs) {
+      try {
+        scheduleAgentWake(bug, "created");
+      } catch (error) {
+        console.error("dispatch schedule failed", error instanceof Error ? error.message : error);
+      }
+    }
   }
-  getDb()
-    .prepare("UPDATE capture_sessions SET status = 'done', updated_at = ? WHERE id = ?")
-    .run(nowIso(), sessionId);
   return { session: getCaptureSession(identity, sessionId), bugs };
 }
 

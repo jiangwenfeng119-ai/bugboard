@@ -1,6 +1,6 @@
 import path from "path";
 
-const SHELLS = new Set([
+export const DEPLOY_SHELLS = [
   "sh",
   "bash",
   "zsh",
@@ -15,7 +15,9 @@ const SHELLS = new Set([
   "node",
   "perl",
   "ruby",
-]);
+] as const;
+
+const SHELLS = new Set<string>(DEPLOY_SHELLS);
 
 /** Absolute executable roots. The runner also allows the project workspace. */
 const ROOTS = ["/Users", "/opt", "/usr", "/homebrew"];

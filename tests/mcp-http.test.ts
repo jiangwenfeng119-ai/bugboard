@@ -13,6 +13,7 @@ beforeEach(() => {
   process.env.DATA_DIR = tmpRoot;
   process.env.DB_PATH = path.join(tmpRoot, "db", "test.sqlite");
   process.env.UPLOADS_DIR = path.join(tmpRoot, "uploads");
+  process.env.PORT = "3000";
 });
 
 afterEach(async () => {
@@ -56,7 +57,7 @@ describe("remote mcp endpoint", () => {
         const url = String(input);
         const authorization = new Headers(init?.headers).get("authorization");
         seen.push({ url, authorization });
-        if (url === "https://bugboard.example/api/projects") {
+        if (url === "http://127.0.0.1:3000/api/projects") {
           return Response.json({
             projects: [{ id: 2, name: "brandonapp" }],
           });
@@ -87,7 +88,7 @@ describe("remote mcp endpoint", () => {
       const data = JSON.parse(text);
       expect(data.projects).toEqual([{ id: 2, name: "brandonapp" }]);
       expect(seen).toContainEqual({
-        url: "https://bugboard.example/api/projects",
+        url: "http://127.0.0.1:3000/api/projects",
         authorization: `Bearer ${created.rawKey}`,
       });
     } finally {

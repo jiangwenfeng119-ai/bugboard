@@ -1,12 +1,13 @@
 import { getIronSession, SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
-import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
-import { getDb, nowIso } from "./db";
+import { getDb, recordApiKeyUse } from "./db";
 import type { Identity, Role, UserRow } from "./types";
 
 export type SessionData = {
   userId?: number;
+  sessionVersion?: number;
 };
 
 export const DEV_SESSION_SECRET =
@@ -62,13 +63,6 @@ export function generateApiKey() {
   };
 }
 
-export function safeEqualHex(a: string, b: string) {
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
-
 export function getUserById(id: number): UserRow | undefined {
   return getDb().prepare("SELECT * FROM users WHERE id = ?").get(id) as
     | UserRow
@@ -80,6 +74,7 @@ export async function resolveSessionIdentity(): Promise<Identity | null> {
   if (!session.userId) return null;
   const user = getUserById(session.userId);
   if (!user || !user.active) return null;
+  if ((user.session_version ?? 0) !== (session.sessionVersion ?? 0)) return null;
   return {
     kind: "user",
     userId: user.id,
@@ -105,11 +100,7 @@ export function resolveApiKeyIdentity(bearer: string | null): Identity | null {
       }
     | undefined;
   if (!row) return null;
-  getDb()
-    .prepare(
-      "UPDATE api_keys SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?"
-    )
-    .run(nowIso(), row.id);
+  recordApiKeyUse(row.id);
   const projectIds = (
     getDb()
       .prepare("SELECT project_id FROM api_key_projects WHERE api_key_id = ?")

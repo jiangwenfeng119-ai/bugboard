@@ -177,28 +177,34 @@ export function BugActions({
   }
 
   const primary = primaryBugAction(pageActions);
+  const progressActions = pageActions.filter((action) => !isDangerBugAction(action));
+  const dangerActions = pageActions.filter((action) => isDangerBugAction(action));
+
+  function actionButton(action: TransitionAction) {
+    return (
+      <button
+        key={action}
+        type="button"
+        className={
+          isDangerBugAction(action)
+            ? "bb-btn bb-btn-danger"
+            : action === primary
+              ? "bb-btn"
+              : "bb-btn bb-btn-secondary"
+        }
+        disabled={loading}
+        onClick={() => runSimple(action)}
+      >
+        {ACTION_LABEL[action]}
+      </button>
+    );
+  }
 
   return (
     <div>
       {pageActions.length > 0 || canSupplement ? (
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          {pageActions.map((a) => (
-            <button
-              key={a}
-              type="button"
-              className={
-                isDangerBugAction(a)
-                  ? "bb-btn bb-btn-danger"
-                  : a === primary
-                    ? "bb-btn"
-                    : "bb-btn bb-btn-secondary"
-              }
-              disabled={loading}
-              onClick={() => runSimple(a)}
-            >
-              {ACTION_LABEL[a]}
-            </button>
-          ))}
+          {progressActions.map(actionButton)}
           {canSupplement ? (
             <button
               type="button"
@@ -209,6 +215,7 @@ export function BugActions({
               补充说明
             </button>
           ) : null}
+          {dangerActions.map(actionButton)}
         </div>
       ) : (
         <p className="bb-muted">

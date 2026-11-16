@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const user = await setupAdmin(body.username || "", body.password || "");
     const session = await getSession();
     session.userId = user.id;
+    session.sessionVersion = user.session_version ?? 0;
     await session.save();
     return json({
       user: {

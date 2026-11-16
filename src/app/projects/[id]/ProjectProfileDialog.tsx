@@ -566,7 +566,7 @@ function LogoField({
           </button>
         ) : null}
       </div>
-      <p className="bb-muted bb-field-hint">png、jpg 或 webp，不超过 2MB。显示在项目列表和项目标题上。</p>
+      <p className="bb-muted bb-field-hint">png、jpg、jpeg 或 webp，不超过 2MB。显示在项目列表和项目标题上。</p>
     </div>
   );
 }

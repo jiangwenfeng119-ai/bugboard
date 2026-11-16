@@ -63,8 +63,10 @@ export async function handleMcpRequest(req: Request): Promise<Response> {
   }
 
   const apiKey = authorization!.slice("Bearer ".length).trim();
+  // 工具在本进程里再调 REST。用访客的 Host（公网域名或映射端口）回连会在容器里失败。
+  const port = process.env.PORT || "3000";
   const mcp = createBugboardMcpServer({
-    baseUrl: new URL(req.url).origin,
+    baseUrl: `http://127.0.0.1:${port}`,
     apiKey,
   });
   const transport = new WebStandardStreamableHTTPServerTransport({

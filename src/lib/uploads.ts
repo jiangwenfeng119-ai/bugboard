@@ -27,7 +27,6 @@ const ALLOWED_EXT = new Set([
   ".wav",
   ".ogg",
   ".m4a",
-  ".webm",
 ]);
 
 export function assertAllowedUpload(filename: string, size: number) {
@@ -97,6 +96,33 @@ export function saveUploadedFile(params: {
   return getDb()
     .prepare("SELECT * FROM attachments WHERE id = ?")
     .get(info.lastInsertRowid) as AttachmentRow;
+}
+
+export function writeAttachmentFile(folder: string, filename: string, buffer: Buffer) {
+  assertAllowedUpload(filename, buffer.length);
+  const safeName = filename.replace(/[^\w.\-\u4e00-\u9fff]+/g, "_");
+  const rel = path.join(folder, `${nanoid(10)}_${safeName}`);
+  const abs = path.join(uploadsRoot(), rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, buffer);
+  return {
+    rel,
+    filename,
+    mime: mimeForFilename(filename),
+    size: buffer.length,
+  };
+}
+
+export function discardAttachmentFile(rel: string) {
+  try {
+    fs.unlinkSync(absoluteAttachmentPath(rel));
+  } catch {
+    // 回滚时文件可能还没写完
+  }
+}
+
+export function unlinkStoredPaths(paths: string[]) {
+  for (const rel of paths) discardAttachmentFile(rel);
 }
 
 const INLINE_EXT = new Set([

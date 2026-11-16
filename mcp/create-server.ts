@@ -21,16 +21,27 @@ async function api(
   init: RequestInit = {}
 ): Promise<unknown> {
   if (!KEY) throw new Error("BUGBOARD_API_KEY 未设置");
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${KEY}`,
-      ...(init.body && !(init.body instanceof FormData)
-        ? { "Content-Type": "application/json" }
-        : {}),
-      ...(init.headers || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${KEY}`,
+        ...(init.body && !(init.body instanceof FormData)
+          ? { "Content-Type": "application/json" }
+          : {}),
+        ...(init.headers || {}),
+      },
+    });
+  } catch (error) {
+    const cause = error instanceof Error ? error.cause : undefined;
+    const code =
+      cause && typeof cause === "object" && "code" in cause
+        ? String((cause as { code?: unknown }).code || "")
+        : "";
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error([message, code, `${BASE}${path}`].filter(Boolean).join(" "));
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(
@@ -827,7 +838,7 @@ server.tool(
 
 server.tool(
   "upload_project_logo",
-  "给项目上传 logo（仅管理员级 Key）。path 是本机图片绝对路径，只接受 png、jpg、webp，单张不超过 2MB。再上传会替换原来的图。显示在项目列表卡片和项目标题上。修报障时不要调用，只有用户让你补项目资料时才用。",
+  "给项目上传 logo（仅管理员级 Key）。path 是本机图片绝对路径，只接受 png、jpg、jpeg、webp，单张不超过 2MB。再上传会替换原来的图。显示在项目列表卡片和项目标题上。修报障时不要调用，只有用户让你补项目资料时才用。",
   {
     projectId: z.number().int().positive(),
     path: z.string().min(1).describe("要上传的本机图片绝对路径"),

@@ -11,6 +11,7 @@ export function PasswordField({
   autoComplete,
   minLength,
   required,
+  hint,
 }: {
   id: string;
   label: string;
@@ -19,6 +20,7 @@ export function PasswordField({
   autoComplete?: string;
   minLength?: number;
   required?: boolean;
+  hint?: string;
 }) {
   const [visible, setVisible] = useState(false);
   return (
@@ -47,6 +49,7 @@ export function PasswordField({
           {visible ? <IconEyeOff /> : <IconEye />}
         </button>
       </div>
+      {hint ? <p className="bb-field-hint">{hint}</p> : null}
     </div>
   );
 }

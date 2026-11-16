@@ -267,7 +267,7 @@ describe("capture sessions", () => {
     });
     expect(reported.reporter_id).toBe(admin.id);
     expect(reported.source_url).toBe("https://shop.example/cart");
-    expect(reported.body).toContain("cart failed");
+    expect(reported.body).not.toContain("cart failed");
     expect(services.getAttachments("bug", reported.id)).toHaveLength(1);
 
     await expect(speech.transcribeSpeech({ filename: "a.webm", mime: "audio/webm", buffer: Buffer.from("a") }, "")).resolves.toEqual({
