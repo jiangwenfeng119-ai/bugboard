@@ -5012,6 +5012,39 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   flex: 1 1 16rem;
 }
 
+.bb-change-banner {
+  margin: 0.65rem 0 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--ink-muted) 22%, white);
+  border-radius: 0.55rem;
+  background: var(--surface-2);
+}
+
+.bb-change-banner strong {
+  display: block;
+  font-weight: 600;
+}
+
+.bb-change-banner p {
+  margin: 0.25rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.bb-change-banner-danger {
+  border-color: color-mix(in srgb, var(--danger) 28%, white);
+  background: color-mix(in srgb, var(--danger) 7%, white);
+}
+
+.bb-change-banner-danger strong {
+  color: var(--danger);
+}
+
+.bb-change-banner-danger p {
+  color: color-mix(in srgb, var(--danger) 55%, var(--ink-muted));
+}
+
 .bb-badge-change-fix {
   color: var(--status-fixing);
   background: color-mix(in srgb, var(--status-fixing) 12%, white);

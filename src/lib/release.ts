@@ -86,6 +86,7 @@ export function markReleased(
 /** 待发布报障，以及还没挂上某次发布的代码变更。仅管理员。 */
 export function listPendingRelease(identity: Identity, projectId: number) {
   assertProjectChangeAdmin(identity, projectId);
+  expireStaleRunningReleases();
   const bugs = getDb()
     .prepare(
       `SELECT id, public_id, title, priority
@@ -109,6 +110,11 @@ export function listPendingRelease(identity: Identity, projectId: number) {
       bug_ids: change.bug_ids,
       created_at: change.created_at,
     })),
+    releaseFeedback: {
+      activeStatus: activeReleaseStatus(projectId),
+      latestFailureDetail: latestReleaseFailureDetail(projectId),
+      advancesBugs: true,
+    },
   };
 }
 
@@ -362,6 +368,35 @@ function releaseInFlight(projectId: number) {
        LIMIT 1`
     )
     .get(projectId) as { id: number } | undefined;
+}
+
+function activeReleaseStatus(projectId: number): "queued" | "running" | null {
+  const row = getDb()
+    .prepare(
+      `SELECT status FROM agent_dispatches
+       WHERE project_id = ? AND target = 'release_runner' AND reason = 'release'
+         AND status IN ('queued', 'running')
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    .get(projectId) as { status: string } | undefined;
+  if (row?.status === "queued" || row?.status === "running") return row.status;
+  return null;
+}
+
+/** 最近一次失败发布的说明；若之后又有成功发布则不再提示。 */
+function latestReleaseFailureDetail(projectId: number): string | null {
+  const row = getDb()
+    .prepare(
+      `SELECT result, detail FROM project_changes
+       WHERE project_id = ? AND kind = 'release'
+       ORDER BY id DESC
+       LIMIT 1`
+    )
+    .get(projectId) as { result: string | null; detail: string | null } | undefined;
+  if (!row || row.result !== "failed") return null;
+  const detail = row.detail?.trim() || "";
+  return detail || "发布失败";
 }
 
 function abandonRunningRelease(

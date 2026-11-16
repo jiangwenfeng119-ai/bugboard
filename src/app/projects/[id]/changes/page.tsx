@@ -12,7 +12,12 @@ import type {
   ProjectChangeRow,
   ReleaseTrigger,
 } from "@/lib/types";
-import { ChangesPanel, type ChangeListItem, type PendingReleaseBug } from "./ChangesPanel";
+import {
+  ChangesPanel,
+  type ChangeListItem,
+  type PendingReleaseBug,
+  type ReleaseFeedback,
+} from "./ChangesPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +74,11 @@ export default async function ChangesPage({
     publicId: bug.public_id,
     title: bug.title,
   }));
+  const releaseFeedback: ReleaseFeedback = pending?.releaseFeedback ?? {
+    activeStatus: null,
+    latestFailureDetail: null,
+    advancesBugs: true,
+  };
 
   return (
     <div className="bb-bugs-page">
@@ -80,6 +90,7 @@ export default async function ChangesPage({
         total={total}
         canRelease={canRelease}
         pendingBugs={pendingBugs}
+        releaseFeedback={releaseFeedback}
       />
     </div>
   );

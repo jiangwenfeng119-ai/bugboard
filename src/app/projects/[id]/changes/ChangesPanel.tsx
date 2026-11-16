@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { HoverTip } from "@/components/HoverTip";
-import { canImmediateRelease } from "@/lib/release-ui";
+import {
+  canImmediateRelease,
+  releaseFinishedNotice,
+  releaseStatusBanner,
+  releaseSubmitNotice,
+} from "@/lib/release-ui";
 import type { ProjectChangeKind } from "@/lib/types";
 
 export type ChangeListItem = {
@@ -30,6 +35,12 @@ export type PendingReleaseBug = {
   title: string;
 };
 
+export type ReleaseFeedback = {
+  activeStatus: "queued" | "running" | null;
+  latestFailureDetail: string | null;
+  advancesBugs: boolean;
+};
+
 const KIND_CLASS: Record<ProjectChangeKind, string> = {
   fix: "bb-badge bb-badge-change-fix",
   feature: "bb-badge bb-badge-change-feature",
@@ -44,6 +55,7 @@ export function ChangesPanel({
   total,
   canRelease,
   pendingBugs,
+  releaseFeedback,
 }: {
   projectId: number;
   filter: "" | "code" | "release";
@@ -51,6 +63,7 @@ export function ChangesPanel({
   total: number;
   canRelease: boolean;
   pendingBugs: PendingReleaseBug[];
+  releaseFeedback: ReleaseFeedback;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<number[]>([]);
@@ -58,10 +71,57 @@ export function ChangesPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [feedback, setFeedback] = useState(releaseFeedback);
+
+  useEffect(() => {
+    setFeedback(releaseFeedback);
+  }, [releaseFeedback]);
+
+  const jobInFlight = feedback.activeStatus === "queued" || feedback.activeStatus === "running";
+
+  useEffect(() => {
+    if (!canRelease || !jobInFlight) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/release`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { releaseFeedback?: ReleaseFeedback };
+        if (!data.releaseFeedback || cancelled) return;
+        setFeedback(data.releaseFeedback);
+        const stillActive =
+          data.releaseFeedback.activeStatus === "queued" ||
+          data.releaseFeedback.activeStatus === "running";
+        if (!stillActive) {
+          setNotice(
+            data.releaseFeedback.latestFailureDetail
+              ? ""
+              : releaseFinishedNotice(data.releaseFeedback.advancesBugs)
+          );
+          router.refresh();
+        }
+      } catch {
+        // Keep the last known banner; next tick retries.
+      }
+    };
+    const id = window.setInterval(tick, 3000);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [canRelease, jobInFlight, projectId, router]);
 
   const pendingIds = new Set(pendingBugs.map((bug) => bug.id));
   const chosen = selected.filter((id) => pendingIds.has(id));
-  const canRunRelease = canImmediateRelease(pendingBugs.length);
+  const canRunRelease = canImmediateRelease(pendingBugs.length, jobInFlight);
+  const banner = canRelease
+    ? releaseStatusBanner({
+        activeStatus: feedback.activeStatus,
+        latestFailureDetail: feedback.latestFailureDetail,
+        advancesBugs: feedback.advancesBugs,
+      })
+    : null;
 
   function toggle(id: number) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -83,14 +143,30 @@ export function ChangesPanel({
           ...(bugIds ? { bugIds } : {}),
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        releaseFeedback?: ReleaseFeedback;
+      };
       if (!res.ok) {
         setError(data.error || `发布失败（HTTP ${res.status}）`);
         return;
       }
       setSelected([]);
       setConfirming(null);
-      setNotice(mode === "run" ? "已排队，本机发布任务会接着做。" : "已标记发布。");
+      setNotice(releaseSubmitNotice(mode, feedback.advancesBugs));
+      if (mode === "run") {
+        setFeedback((prev) => ({
+          ...prev,
+          activeStatus: "queued",
+          latestFailureDetail: null,
+        }));
+      } else {
+        setFeedback((prev) => ({
+          ...prev,
+          activeStatus: null,
+          latestFailureDetail: null,
+        }));
+      }
       router.refresh();
     } catch {
       setError("网络异常，请重试");
@@ -128,23 +204,32 @@ export function ChangesPanel({
               className={canRunRelease ? "bb-btn" : "bb-btn bb-btn-secondary"}
               disabled={busy || !canRunRelease}
               title={
-                canRunRelease ? undefined : "眼下还没有待发布报障。有待发单时再点这里。"
+                jobInFlight
+                  ? "已有发布任务在排队或执行，结束后才能再次发布。"
+                  : canRunRelease
+                    ? undefined
+                    : "眼下还没有待发布报障。有待发单时再点这里。"
               }
               onClick={() => setConfirming("run")}
             >
-              立即发布
+              {feedback.activeStatus === "running"
+                ? "发布执行中…"
+                : feedback.activeStatus === "queued"
+                  ? "发布排队中…"
+                  : "立即发布"}
             </button>
             <button
               type="button"
               className="bb-btn bb-btn-secondary"
-              disabled={busy}
+              disabled={busy || jobInFlight}
+              title={jobInFlight ? "已有发布任务在排队或执行。" : undefined}
               onClick={() => setConfirming("mark")}
             >
-              标记已发布
+              {jobInFlight ? "发布进行中…" : "标记已发布"}
             </button>
           </div>
         ) : null}
-        {canRelease && !canRunRelease && !confirming ? (
+        {canRelease && !canRunRelease && !confirming && !jobInFlight ? (
           <p className="bb-muted" style={{ margin: "0.35rem 0 0", width: "100%" }}>
             眼下还没有待发布的报障。修好并提交说明后，再回这里一键发布就行；若已经在外面发完，也可以用「标记已发布」记一笔。
           </p>
@@ -161,10 +246,21 @@ export function ChangesPanel({
           {notice}
         </p>
       ) : null}
+      {banner ? (
+        <div
+          className={
+            banner.tone === "danger" ? "bb-change-banner bb-change-banner-danger" : "bb-change-banner"
+          }
+          role={banner.tone === "danger" ? "alert" : "status"}
+        >
+          <strong>{banner.title}</strong>
+          <p>{banner.body}</p>
+        </div>
+      ) : null}
 
       {canRelease && confirming ? (
         <div className="bb-card bb-section-card bb-change-confirm">
-          <p>{confirmCopy(confirming, chosen.length, pendingBugs.length)}</p>
+          <p>{confirmCopy(confirming, chosen.length, pendingBugs.length, feedback.advancesBugs)}</p>
           <button
             type="button"
             className="bb-btn"
@@ -323,7 +419,12 @@ function toneClass(tone: ChangeListItem["onlineTone"]) {
   return "bb-muted";
 }
 
-function confirmCopy(mode: "run" | "mark", chosenCount: number, pendingCount: number) {
+function confirmCopy(
+  mode: "run" | "mark",
+  chosenCount: number,
+  pendingCount: number,
+  advancesBugs: boolean
+) {
   const scope =
     chosenCount > 0
       ? `选中的 ${chosenCount} 条`
@@ -331,9 +432,20 @@ function confirmCopy(mode: "run" | "mark", chosenCount: number, pendingCount: nu
         ? `全部 ${pendingCount} 条`
         : "";
   if (mode === "run") {
-    if (!scope) return "确认立即发布？当前没有待发布报障，仍会排队一次发布。报障状态要等发布完成才变。";
-    return `确认立即发布？将排队发布${scope}待发布报障。报障状态要等发布完成才变。`;
+    const statusLine = advancesBugs
+      ? "成功后对应报障进入待确认；失败则留在待发布，本页会显示失败原因，可重新发布。"
+      : "完成后变更列表会记发布结果；失败时本页会显示原因，可重新发布。";
+    if (!scope) {
+      return `确认立即发布？当前没有待发布报障，仍会排队一次发布。${statusLine}`;
+    }
+    return `确认立即发布？将排队发布${scope}待发布报障。${statusLine}`;
   }
-  if (!scope) return "确认标记已发布？不会跑部署，会记一条发布记录。";
-  return `确认标记已发布？不会跑部署。${scope}待发布报障会进入待确认。`;
+  if (!scope) {
+    return advancesBugs
+      ? "确认标记已发布？不会跑部署，会记一条发布记录。"
+      : "确认标记已发布？不会跑部署，会记一条发布记录。";
+  }
+  return advancesBugs
+    ? `确认标记已发布？不会跑部署。${scope}待发布报障会进入待确认。`
+    : `确认标记已发布？不会跑部署。会记一条发布记录（含${scope}待发布报障）。`;
 }
