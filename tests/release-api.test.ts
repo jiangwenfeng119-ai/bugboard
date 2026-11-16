@@ -201,6 +201,11 @@ describe("changes and release routes", () => {
     expect(pending.status).toBe(200);
     const pendingBody = await pending.json();
     expect(pendingBody.bugs.map((item: { id: number }) => item.id)).toEqual([bug.id]);
+    expect(pendingBody.releaseFeedback).toEqual({
+      activeStatus: "queued",
+      latestFailureDetail: null,
+      advancesBugs: true,
+    });
 
     const member = await GET(
       request("GET", `http://test/api/projects/${project.id}/release`, userKey),
