@@ -10,7 +10,11 @@ import {
   ACTION_LABEL,
   type TransitionAction,
 } from "@/lib/state-machine";
-import { bugPageActions } from "./bug-page-actions";
+import {
+  bugPageActions,
+  isDangerBugAction,
+  primaryBugAction,
+} from "./bug-page-actions";
 import type { Priority } from "@/lib/types";
 
 const NOTE_ACTIONS = new Set<TransitionAction>([
@@ -165,8 +169,14 @@ export function BugActions({
   }
 
   if (pageActions.length === 0 && !canSupplement && !isAdmin) {
-    return <p className="bb-muted" style={{ margin: 0 }}>当前无需你操作，可查看时间线。</p>;
+    return (
+      <p className="bb-muted" style={{ margin: 0 }}>
+        这一步暂时轮不到你。可以先看时间线；轮到你时，这里会出现按钮。
+      </p>
+    );
   }
+
+  const primary = primaryBugAction(pageActions);
 
   return (
     <div>
@@ -177,9 +187,11 @@ export function BugActions({
               key={a}
               type="button"
               className={
-                a === "mark_invalid" || a === "decline_product" || a === "reject_fix"
+                isDangerBugAction(a)
                   ? "bb-btn bb-btn-danger"
-                  : "bb-btn"
+                  : a === primary
+                    ? "bb-btn"
+                    : "bb-btn bb-btn-secondary"
               }
               disabled={loading}
               onClick={() => runSimple(a)}
@@ -199,7 +211,9 @@ export function BugActions({
           ) : null}
         </div>
       ) : (
-        <p className="bb-muted">当前状态没有可执行的流转操作。</p>
+        <p className="bb-muted">
+          这一步在等别人处理。你可以先看时间线；有可做的操作时会出现在这里。
+        </p>
       )}
 
       {active ? (
