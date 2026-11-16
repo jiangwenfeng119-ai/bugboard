@@ -88,9 +88,7 @@ export function AnalyticsAdmin({ stats }: { stats: ReporterAnalytics }) {
             value={stats.range}
             onChange={(e) => {
               const range = e.target.value;
-              router.push(
-                range === "all" ? "/admin?tab=analytics" : `/admin?tab=analytics&range=${range}`
-              );
+              router.push(range === "all" ? "/admin" : `/admin?range=${range}`);
             }}
           >
             <option value="all">全部时间</option>

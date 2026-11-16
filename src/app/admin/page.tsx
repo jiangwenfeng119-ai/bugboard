@@ -22,10 +22,10 @@ import { AgentPromptsAdmin } from "./AgentPromptsAdmin";
 export const dynamic = "force-dynamic";
 
 const TABS = [
-  { id: "users", href: "/admin", label: "用户", icon: IconUsers },
+  { id: "analytics", href: "/admin", label: "数据分析", icon: IconChart },
+  { id: "users", href: "/admin?tab=users", label: "用户", icon: IconUsers },
   { id: "keys", href: "/admin?tab=keys", label: "API Key", icon: IconKey },
   { id: "wake", href: "/admin?tab=wake", label: "分派给 Agent", icon: IconBell },
-  { id: "analytics", href: "/admin?tab=analytics", label: "数据分析", icon: IconChart },
   { id: "prompts", href: "/admin?tab=prompts", label: "提示词", icon: IconPencil },
 ] as const;
 
@@ -43,9 +43,12 @@ export default async function AdminPage({
   const identity = await requireAdminUser();
   const sp = await searchParams;
   const tab =
-    sp.tab === "keys" || sp.tab === "analytics" || sp.tab === "prompts" || sp.tab === "wake"
+    sp.tab === "users" ||
+    sp.tab === "keys" ||
+    sp.tab === "prompts" ||
+    sp.tab === "wake"
       ? sp.tab
-      : "users";
+      : "analytics";
   const projects = tab === "wake" ? listProjects(identity) : [];
   const requestedProject = Number(sp.project);
   const wakeProject = projects.find((project) => project.id === requestedProject) ?? null;

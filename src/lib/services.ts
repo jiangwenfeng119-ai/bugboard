@@ -1694,6 +1694,27 @@ export function openBugCountsByProject(identity: Identity) {
   return result;
 }
 
+/** Total bug count per accessible project (all statuses). */
+export function bugTotalsByProject(identity: Identity) {
+  const projects = listProjects(identity);
+  const result: Record<number, number> = {};
+  for (const project of projects) result[project.id] = 0;
+  if (projects.length === 0) return result;
+
+  const ids = projects.map((project) => project.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = getDb()
+    .prepare(
+      `SELECT project_id, COUNT(*) AS c
+       FROM bugs
+       WHERE project_id IN (${placeholders})
+       GROUP BY project_id`
+    )
+    .all(...ids) as { project_id: number; c: number }[];
+  for (const row of rows) result[row.project_id] = row.c;
+  return result;
+}
+
 const INBOX_KIND_ORDER = [
   "awaiting_confirm",
   "ready_to_release",

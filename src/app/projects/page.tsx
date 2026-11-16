@@ -3,9 +3,11 @@ import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { IconArrowRight, IconFolder } from "@/components/Icons";
 import { projectLogoSrc } from "@/lib/project-logo-shared";
+import { resolveProjectSort, sortProjects } from "@/lib/project-sort";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { requireUser } from "@/lib/session-guard";
 import {
+  bugTotalsByProject,
   listInbox,
   listProjects,
   openBugCountsByProject,
@@ -15,6 +17,7 @@ import type { Role } from "@/lib/types";
 import { CreateProjectForm } from "./CreateProjectForm";
 import { DeleteProjectButton } from "./DeleteProjectButton";
 import { InboxSection } from "./InboxSection";
+import { ProjectSortSelect } from "./ProjectSortSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -67,9 +70,15 @@ function attentionChips(
   ];
 }
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string }>;
+}) {
   const identity = await requireUser();
-  const projects = listProjects(identity);
+  const sp = await searchParams;
+  const sort = resolveProjectSort(sp.sort);
+  const projects = sortProjects(listProjects(identity), sort, bugTotalsByProject(identity));
   const inbox = listInbox(identity);
   const openCounts = openBugCountsByProject(identity);
   const canManage = isAdminRole(identity.role);
@@ -89,7 +98,10 @@ export default async function ProjectsPage() {
             进入项目即打开报障列表
           </p>
         </div>
-        {canManage ? <CreateProjectForm /> : null}
+        <div className="bb-page-head-actions">
+          {projects.length > 0 ? <ProjectSortSelect sort={sort} /> : null}
+          {canManage ? <CreateProjectForm /> : null}
+        </div>
       </div>
 
       <InboxSection inbox={inbox} />
@@ -144,16 +156,28 @@ export default async function ProjectsPage() {
                     )}
                   </Link>
                   <div className="bb-open-chips">
-                    {attentionChips(p.id, counts, identity).map((chip) => (
-                      <Link
-                        key={chip.key}
-                        href={chip.href}
-                        className={`bb-open-chip${chip.count > 0 ? ` is-hot is-${chip.tone}` : ""}`}
-                        title={chip.title}
-                      >
-                        {chip.count} {chip.label}
-                      </Link>
-                    ))}
+                    {(() => {
+                      const hot = attentionChips(p.id, counts, identity).filter(
+                        (chip) => chip.count > 0
+                      );
+                      if (hot.length === 0) {
+                        return (
+                          <span className="bb-open-chip is-quiet" title="暂时没有需要跟进的报障">
+                            暂无待办
+                          </span>
+                        );
+                      }
+                      return hot.map((chip) => (
+                        <Link
+                          key={chip.key}
+                          href={chip.href}
+                          className={`bb-open-chip is-hot is-${chip.tone}`}
+                          title={chip.title}
+                        >
+                          {chip.count} {chip.label}
+                        </Link>
+                      ));
+                    })()}
                   </div>
                 </div>
                 <Link href={bugsHref} className="bb-project-card-link">
