@@ -270,7 +270,7 @@ export function listMembers(identity: Identity, projectId: number) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   return getDb()
     .prepare(
-      `SELECT u.id, u.username, pm.role, u.active
+      `SELECT u.id, u.username, pm.role, u.role AS account_role, u.active
        FROM project_members pm JOIN users u ON u.id = pm.user_id
        WHERE pm.project_id = ?
        ORDER BY u.username`
@@ -279,6 +279,7 @@ export function listMembers(identity: Identity, projectId: number) {
     id: number;
     username: string;
     role: ProjectRole;
+    account_role: string;
     active: number;
   }[];
 }
