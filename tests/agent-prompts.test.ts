@@ -60,6 +60,8 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("改产品");
     expect(ADMIN_AGENT_PROMPT).toContain("这张在等产品经理决定做不做");
     expect(ADMIN_AGENT_PROMPT).toContain("之后补的说明，都不算");
+    expect(ADMIN_AGENT_PROMPT).toContain("页面上点了「可以做」也算已确认");
+    expect(ADMIN_AGENT_PROMPT).toContain("不要再 request_product，也不要 start_fix");
     expect(ADMIN_AGENT_PROMPT).not.toContain("请和产品经理沟通是否要增加");
     expect(ADMIN_AGENT_PROMPT).toContain("这张按需求做");
     expect(ADMIN_AGENT_PROMPT).toContain("已经和产品经理沟通确认");

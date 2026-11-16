@@ -4258,6 +4258,28 @@ a.bb-bug-id:hover {
   gap: 0.45rem;
 }
 
+.bb-cap-more {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.55rem;
+}
+
+.bb-cap-more > summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  list-style: none;
+}
+
+.bb-cap-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.bb-cap-more[open] > summary {
+  margin-bottom: 0.35rem;
+}
+
 .bb-cap-row,
 .bb-cap-actions {
   display: flex;

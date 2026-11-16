@@ -217,6 +217,7 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
 
           <CaptureTools
             projectId={projectId}
+            essentials
             draftPending={Boolean(
               title.trim() || !bugBodyUntouched(body) || files.length || quote.trim()
             )}

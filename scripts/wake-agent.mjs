@@ -165,26 +165,56 @@ export function takeSessionId(text) {
   }
 }
 
-export function assertWorkdir(cwd) {
+function workdirMsg(projectCode, withCode, withoutCode) {
+  const code = typeof projectCode === "string" ? projectCode.trim() : "";
+  return code ? withCode(code) : withoutCode;
+}
+
+export function assertWorkdir(cwd, projectCode = "") {
   if (!cwd || typeof cwd !== "string" || !cwd.trim()) {
-    throw new Error("没有配置该项目的本地目录");
+    throw new Error(
+      workdirMsg(
+        projectCode,
+        (code) => `没有配置项目 ${code} 的本地目录（wake.config.json 的 projects）`,
+        "没有配置该项目的本地目录"
+      )
+    );
   }
+  const notDir = workdirMsg(
+    projectCode,
+    (code) => `项目 ${code} 的工作目录不是文件夹`,
+    "工作目录不是文件夹"
+  );
   const abs = path.resolve(cwd);
   let real;
   try {
-    if (!fs.statSync(abs).isDirectory()) throw new Error("工作目录不是文件夹");
+    if (!fs.statSync(abs).isDirectory()) throw new Error(notDir);
     real = fs.realpathSync(abs);
   } catch (error) {
-    if (error instanceof Error && error.message === "工作目录不是文件夹") throw error;
-    throw new Error("工作目录不存在");
+    if (error instanceof Error && error.message === notDir) throw error;
+    throw new Error(
+      workdirMsg(projectCode, (code) => `项目 ${code} 的工作目录不存在`, "工作目录不存在")
+    );
   }
   const home = fs.realpathSync(os.homedir());
   const root = path.parse(real).root;
   if (real === home || real === root) {
-    throw new Error("工作目录不能是用户主目录或磁盘根目录");
+    throw new Error(
+      workdirMsg(
+        projectCode,
+        (code) => `项目 ${code} 的工作目录不能是用户主目录或磁盘根目录`,
+        "工作目录不能是用户主目录或磁盘根目录"
+      )
+    );
   }
   if (fs.existsSync(path.join(real, "wake.config.json"))) {
-    throw new Error("工作目录里有叫醒密钥，请改到专用的项目目录");
+    throw new Error(
+      workdirMsg(
+        projectCode,
+        (code) => `项目 ${code} 的工作目录里有叫醒密钥，请改到专用的项目目录`,
+        "工作目录里有叫醒密钥，请改到专用的项目目录"
+      )
+    );
   }
   return real;
 }
@@ -376,7 +406,7 @@ export function createWakeServer(config) {
     const configured = config.projects[code] || config.projects[String(payload.project?.id || "")] || config.cwd;
     let cwd;
     try {
-      cwd = assertWorkdir(configured);
+      cwd = assertWorkdir(configured, code);
     } catch (error) {
       const message = error instanceof Error ? error.message : "工作目录无效";
       send(res, 500, { error: message });

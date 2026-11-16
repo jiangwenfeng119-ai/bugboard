@@ -653,10 +653,12 @@ export function createBug(
     }
   }
   const bug = getBug(identity, bugId);
-  try {
-    scheduleAgentWake(bug, "created");
-  } catch (error) {
-    console.error("dispatch schedule failed", error instanceof Error ? error.message : error);
+  if (identity.kind === "user") {
+    try {
+      scheduleAgentWake(bug, "created");
+    } catch (error) {
+      console.error("dispatch schedule failed", error instanceof Error ? error.message : error);
+    }
   }
   return bug;
 }

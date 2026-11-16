@@ -37,7 +37,7 @@ export default async function ProjectSummaryPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; showAll?: string }>;
 }) {
   const identity = await requireUser();
   const { id } = await params;
@@ -59,7 +59,7 @@ export default async function ProjectSummaryPage({
   const reporterSeries = colorPeople(stats.createdByReporter);
   const actorSeries = colorPeople(stats.movedByActor);
 
-  const entries: { key: BugStatus | "total"; label: string; value: number }[] = [
+  const allEntries: { key: BugStatus | "total"; label: string; value: number }[] = [
     { key: "total", label: "总数", value: stats.total },
     ...(Object.keys(STATUS_LABEL) as BugStatus[]).map((key) => ({
       key,
@@ -67,6 +67,11 @@ export default async function ProjectSummaryPage({
       value: stats.byStatus[key],
     })),
   ];
+  const showAll = sp.showAll === "1";
+  const entries = showAll
+    ? allEntries
+    : allEntries.filter((e) => e.key === "total" || e.value > 0);
+  const hiddenZeros = allEntries.length - entries.length;
 
   return (
     <div className="bb-summary">
@@ -89,6 +94,24 @@ export default async function ProjectSummaryPage({
           </Link>
         ))}
       </div>
+      {hiddenZeros > 0 || showAll ? (
+        <p className="bb-muted" style={{ margin: "0.65rem 0 0" }}>
+          {showAll ? (
+            <Link href={`/projects/${id}/summary${sp.days ? `?days=${sp.days}` : ""}`}>
+              收起为零的状态
+            </Link>
+          ) : (
+            <>
+              已收起 {hiddenZeros} 个为零的状态。{" "}
+              <Link
+                href={`/projects/${id}/summary?showAll=1${sp.days ? `&days=${sp.days}` : ""}`}
+              >
+                查看全部状态
+              </Link>
+            </>
+          )}
+        </p>
+      ) : null}
 
       <div className="bb-card bb-section-card">
         <div className="bb-section-head">

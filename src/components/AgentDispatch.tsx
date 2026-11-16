@@ -9,6 +9,7 @@ import type {
   DispatchSettings,
   LocalAgentKind,
 } from "@/lib/dispatch";
+import { explainDispatchDetail } from "@/lib/dispatch-detail";
 import { formatDateTimeShort } from "@/lib/time";
 
 const REASON_LABEL: Record<string, string> = {
@@ -17,6 +18,7 @@ const REASON_LABEL: Record<string, string> = {
   reject_fix: "打回",
   dispute_invalid: "异议",
   reopen_invalid: "撤回不属实",
+  accept_product: "可以做",
   manual: "手动",
   test: "测试",
   organize: "整理走查",
@@ -79,22 +81,15 @@ const DEPLOY_LABEL: Record<DispatchSettings["deployMode"], string> = {
   ecs_deploy: "云上部署",
 };
 
-function explainDetail(detail: string) {
-  if (
-    detail === "fetch failed" ||
-    /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ETIMEDOUT|AbortError|timeout/i.test(detail)
-  ) {
-    return "连不上这个地址（本机叫醒服务没在跑，或 Docker 要用 host.docker.internal）";
-  }
-  if (detail === "没有可启动的本机 agent") return "本机收到了，但没有可启动的 Agent";
-  return detail;
-}
-
 function resultText(item: DispatchRecent) {
   const when = formatDateTimeShort(item.createdAt);
   if (item.reason === "test") {
     if (item.status === "failed") {
-      return { head: `${when} · 测试本机地址：没送到`, href: "", extra: explainDetail(item.detail) };
+      return {
+        head: `${when} · 测试本机地址：没送到`,
+        href: "",
+        extra: explainDispatchDetail(item.detail),
+      };
     }
     if (item.status === "pending") {
       return { head: `${when} · 测试本机地址：正在发送`, href: "", extra: "" };
@@ -112,7 +107,7 @@ function resultText(item: DispatchRecent) {
     return { head, href: item.detail, extra: "" };
   }
   if (item.status === "failed" || item.status === "skipped") {
-    return { head, href: "", extra: explainDetail(item.detail) };
+    return { head, href: "", extra: explainDispatchDetail(item.detail) };
   }
   return { head, href: "", extra: "" };
 }
@@ -879,10 +874,12 @@ export function WakeBugButton({
   bugId,
   canWake,
   initial,
+  hold = "",
 }: {
   bugId: number;
   canWake: boolean;
   initial: DispatchRecent | null;
+  hold?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -923,6 +920,7 @@ export function WakeBugButton({
       ) : (
         <p className="bb-muted">这张报障还没有分派去修理。</p>
       )}
+      {hold ? <p className="bb-muted">{hold}</p> : null}
       {canWake ? (
         <button type="button" className="bb-btn bb-btn-secondary" onClick={wake} disabled={loading}>
           {loading ? "发送中…" : latest ? "再次分派去修理" : "分派去修理"}

@@ -17,11 +17,14 @@ export function CaptureTools({
   draftPending,
   onSnap,
   onVoice,
+  essentials = false,
 }: {
   projectId: number;
   draftPending: boolean;
   onSnap: (item: { file: File; note: string; strokes: Stroke[] }) => void;
   onVoice: (item: { file: File; text: string }) => void;
+  /** New-bug sheet: photo/file first; advanced capture behind disclosure. */
+  essentials?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -485,26 +488,55 @@ export function CaptureTools({
     <div className="bb-cap-tools">
       <div className="bb-label">取证</div>
       <div className="bb-cap-row">
-        <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void shareFrame()} disabled={recording === "walk"}>
-          共享画面
-        </button>
         <button type="button" className="bb-btn bb-btn-ghost" onClick={() => fileRef.current?.click()} disabled={recording === "walk"}>
           选择图片
         </button>
         <button type="button" className="bb-btn bb-btn-ghost" onClick={() => cameraRef.current?.click()} disabled={recording === "walk"}>
           拍照
         </button>
-        <button
-          type="button"
-          className="bb-btn bb-btn-ghost"
-          onClick={() => void recordVoice()}
-          disabled={recording === "walk"}
-          aria-pressed={recording === "voice"}
-        >
-          {recording === "voice" ? "停止" : "说一句"}
-        </button>
+        {!essentials ? (
+          <>
+            <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void shareFrame()} disabled={recording === "walk"}>
+              共享画面
+            </button>
+            <button
+              type="button"
+              className="bb-btn bb-btn-ghost"
+              onClick={() => void recordVoice()}
+              disabled={recording === "walk"}
+              aria-pressed={recording === "voice"}
+            >
+              {recording === "voice" ? "停止" : "说一句"}
+            </button>
+          </>
+        ) : null}
       </div>
-      <p className="bb-field-hint">圈图和语音写进这张单。</p>
+      <p className="bb-field-hint">
+        {essentials ? "先附上截图或照片；复杂取证可展开「更多取证」。" : "圈图和语音写进这张单。"}
+      </p>
+      {essentials ? (
+        <details className="bb-cap-more">
+          <summary>更多取证</summary>
+          <p className="bb-field-hint">共享画面、口述和走查会写进这张单；走查会先离开本页去整理草稿。</p>
+          <div className="bb-cap-row">
+            <button type="button" className="bb-btn bb-btn-ghost" onClick={() => void shareFrame()} disabled={recording === "walk"}>
+              共享画面
+            </button>
+            <button
+              type="button"
+              className="bb-btn bb-btn-ghost"
+              onClick={() => void recordVoice()}
+              disabled={recording === "walk"}
+              aria-pressed={recording === "voice"}
+            >
+              {recording === "voice" ? "停止" : "说一句"}
+            </button>
+            <button type="button" className="bb-btn bb-btn-ghost" onClick={requestWalk} disabled={recording !== null}>
+              录一段走查
+            </button>
+          </div>
+        </details>
+      ) : null}
       {recording === "voice" ? (
         <p className="bb-cap-status" role="status">
           正在听 {formatClock(seconds)}。停止后写入这张单。
@@ -618,7 +650,7 @@ export function CaptureTools({
             </button>
           </div>
         </div>
-      ) : (
+      ) : essentials ? null : (
         <div className="bb-cap-walk">
           <p className="bb-field-hint">边说边录屏幕。要标出一块，录的时候圈一下，这一帧会自己留下。</p>
           <div className="bb-cap-actions">

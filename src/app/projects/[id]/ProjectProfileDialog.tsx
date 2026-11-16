@@ -366,7 +366,7 @@ export function ProjectProfileDialog({
                       spellCheck={false}
                     />
                     <p className="bb-muted bb-field-hint">
-                      {`报障 ID 为缩写 + 年月日 + 序号，例如 ${codePreview}261106001。已有 ID 不会改。`}
+                      {`项目缩写，2–8 位，字母开头、可含数字。用作报障编号前缀，例如 ${codePreview}261106001。修改后已有编号不会改。`}
                     </p>
                   </div>
                   <div className="bb-field is-wide">

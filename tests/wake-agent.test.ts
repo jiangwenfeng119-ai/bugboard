@@ -98,6 +98,23 @@ describe("wake agent launch", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("names the project code in workdir errors when configured", () => {
+    expect(() => assertWorkdir("", "EMH")).toThrow(
+      "没有配置项目 EMH 的本地目录（wake.config.json 的 projects）"
+    );
+    expect(() => assertWorkdir("")).toThrow("没有配置该项目的本地目录");
+    expect(() => assertWorkdir("/no/such/wake-dir-emh", "EMH")).toThrow("项目 EMH 的工作目录不存在");
+    expect(() => assertWorkdir(os.homedir(), "EMH")).toThrow(
+      "项目 EMH 的工作目录不能是用户主目录或磁盘根目录"
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wake-secret-"));
+    fs.writeFileSync(path.join(root, "wake.config.json"), "{}");
+    expect(() => assertWorkdir(root, "EMH")).toThrow(
+      "项目 EMH 的工作目录里有叫醒密钥，请改到专用的项目目录"
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
   it("organizes a walkthrough with plan mode and tries the next local agent", () => {
     const vars = {
       prompt: "这一轮只整理走查。不要创建报障，不要改代码。",

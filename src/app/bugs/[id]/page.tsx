@@ -21,7 +21,7 @@ import {
 } from "@/lib/services";
 import { STATUS_LABEL } from "@/lib/types";
 import { WakeBugButton } from "@/components/AgentDispatch";
-import { latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
+import { bugAwaitingAgent, latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
 import { BugActions } from "./BugActions";
 import { bugPageActions } from "./bug-page-actions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
@@ -260,7 +260,12 @@ export default async function BugDetailPage({
               <h2>分派去修理</h2>
               <WakeBugButton
                 bugId={bug.id}
-                canWake={wakeEnabled && bug.status === "pending"}
+                canWake={wakeEnabled && bugAwaitingAgent(bug)}
+                hold={
+                  bug.status === "needs_product"
+                    ? "Agent 已停在这里，不会自己继续。点「可以做」之后会再叫醒它去改。"
+                    : ""
+                }
                 initial={wakeLatest}
               />
             </div>

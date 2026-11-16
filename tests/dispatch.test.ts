@@ -43,6 +43,53 @@ async function setup() {
 }
 
 describe("agent wake", () => {
+  it("does not wake when an agent files the bug", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const calls: string[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input.body);
+      return { status: 204, text: "" };
+    });
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+    });
+
+    const fixerKey = services.createApiKey(identity, { name: "fixer", role: "admin" });
+    const fixer = {
+      kind: "api_key" as const,
+      apiKeyId: fixerKey.id,
+      role: "admin" as const,
+      name: "fixer",
+      projectIds: [] as number[],
+    };
+    const qaKey = services.createApiKey(identity, {
+      name: "qa",
+      role: "user",
+      projectIds: [project.id],
+    });
+    const qa = {
+      kind: "api_key" as const,
+      apiKeyId: qaKey.id,
+      role: "user" as const,
+      name: "qa",
+      projectIds: [project.id],
+    };
+
+    services.createBug(fixer, { projectId: project.id, title: "agent 自己要改的" });
+    services.createBug(qa, { projectId: project.id, title: "测试 agent 记下的" });
+    await dispatch.flushDispatches();
+    expect(calls).toHaveLength(0);
+
+    const human = services.createBug(identity, {
+      projectId: project.id,
+      title: "人提交的",
+    });
+    await dispatch.flushDispatches();
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0]).bug.id).toBe(human.id);
+  });
+
   it("posts a signed webhook when a bug is created, and again when it returns to pending", async () => {
     const { services, dispatch, identity, project } = await setup();
     const calls: { url: string; headers: Record<string, string>; body: string }[] = [];
@@ -137,6 +184,73 @@ describe("agent wake", () => {
     await dispatch.flushDispatches();
     expect(calls).toHaveLength(beforeDispute + 1);
     expect(JSON.parse(calls.at(-1) || "{}").reason).toBe("dispute_invalid");
+  });
+
+  it("wakes again after the product manager accepts, and stays quiet when they decline", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const calls: string[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input.body);
+      return { status: 204, text: "" };
+    });
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+    });
+
+    const accepted = services.createBug(identity, {
+      projectId: project.id,
+      title: "要加 1% 税率",
+      body: "签署页现在只有 6% 和 13%",
+    });
+    await dispatch.flushDispatches();
+    const afterCreate = calls.length;
+    services.transitionBug(identity, accepted.id, "request_product", "要一个现在没有的税率");
+    await dispatch.flushDispatches();
+    expect(calls).toHaveLength(afterCreate);
+    expect(services.getBug(identity, accepted.id).status).toBe("needs_product");
+    expect(dispatch.bugAwaitingAgent(services.getBug(identity, accepted.id))).toBe(false);
+
+    services.transitionBug(identity, accepted.id, "accept_product");
+    await dispatch.flushDispatches();
+    expect(services.getBug(identity, accepted.id).status).toBe("fixing");
+    expect(dispatch.bugAwaitingAgent(services.getBug(identity, accepted.id))).toBe(true);
+    expect(calls).toHaveLength(afterCreate + 1);
+    const payload = JSON.parse(calls.at(-1) || "{}") as {
+      reason: string;
+      bug: { status: string };
+      prompt: string;
+    };
+    expect(payload.reason).toBe("accept_product");
+    expect(payload.bug.status).toBe("fixing");
+    expect(payload.prompt).toContain("可以做");
+    expect(payload.prompt).toContain("不要再 request_product");
+    expect(dispatch.shouldWakeOnAction("accept_product", "fixing", "api_key")).toBe(false);
+    expect(dispatch.shouldWakeOnAction("accept_product", "fixing", "user")).toBe(true);
+
+    dispatch.wakeBugNow(identity, accepted.id);
+    await dispatch.flushDispatches();
+    expect(calls).toHaveLength(afterCreate + 2);
+
+    const claimed = services.createBug(identity, {
+      projectId: project.id,
+      title: "合计不对",
+    });
+    await dispatch.flushDispatches();
+    services.transitionBug(identity, claimed.id, "start_fix");
+    expect(() => dispatch.wakeBugNow(identity, claimed.id)).toThrow(/待处理/);
+
+    const declined = services.createBug(identity, {
+      projectId: project.id,
+      title: "要加 3% 税率",
+    });
+    await dispatch.flushDispatches();
+    const beforeDecline = calls.length;
+    services.transitionBug(identity, declined.id, "request_product", "要一个现在没有的税率");
+    services.transitionBug(identity, declined.id, "decline_product", "这次不做");
+    await dispatch.flushDispatches();
+    expect(services.getBug(identity, declined.id).status).toBe("invalid");
+    expect(calls).toHaveLength(beforeDecline);
   });
 
   it("coalesces the same bug and reason for a minute, unless forced", async () => {
