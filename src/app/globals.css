@@ -20,14 +20,14 @@
   --status-needs: #0f766e;
   --status-product: #9a3412;
   --status-ready: #0d9488;
-  --status-awaiting: #5b4bb5;
+  --status-awaiting: #0c4a6e;
   --status-confirmed: #1b7f4a;
   --status-acknowledged: #3d5c4e;
   --status-invalid: #6b7280;
   --series-1: #1f6feb;
   --series-2: #0f766e;
   --series-3: #9a3412;
-  --series-4: #5b4bb5;
+  --series-4: #0c4a6e;
   --series-5: #334155;
   --series-6: #be123c;
   --priority-p1: #c62828;
@@ -38,7 +38,7 @@
   --radius: 14px;
   --font: "IBM Plex Sans Variable", "Noto Sans SC Variable", "PingFang SC", "Segoe UI", sans-serif;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.22, 1.22, 0.36, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --bb-topbar-h: 4.5rem;
   --bb-gutter: clamp(1.15rem, 2vw, 2.25rem);
   --bb-measure: 40em;
@@ -640,12 +640,11 @@ body.bb-modal-open {
   border: 1px solid color-mix(in srgb, var(--line) 88%, white);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  transition: box-shadow 320ms var(--ease-spring), transform 320ms var(--ease-spring), border-color 200ms ease;
+  transition: box-shadow 200ms var(--ease-out), border-color 200ms ease;
 }
 
 .bb-card-interactive:hover {
   box-shadow: var(--shadow-hover);
-  transform: translateY(-6px);
   border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 
@@ -1135,12 +1134,11 @@ a.bb-bug-id:hover {
   background: linear-gradient(180deg, #fff, #f7fafd);
   cursor: pointer;
   box-shadow: var(--shadow);
-  transition: border-color 160ms ease, transform 320ms var(--ease-spring), box-shadow 320ms var(--ease-spring);
+  transition: border-color 160ms ease, box-shadow 200ms var(--ease-out);
 }
 
 .bb-stat:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  transform: translateY(-6px);
   box-shadow: var(--shadow-hover);
 }
 
@@ -2487,6 +2485,12 @@ a.bb-bug-id:hover {
   white-space: nowrap;
   text-decoration: none;
 }
+
+.bb-open-chip.is-quiet {
+  cursor: default;
+  opacity: 0.85;
+}
+
 
 .bb-open-chip.is-hot.is-pending {
   color: var(--status-pending);

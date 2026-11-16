@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { HoverTip } from "@/components/HoverTip";
+import { canImmediateRelease } from "@/lib/release-ui";
 import type { ProjectChangeKind } from "@/lib/types";
 
 export type ChangeListItem = {
@@ -60,6 +61,7 @@ export function ChangesPanel({
 
   const pendingIds = new Set(pendingBugs.map((bug) => bug.id));
   const chosen = selected.filter((id) => pendingIds.has(id));
+  const canRunRelease = canImmediateRelease(pendingBugs.length);
 
   function toggle(id: number) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -121,7 +123,15 @@ export function ChangesPanel({
           </select>
         {canRelease && !confirming ? (
           <div className="bb-bugs-actions">
-            <button type="button" className="bb-btn" disabled={busy} onClick={() => setConfirming("run")}>
+            <button
+              type="button"
+              className={canRunRelease ? "bb-btn" : "bb-btn bb-btn-secondary"}
+              disabled={busy || !canRunRelease}
+              title={
+                canRunRelease ? undefined : "眼下还没有待发布报障。有待发单时再点这里。"
+              }
+              onClick={() => setConfirming("run")}
+            >
               立即发布
             </button>
             <button
@@ -133,6 +143,11 @@ export function ChangesPanel({
               标记已发布
             </button>
           </div>
+        ) : null}
+        {canRelease && !canRunRelease && !confirming ? (
+          <p className="bb-muted" style={{ margin: "0.35rem 0 0", width: "100%" }}>
+            眼下还没有待发布的报障。修好并提交说明后，再回这里一键发布就行；若已经在外面发完，也可以用「标记已发布」记一笔。
+          </p>
         ) : null}
       </div>
 
@@ -199,7 +214,9 @@ export function ChangesPanel({
           description={
             filter
               ? "换一个筛选，或查看全部记录。"
-              : "修复推送和功能开发登记后，会出现在这里。"
+              : canRelease
+                ? "修好并提交修复说明后，待发布报障会出现在上方；发布或登记后，时间线会落在这里。"
+                : "修复推送和功能开发登记后，会出现在这里。"
           }
           action={
             filter ? (
