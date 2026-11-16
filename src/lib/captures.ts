@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
 import { actorFromIdentity } from "./auth";
+import { readBehavior } from "./behavior";
 import { getDb, nowIso } from "./db";
 import { parseBugEvidence } from "./evidence";
 import { BUG_TITLE_MAX } from "./limits";
@@ -125,11 +126,10 @@ function sessionView(row: SessionRow, drafts: DraftRow[]) {
   };
 }
 
-const ORGANIZE_WAIT_MS = 8 * 60 * 1000;
-
 function settleOrganize(row: SessionRow) {
   if (row.organize_status !== "organizing" || !row.organize_started_at) return row;
-  if (Date.now() - Date.parse(row.organize_started_at) < ORGANIZE_WAIT_MS) return row;
+  const waitMs = readBehavior(row.project_id).organizeTimeoutMin * 60 * 1000;
+  if (Date.now() - Date.parse(row.organize_started_at) < waitMs) return row;
   const detail = "整理超时，先用规则草稿";
   getDb()
     .prepare(
@@ -160,9 +160,10 @@ const UNHEARD_QUESTION = "没有识别到话。看录像，把现象写进标题
 export function draftsFromCapture(
   transcript: Segment[],
   marks: FrameMark[],
-  source: { hasVideo: boolean; durationSec: number | null }
+  source: { hasVideo: boolean; durationSec: number | null },
+  split?: { gapSec?: number; shortChars?: number }
 ): DraftSeed[] {
-  const seeds = splitTranscript(transcript, marks);
+  const seeds = splitTranscript(transcript, marks, split);
   if (seeds.length || !source.hasVideo) return seeds;
   return [
     {
@@ -209,10 +210,16 @@ export function createCaptureSession(
     note: frame.note,
     strokes: frame.strokes,
   }));
-  const seeds = draftsFromCapture(input.transcript, marks, {
-    hasVideo: Boolean(input.video?.buffer.length),
-    durationSec: input.durationSec ?? null,
-  });
+  const behavior = readBehavior(projectId);
+  const seeds = draftsFromCapture(
+    input.transcript,
+    marks,
+    {
+      hasVideo: Boolean(input.video?.buffer.length),
+      durationSec: input.durationSec ?? null,
+    },
+    { gapSec: behavior.captureGapMs / 1000, shortChars: behavior.captureShortChars }
+  );
   if (!seeds.length) throw new Error("没有整理出草稿");
   const actor = actorFromIdentity(identity);
   const t = nowIso();
@@ -519,11 +526,13 @@ export async function commitCaptureSession(
   const { createBug } = await import("./services");
   const bugs = [];
   for (const draft of kept) {
+    const intake = readBehavior(row.project_id);
     const bug = createBug(identity, {
       projectId: row.project_id,
       title: draft.title,
       body: draft.body,
-      priority: "p2",
+      priority: intake.intakePriority,
+      wakeSource: "capture",
       evidence: {
         quote: draft.quote,
         steps: JSON.parse(draft.steps_json) as string[],

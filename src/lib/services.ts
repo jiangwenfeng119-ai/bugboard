@@ -1,6 +1,14 @@
 import fs from "fs";
 import { getDb, isSetupComplete, nowIso } from "./db";
 import { buildAnalyticsTrend } from "./analytics-trend";
+import {
+  adminInboxShows,
+  readBehavior,
+  readBehaviors,
+  wakeSourceFor,
+  wakesOnCreate,
+  type WakeSource,
+} from "./behavior";
 import { scheduleAgentWake, shouldWakeOnAction, type DispatchReason } from "./dispatch";
 import { BUG_BODY_MAX, BUG_TITLE_MAX } from "./limits";
 import { recentShanghaiDateKeys, shanghaiDaySql, shanghaiDayStartIso, shanghaiYymmdd } from "./time";
@@ -596,6 +604,7 @@ export function createBug(
     body?: string;
     priority?: Priority;
     evidence?: BugEvidenceInput;
+    wakeSource?: WakeSource;
   }
 ) {
   getProject(identity, data.projectId);
@@ -687,7 +696,8 @@ export function createBug(
     }
   }
   const bug = getBug(identity, bugId);
-  if (identity.kind === "user") {
+  const source = wakeSourceFor(identity, data.wakeSource);
+  if (wakesOnCreate(readBehavior(data.projectId), source)) {
     try {
       scheduleAgentWake(bug, "created");
     } catch (error) {
@@ -986,7 +996,9 @@ export function transitionBug(
   });
   const eventId = tx();
   const updated = getBug(identity, bugId);
-  if (shouldWakeOnAction(action, updated.status)) {
+  const wakeActor = identity.kind === "api_key" ? "api_key" : "user";
+  const allowed = new Set(readBehavior(bug.project_id).wakeActions);
+  if (shouldWakeOnAction(action, updated.status, wakeActor, allowed)) {
     try {
       scheduleAgentWake(updated, action as DispatchReason);
     } catch (error) {
@@ -1040,7 +1052,8 @@ export function addBugSupplement(
     .prepare("UPDATE bugs SET updated_at = ? WHERE id = ?")
     .run(t, bugId);
   const updated = getBug(identity, bugId);
-  if (updated.status === "pending") {
+  const behavior = readBehavior(bug.project_id);
+  if (updated.status === "pending" && behavior.wakeActions.includes("supplement")) {
     try {
       scheduleAgentWake(updated, "supplement");
     } catch (error) {
@@ -1784,7 +1797,6 @@ const INBOX_KIND_LABEL: Record<InboxKind, string> = {
 };
 
 const INBOX_PRIORITY_RANK: Record<Priority, number> = { p1: 0, p2: 1, p3: 2 };
-const INBOX_PENDING_CAP = 8;
 
 export type InboxItem = {
   id: number;
@@ -1827,6 +1839,7 @@ export function listInbox(identity: Identity): Inbox {
   if (projects.length === 0) return { total: 0, groups: [] };
 
   const ids = projects.map((project) => project.id);
+  const behaviors = readBehaviors(ids);
   const placeholders = ids.map(() => "?").join(",");
   const actorType = identity.kind === "user" ? "user" : "api_key";
   const actorId = identity.kind === "user" ? identity.userId : identity.apiKeyId;
@@ -1884,6 +1897,8 @@ export function listInbox(identity: Identity): Inbox {
     const seen = new Set(rows.map((row) => row.id));
     for (const row of [...product, ...releasing, ...fixing, ...pending]) {
       if (!isInboxKind(row.status) || seen.has(row.id)) continue;
+      const behavior = behaviors.get(row.project_id);
+      if (!behavior || !adminInboxShows(behavior, row.status)) continue;
       seen.add(row.id);
       rows.push(row);
     }
@@ -1914,16 +1929,17 @@ export function listInbox(identity: Identity): Inbox {
       return count > 0 ? [{ kind, label: INBOX_KIND_LABEL[kind], count }] : [];
     });
     const pending = list.filter((row) => row.status === "pending");
+    const cap = behaviors.get(project.id)?.inboxPendingCap ?? 8;
     const shown = [
       ...list.filter((row) => row.status !== "pending"),
-      ...pending.slice(0, INBOX_PENDING_CAP),
+      ...pending.slice(0, cap),
     ];
     total += list.length;
     groups.push({
       projectId: project.id,
       projectName: project.name,
       counts,
-      pendingOverflow: pending.length - Math.min(pending.length, INBOX_PENDING_CAP),
+      pendingOverflow: pending.length - Math.min(pending.length, cap),
       items: shown.map((row) => ({
         id: row.id,
         publicId: row.public_id,

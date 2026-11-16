@@ -223,6 +223,7 @@ function migrateSchema(db: Database.Database) {
   ensureCaptureSchema(db);
   ensureLocalAgents(db);
   ensureReleaseConfig(db);
+  ensureBehaviorConfig(db);
   ensureEventKind(db);
   ensureProjectChanges(db);
 }
@@ -403,6 +404,33 @@ function ensureReleaseConfig(db: Database.Database) {
   if (!dispatchCols.has("claimed_at")) {
     db.exec("ALTER TABLE agent_dispatches ADD COLUMN claimed_at TEXT");
   }
+}
+
+function ensureBehaviorConfig(db: Database.Database) {
+  const cols = new Set(columnNames(db, "project_dispatch"));
+  const add = (name: string, ddl: string) => {
+    if (!cols.has(name)) db.exec(`ALTER TABLE project_dispatch ADD COLUMN ${ddl}`);
+  };
+  add("wake_on_web_create", "wake_on_web_create INTEGER NOT NULL DEFAULT 1");
+  add("wake_on_widget_create", "wake_on_widget_create INTEGER NOT NULL DEFAULT 1");
+  add("wake_on_capture_create", "wake_on_capture_create INTEGER NOT NULL DEFAULT 1");
+  add("wake_on_api_create", "wake_on_api_create INTEGER NOT NULL DEFAULT 0");
+  add(
+    "wake_actions",
+    "wake_actions TEXT NOT NULL DEFAULT 'provide_info,reject_fix,dispute_invalid,reopen_invalid,supplement,accept_product'"
+  );
+  add("wake_drain_queue", "wake_drain_queue INTEGER NOT NULL DEFAULT 1");
+  add("intake_priority", "intake_priority TEXT NOT NULL DEFAULT 'p2'");
+  add("inbox_show_pending", "inbox_show_pending INTEGER NOT NULL DEFAULT 1");
+  add("inbox_show_needs_product", "inbox_show_needs_product INTEGER NOT NULL DEFAULT 1");
+  add("inbox_show_ready", "inbox_show_ready INTEGER NOT NULL DEFAULT 1");
+  add("inbox_show_own_fixing", "inbox_show_own_fixing INTEGER NOT NULL DEFAULT 1");
+  add("inbox_pending_cap", "inbox_pending_cap INTEGER NOT NULL DEFAULT 8");
+  add("release_advances_bugs", "release_advances_bugs INTEGER NOT NULL DEFAULT 1");
+  add("release_timeout_min", "release_timeout_min INTEGER NOT NULL DEFAULT 45");
+  add("capture_gap_ms", "capture_gap_ms INTEGER NOT NULL DEFAULT 1200");
+  add("capture_short_chars", "capture_short_chars INTEGER NOT NULL DEFAULT 8");
+  add("organize_timeout_min", "organize_timeout_min INTEGER NOT NULL DEFAULT 8");
 }
 
 function ensureProjectLogo(db: Database.Database) {

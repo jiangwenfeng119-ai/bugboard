@@ -1,0 +1,98 @@
+import type { Priority } from "./types";
+
+export const WAKE_ACTIONS = [
+  "provide_info",
+  "reject_fix",
+  "dispute_invalid",
+  "reopen_invalid",
+  "supplement",
+  "accept_product",
+] as const;
+
+export type WakeAction = (typeof WAKE_ACTIONS)[number];
+export type WakeSource = "web" | "widget" | "capture" | "api";
+
+export const WAKE_ACTION_LABELS: Record<WakeAction, string> = {
+  provide_info: "补充说明后仍是待处理",
+  reject_fix: "打回修复，回到待处理",
+  dispute_invalid: "对不属实提出异议，回到待处理",
+  reopen_invalid: "重新打开不属实，回到待处理",
+  supplement: "待处理时补充说明",
+  accept_product: "产品点「可以做」，进入修复中",
+};
+
+export type BehaviorSettings = {
+  wakeOnWebCreate: boolean;
+  wakeOnWidgetCreate: boolean;
+  wakeOnCaptureCreate: boolean;
+  wakeOnApiCreate: boolean;
+  wakeActions: WakeAction[];
+  wakeDrainQueue: boolean;
+  intakePriority: Priority;
+  inboxShowPending: boolean;
+  inboxShowNeedsProduct: boolean;
+  inboxShowReady: boolean;
+  inboxShowOwnFixing: boolean;
+  inboxPendingCap: number;
+  releaseAdvancesBugs: boolean;
+  releaseTimeoutMin: number;
+  captureGapMs: number;
+  captureShortChars: number;
+  organizeTimeoutMin: number;
+};
+
+export function behaviorDefaults(): BehaviorSettings {
+  return {
+    wakeOnWebCreate: true,
+    wakeOnWidgetCreate: true,
+    wakeOnCaptureCreate: true,
+    wakeOnApiCreate: false,
+    wakeActions: [...WAKE_ACTIONS],
+    wakeDrainQueue: true,
+    intakePriority: "p2",
+    inboxShowPending: true,
+    inboxShowNeedsProduct: true,
+    inboxShowReady: true,
+    inboxShowOwnFixing: true,
+    inboxPendingCap: 8,
+    releaseAdvancesBugs: true,
+    releaseTimeoutMin: 45,
+    captureGapMs: 1200,
+    captureShortChars: 8,
+    organizeTimeoutMin: 8,
+  };
+}
+
+export function describeBehavior(settings: BehaviorSettings) {
+  const wakes = [
+    settings.wakeOnWebCreate ? "网页建单会叫醒" : "网页建单不叫醒",
+    settings.wakeOnWidgetCreate ? "小组件上报会叫醒" : "小组件上报不叫醒",
+    settings.wakeOnCaptureCreate ? "走查提交会叫醒" : "走查提交不叫醒",
+    settings.wakeOnApiCreate ? "API Key 建单会叫醒" : "API Key 建单不叫醒",
+  ];
+  const actionLine = settings.wakeActions.length
+    ? `这些动作会再叫一次：${settings.wakeActions.map((action) => WAKE_ACTION_LABELS[action]).join("、")}。`
+    : "回到待处理或点「可以做」都不再自动叫醒。";
+  const queues = [
+    settings.inboxShowPending ? "待处理" : "",
+    settings.inboxShowNeedsProduct ? "待产品确认" : "",
+    settings.inboxShowReady ? "待发布" : "",
+    settings.inboxShowOwnFixing ? "自己接手的修复中" : "",
+  ].filter(Boolean);
+  const gapSec = settings.captureGapMs / 1000;
+  return [
+    `${wakes.join("，")}。`,
+    actionLine,
+    settings.wakeDrainQueue
+      ? "叫醒后会继续处理该项目其余待处理。"
+      : "叫醒后只处理被点名的那一张。",
+    `小组件和走查的新单优先级是 ${settings.intakePriority.toUpperCase()}。`,
+    queues.length
+      ? `管理员收件箱包含${queues.join("、")}，待处理最多列 ${settings.inboxPendingCap} 条。`
+      : "管理员收件箱不放这个项目的处理队列。报障人自己的待确认、待补充和不属实仍在。",
+    settings.releaseAdvancesBugs
+      ? `发布成功后，待发布的单进入待确认。发布任务超过 ${settings.releaseTimeoutMin} 分钟算超时。`
+      : `发布成功后，待发布的单留在待发布。发布任务超过 ${settings.releaseTimeoutMin} 分钟算超时。`,
+    `走查停顿超过 ${gapSec} 秒新开一条，不足 ${settings.captureShortChars} 个字标成待确认，整理超过 ${settings.organizeTimeoutMin} 分钟改用规则草稿。`,
+  ];
+}

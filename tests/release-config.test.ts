@@ -385,8 +385,45 @@ describe("release runner queue", () => {
     );
   });
 
-  it("fails a running claim after 45 minutes so the next night can queue", async () => {
+  it("does not queue a due project when nothing is waiting to release", async () => {
     const { dispatch, release, adminId, project } = await setup();
+    dispatch.saveDispatchSettings(adminId, project.id, {
+      webhookUrl: "",
+      cursorEnabled: false,
+      organizeEnabled: false,
+      repairLocalEnabled: false,
+      deployMode: "restart",
+      deployCommand: "/usr/local/bin/counter-deploy",
+      releaseSchedule: "22:00",
+    });
+    expect(release.enqueueScheduledReleases(adminId, "22:00")).toEqual([]);
+  });
+
+  it("queues a due project that only has an unreleased change", async () => {
+    const { dispatch, release, adminId, project } = await setup();
+    dispatch.saveDispatchSettings(adminId, project.id, {
+      webhookUrl: "",
+      cursorEnabled: false,
+      organizeEnabled: false,
+      repairLocalEnabled: false,
+      deployMode: "restart",
+      deployCommand: "/usr/local/bin/counter-deploy",
+      releaseSchedule: "22:00",
+    });
+    const { recordChange } = await import("../src/lib/project-changes");
+    recordChange(adminId, project.id, {
+      kind: "feature",
+      title: "夜间才发",
+      commitShas: ["abc1234def"],
+    });
+    expect(release.enqueueScheduledReleases(adminId, "22:00").map((item) => item.projectId)).toEqual([
+      project.id,
+    ]);
+  });
+
+  it("fails a running claim after 45 minutes so the next night can queue", async () => {
+    const { services, dispatch, release, adminId, qaId, project } = await setup();
+    await readyBug(services, qaId, adminId, project.id, "等下一次发布");
     dispatch.saveDispatchSettings(adminId, project.id, {
       webhookUrl: "",
       cursorEnabled: false,

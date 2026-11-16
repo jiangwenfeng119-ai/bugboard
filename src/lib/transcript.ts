@@ -78,11 +78,15 @@ function spokenBody(quote: string, spoken: string, steps: string[], question: st
   return blocks.join("\n\n");
 }
 
-function makeSeed(parts: string[], start: number, end: number): DraftSeed {
+function isShortQuote(quote: string, shortChars: number) {
+  const bare = quote.replace(/[。！？.!?]$/u, "");
+  return Array.from(bare).length < shortChars;
+}
+
+function makeSeed(parts: string[], start: number, end: number, shortChars: number): DraftSeed {
   const quote = ensurePeriod(parts.filter(Boolean).join("，"));
   const steps = stepsFrom(quote);
-  const bare = quote.replace(/[。！？.!?]$/u, "");
-  const low = Array.from(bare).length < 8;
+  const low = isShortQuote(quote, shortChars);
   const question = low ? LOW_QUESTION : "";
   const confidence = low ? "low" : "ok";
   return {
@@ -100,11 +104,10 @@ function makeSeed(parts: string[], start: number, end: number): DraftSeed {
   };
 }
 
-function applyText(seed: DraftSeed, text: string, keepTime: boolean) {
+function applyText(seed: DraftSeed, text: string, keepTime: boolean, shortChars: number) {
   const quote = polishUtterance(text);
   const steps = stepsFrom(quote);
-  const bare = quote.replace(/[。！？.!?]$/u, "");
-  const low = Array.from(bare).length < 8;
+  const low = isShortQuote(quote, shortChars);
   const question = low ? LOW_QUESTION : "";
   seed.title = clipTitle(quote);
   seed.quote = quote;
@@ -124,7 +127,13 @@ const CORRECTION = /^(?:不对|不是)[，,]?\s*是(.+)$/u;
 
 type OpenCluster = { parts: string[]; start: number; end: number };
 
-export function splitTranscript(segments: Segment[], frames: FrameMark[] = []): DraftSeed[] {
+export function splitTranscript(
+  segments: Segment[],
+  frames: FrameMark[] = [],
+  options: { gapSec?: number; shortChars?: number } = {}
+): DraftSeed[] {
+  const gapSec = options.gapSec ?? GAP_SEC;
+  const shortChars = options.shortChars ?? 8;
   const ordered = [...segments].sort((a, b) => a.start - b.start);
   const drafts: DraftSeed[] = [];
   let current: OpenCluster | null = null;
@@ -134,7 +143,7 @@ export function splitTranscript(segments: Segment[], frames: FrameMark[] = []): 
       current = null;
       return;
     }
-    drafts.push(makeSeed(current.parts, current.start, current.end));
+    drafts.push(makeSeed(current.parts, current.start, current.end, shortChars));
     current = null;
   }
 
@@ -153,7 +162,7 @@ export function splitTranscript(segments: Segment[], frames: FrameMark[] = []): 
         current.end = segment.end;
       } else if (drafts.length) {
         const last = drafts[drafts.length - 1];
-        applyText(last, correction[1], true);
+        applyText(last, correction[1], true, shortChars);
         last.evidenceEnd = segment.end;
       } else {
         current = { parts: [correction[1].trim()], start: segment.start, end: segment.end };
@@ -163,7 +172,7 @@ export function splitTranscript(segments: Segment[], frames: FrameMark[] = []): 
     const polished = polishUtterance(text).replace(/[。！？.!?]$/u, "");
     if (!polished) continue;
     const gap = current ? segment.start - current.end : 0;
-    if (current && gap > GAP_SEC) flush();
+    if (current && gap > gapSec) flush();
     if (!current) current = { parts: [], start: segment.start, end: segment.end };
     current.parts.push(polished);
     current.end = segment.end;

@@ -3,7 +3,8 @@ import path from "node:path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DispatchAdmin } from "@/components/AgentDispatch";
-import { IconBell, IconChart, IconKey, IconPencil, IconUsers } from "@/components/Icons";
+import { IconBell, IconChart, IconKey, IconPencil, IconUsers, IconWrench } from "@/components/Icons";
+import { getBehaviorSettings } from "@/lib/behavior";
 import { dispatchRuntimeStatus, getDispatchSettings, listDispatchOverviews } from "@/lib/dispatch";
 import { requireAdminUser } from "@/lib/session-guard";
 import {
@@ -18,6 +19,7 @@ import { UsersAdmin } from "./UsersAdmin";
 import { ApiKeysAdmin } from "./ApiKeysAdmin";
 import { AnalyticsAdmin } from "./AnalyticsAdmin";
 import { AgentPromptsAdmin } from "./AgentPromptsAdmin";
+import { BehaviorAdmin } from "./BehaviorAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,7 @@ const TABS = [
   { id: "users", href: "/admin?tab=users", label: "用户", icon: IconUsers },
   { id: "keys", href: "/admin?tab=keys", label: "API Key", icon: IconKey },
   { id: "wake", href: "/admin?tab=wake", label: "分派给 Agent", icon: IconBell },
+  { id: "behavior", href: "/admin?tab=behavior", label: "行为", icon: IconWrench },
   { id: "prompts", href: "/admin?tab=prompts", label: "提示词", icon: IconPencil },
 ] as const;
 
@@ -46,10 +49,11 @@ export default async function AdminPage({
     sp.tab === "users" ||
     sp.tab === "keys" ||
     sp.tab === "prompts" ||
-    sp.tab === "wake"
+    sp.tab === "wake" ||
+    sp.tab === "behavior"
       ? sp.tab
       : "analytics";
-  const projects = tab === "wake" ? listProjects(identity) : [];
+  const projects = tab === "wake" || tab === "behavior" ? listProjects(identity) : [];
   const requestedProject = Number(sp.project);
   const wakeProject = projects.find((project) => project.id === requestedProject) ?? null;
   const wakeOverviews = tab === "wake" ? listDispatchOverviews(identity) : [];
@@ -120,6 +124,14 @@ export default async function AdminPage({
       ) : null}
 
       {tab === "prompts" ? <AgentPromptsAdmin /> : null}
+
+      {tab === "behavior" ? (
+        <BehaviorAdmin
+          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          projectId={wakeProject?.id ?? null}
+          initial={wakeProject ? getBehaviorSettings(identity, wakeProject.id) : null}
+        />
+      ) : null}
 
       {tab === "wake" && wakeRuntime ? (
         <DispatchAdmin

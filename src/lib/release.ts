@@ -1,3 +1,4 @@
+import { readBehavior, readBehaviors } from "./behavior";
 import { getDb, nowIso } from "./db";
 import { pokeReleaseRunner, type DeployMode } from "./dispatch";
 import { isProjectAdmin, requireAdmin } from "./permissions";
@@ -14,8 +15,7 @@ export type { ReleaseResult, ReleaseTrigger };
 
 const TRIGGERS = new Set<ReleaseTrigger>(["scheduled", "manual", "external"]);
 
-/** A crashed runner leaves the claim running. After 45 minutes it is failed so the next nightly enqueue is not blocked. */
-const RELEASE_RUNNING_TIMEOUT_MS = 45 * 60 * 1000;
+/** A crashed runner leaves the claim running. After the project's timeout it is failed so the next enqueue is not blocked. */
 const STALE_RELEASE = "发布任务超时未完成，已释放";
 
 /** 不跑部署：写 release 行 + 批量 release_fixes + 挂 release_change_id。失败只记账，不改报障状态。 */
@@ -66,6 +66,7 @@ export function markReleased(
     return { release, bugIds };
   }
 
+  const advances = readBehavior(projectId).releaseAdvancesBugs;
   const done = getDb().transaction(() => {
     const advancing = fromRunner
       ? explicit
@@ -73,8 +74,10 @@ export function markReleased(
         : listReadyToReleaseIds(projectId)
       : bugIds;
     const row = insertChange(identity, projectId, { ...releaseInput, bugIds: advancing });
-    for (const id of advancing) {
-      transitionBug(identity, id, "release_fixes", "已随发布进入待确认");
+    if (advances) {
+      for (const id of advancing) {
+        transitionBug(identity, id, "release_fixes", "已随发布进入待确认");
+      }
     }
     linkChangesToRelease(projectId, advancing, row.id, !explicit);
     closeRunningRelease(projectId, input.dispatchId, "sent", short ? `已发布 ${short}` : "已发布");
@@ -113,7 +116,7 @@ export function listPendingRelease(identity: Identity, projectId: number) {
     releaseFeedback: {
       activeStatus: activeReleaseStatus(projectId),
       latestFailureDetail: latestReleaseFailureDetail(projectId),
-      advancesBugs: true,
+      advancesBugs: readBehavior(projectId).releaseAdvancesBugs,
     },
   };
 }
@@ -224,7 +227,7 @@ export function claimQueuedRelease(identity: Identity, projectKey?: string): Rel
   })();
 }
 
-/** 给 release_schedule 刚好是 at（HH:MM）且会自动部署的项目各入队一条。 */
+/** 给 release_schedule 刚好是 at（HH:MM）、会自动部署、并且还有待发布内容的项目各入队一条。 */
 export function enqueueScheduledReleases(identity: Identity, at: string) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) throw new Error("定时无效");
@@ -243,6 +246,7 @@ export function enqueueScheduledReleases(identity: Identity, at: string) {
     for (const row of rows) {
       if (!isProjectAdmin(identity, row.id)) continue;
       if (releaseInFlight(row.id)) continue;
+      if (!hasPendingRelease(row.id)) continue;
       const dispatchId = insertQueuedRelease(row.id, {
         mode: "run",
         trigger: "scheduled",
@@ -301,6 +305,26 @@ export function finishRunningRelease(
   }
 }
 
+/** 待发布报障，或还没挂上某次发布的代码变更。都没有就不必自动部署。 */
+function hasPendingRelease(projectId: number) {
+  const bug = getDb()
+    .prepare(
+      `SELECT id FROM bugs
+       WHERE project_id = ? AND status = 'ready_to_release'
+       LIMIT 1`
+    )
+    .get(projectId);
+  if (bug) return true;
+  const change = getDb()
+    .prepare(
+      `SELECT id FROM project_changes
+       WHERE project_id = ? AND kind IN ('fix', 'feature', 'chore') AND release_change_id IS NULL
+       LIMIT 1`
+    )
+    .get(projectId);
+  return Boolean(change);
+}
+
 function listReadyToReleaseIds(projectId: number) {
   return (
     getDb()
@@ -332,15 +356,27 @@ function explicitBugIds(projectId: number, bugIds: number[], result: ReleaseResu
 }
 
 function expireStaleRunningReleases(now = Date.now()) {
-  const cutoff = new Date(now - RELEASE_RUNNING_TIMEOUT_MS).toISOString();
-  getDb()
+  const rows = getDb()
     .prepare(
-      `UPDATE agent_dispatches
-       SET status = 'failed', detail = ?
-       WHERE target = 'release_runner' AND reason = 'release' AND status = 'running'
-         AND COALESCE(NULLIF(claimed_at, ''), created_at) < ?`
+      `SELECT id, project_id, COALESCE(NULLIF(claimed_at, ''), created_at) AS started
+       FROM agent_dispatches
+       WHERE target = 'release_runner' AND reason = 'release' AND status = 'running'`
     )
-    .run(STALE_RELEASE, cutoff);
+    .all() as { id: number; project_id: number; started: string }[];
+  if (rows.length === 0) return;
+  const settings = readBehaviors(rows.map((row) => row.project_id));
+  const stale = rows.filter((row) => {
+    const minutes = settings.get(row.project_id)?.releaseTimeoutMin ?? 45;
+    const started = Date.parse(row.started);
+    return Number.isFinite(started) && now - started >= minutes * 60 * 1000;
+  });
+  if (stale.length === 0) return;
+  const update = getDb().prepare(
+    `UPDATE agent_dispatches
+     SET status = 'failed', detail = ?
+     WHERE id = ? AND status = 'running'`
+  );
+  for (const row of stale) update.run(STALE_RELEASE, row.id);
 }
 
 function readySubset(projectId: number, bugIds: number[]) {

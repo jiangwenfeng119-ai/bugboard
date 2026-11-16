@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { getDb, nowIso } from "./db";
+import { readBehavior } from "./behavior";
 import { createBug, getProject } from "./services";
 import type { Identity, Role } from "./types";
 import { saveUploadedFile } from "./uploads";
@@ -102,6 +103,7 @@ export function createWidgetReport(
   const consoleText = (input.consoleText || "").trim().slice(0, 4000);
   if (!note && !input.file) throw new Error("写一句现象，或附上截图");
 
+  const behavior = readBehavior(project.id);
   const title = (input.title || note || "网页上报").trim().slice(0, 200) || "网页上报";
   const blocks = [note, pageUrl ? `页面：${pageUrl}` : "", viewport ? `视口：${viewport}` : "", userAgent ? `浏览器：${userAgent}` : ""].filter(Boolean);
   if (consoleText) blocks.push("控制台：", consoleText);
@@ -115,7 +117,8 @@ export function createWidgetReport(
     projectId: project.id,
     title,
     body: blocks.join("\n\n"),
-    priority: "p2",
+    priority: behavior.intakePriority,
+    wakeSource: "widget",
     evidence: {
       quote: note,
       sourceUrl: pageUrl,
