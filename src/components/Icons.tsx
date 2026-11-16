@@ -259,6 +259,34 @@ export function IconEllipsis({ size = 16, className }: IconProps) {
   );
 }
 
+export function IconEye({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path
+        d="M1.8 8s2.2-3.6 6.2-3.6S14.2 8 14.2 8s-2.2 3.6-6.2 3.6S1.8 8 1.8 8Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="1.7" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function IconEyeOff({ size = 16, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>
+      <path
+        d="M3.1 3.2 12.9 12.8M6.4 6.55A1.7 1.7 0 0 0 8 9.7M6.55 4.55A7.4 7.4 0 0 1 8 4.4c4 0 6.2 3.6 6.2 3.6a12 12 0 0 1-2.05 2.35M4.15 5.7C2.7 6.7 1.8 8 1.8 8s2.2 3.6 6.2 3.6c.7 0 1.35-.12 1.95-.32"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconX({ size = 16, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} aria-hidden>

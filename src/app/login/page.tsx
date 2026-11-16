@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthStory } from "@/components/AuthStory";
 import { BrandMark } from "@/components/BrandMark";
+import { PasswordField } from "@/components/PasswordField";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,17 +50,10 @@ export default function LoginPage() {
               <BrandMark size={32} />
               Bugboard
             </div>
-            <h2>把报障闭环收进一张清晰的工单台账</h2>
-            <p>提报、修复、确认同屏可见；状态可审计，适合人和 Agent 一起协作。</p>
+            <h2>Agent 先处理，人在关键处把关</h2>
+            <p>提报之后由 Agent 接单、修复并排队发布。做不做交给产品经理，上线结果由原报障人确认。</p>
           </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="bb-auth-visual-art"
-            src="/brand/auth-hero.png"
-            alt=""
-            width={420}
-            height={315}
-          />
+          <AuthStory />
         </aside>
         <form className="bb-auth-card" onSubmit={onSubmit}>
           <h1>欢迎回来</h1>
@@ -78,20 +73,14 @@ export default function LoginPage() {
               required
             />
           </div>
-          <div className="bb-field">
-            <label className="bb-label" htmlFor="password">
-              密码
-            </label>
-            <input
-              id="password"
-              type="password"
-              className="bb-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
+          <PasswordField
+            id="password"
+            label="密码"
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            required
+          />
           {error ? <p className="bb-error">{error}</p> : null}
           <button className="bb-btn" type="submit" disabled={loading} style={{ width: "100%" }}>
             {loading ? "登录中…" : "登录"}

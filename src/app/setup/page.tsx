@@ -2,7 +2,9 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthStory } from "@/components/AuthStory";
 import { BrandMark } from "@/components/BrandMark";
+import { PasswordField } from "@/components/PasswordField";
 
 export default function SetupPage() {
   const router = useRouter();
@@ -42,14 +44,7 @@ export default function SetupPage() {
             <h2>第一次启动，先建好超级管理员</h2>
             <p>空库首装只需一步。这个账号可以任命管理员，也可以删除项目。</p>
           </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="bb-auth-visual-art"
-            src="/brand/auth-hero.png"
-            alt=""
-            width={420}
-            height={315}
-          />
+          <AuthStory />
         </aside>
         <form className="bb-auth-card" onSubmit={onSubmit}>
           <h1>开始使用</h1>
@@ -69,21 +64,15 @@ export default function SetupPage() {
               required
             />
           </div>
-          <div className="bb-field">
-            <label className="bb-label" htmlFor="password">
-              密码（至少 6 位）
-            </label>
-            <input
-              id="password"
-              type="password"
-              className="bb-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={6}
-              required
-            />
-          </div>
+          <PasswordField
+            id="password"
+            label="密码（至少 6 位）"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            minLength={6}
+            required
+          />
           {error ? <p className="bb-error">{error}</p> : null}
           <button className="bb-btn" type="submit" disabled={loading} style={{ width: "100%" }}>
             {loading ? "创建中…" : "创建超级管理员并进入"}
