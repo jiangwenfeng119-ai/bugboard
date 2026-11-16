@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { STATUS_LABEL, type BugStatus } from "@/lib/types";
+import { STATUS_FILTER_GROUPS, STATUS_LABEL } from "@/lib/types";
 
 export function BugFilters({
   projectId,
@@ -54,10 +54,14 @@ export function BugFilters({
         aria-label="状态筛选"
       >
         <option value="">全部状态</option>
-        {(Object.keys(STATUS_LABEL) as BugStatus[]).map((key) => (
-          <option key={key} value={key}>
-            {STATUS_LABEL[key]}
-          </option>
+        {STATUS_FILTER_GROUPS.map((group) => (
+          <optgroup key={group.label} label={group.label}>
+            {group.statuses.map((key) => (
+              <option key={key} value={key}>
+                {STATUS_LABEL[key]}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <select

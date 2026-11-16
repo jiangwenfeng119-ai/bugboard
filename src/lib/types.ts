@@ -27,6 +27,25 @@ export const STATUS_LABEL: Record<BugStatus, string> = {
   invalid: "不属实",
 };
 
+/** Status filter dropdown groups: in-flight vs terminal. */
+export const STATUS_FILTER_GROUPS: { label: string; statuses: BugStatus[] }[] = [
+  {
+    label: "进行中",
+    statuses: [
+      "pending",
+      "fixing",
+      "needs_info",
+      "needs_product",
+      "ready_to_release",
+      "awaiting_confirm",
+    ],
+  },
+  {
+    label: "终态",
+    statuses: ["confirmed", "acknowledged", "invalid"],
+  },
+];
+
 export const PRIORITY_LABEL: Record<Priority, string> = {
   p1: "P1 严重 / 阻断",
   p2: "P2 功能异常",
