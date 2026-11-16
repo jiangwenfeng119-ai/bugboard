@@ -1,5 +1,5 @@
+import { execFileSync } from "child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { lookupSync } from "dns";
 import { isIP } from "net";
 import fs from "fs";
 import path from "path";
@@ -224,6 +224,43 @@ export function assertWebhookUrl(raw: string) {
   return url;
 }
 
+function lookupAddresses(host: string) {
+  // Node 没有 dns.lookupSync。解析放在短生命周期进程里，调用方可以保持同步。
+  let output = "";
+  try {
+    output = execFileSync(
+      process.execPath,
+      [
+        "-e",
+        [
+          "const { lookup } = require('node:dns');",
+          "lookup(process.argv[1], { all: true, verbatim: true }, (error, rows) => {",
+          "  if (error) {",
+          "    process.stderr.write(String(error.code || error.message));",
+          "    process.exit(1);",
+          "  }",
+          "  process.stdout.write(JSON.stringify(rows.map((row) => row.address)));",
+          "});",
+        ].join("\n"),
+        host,
+      ],
+      { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }
+    );
+  } catch {
+    throw new Error("本机地址无法解析");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    throw new Error("本机地址无法解析");
+  }
+  if (!Array.isArray(parsed) || !parsed.length || parsed.some((item) => typeof item !== "string")) {
+    throw new Error("本机地址无法解析");
+  }
+  return parsed;
+}
+
 function resolveWebhookHosts(host: string) {
   if (host === "metadata.google.internal" || host.endsWith(".metadata.google.internal")) {
     throw new Error("本机地址不能指向元数据服务");
@@ -232,9 +269,7 @@ function resolveWebhookHosts(host: string) {
   if (numeric) return [numeric];
   if (isIP(host)) return [host];
   try {
-    const found = lookupSync(host, { all: true, verbatim: true });
-    if (!found.length) throw new Error("本机地址无法解析");
-    return found.map((item) => item.address);
+    return lookupAddresses(host);
   } catch (error) {
     if (error instanceof Error && error.message === "本机地址不能指向元数据服务") throw error;
     if (error instanceof Error && error.message === "本机地址无法解析") throw error;
