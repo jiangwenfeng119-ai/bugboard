@@ -99,6 +99,19 @@ describe("mcp handoff", () => {
     expect(remote).toContain("Bearer REPLACE_WITH_FULL_KEY");
   });
 
+  it("lists bound projects for scoped admin keys", () => {
+    const text = buildRemoteMcpHandoff({
+      ...base,
+      role: "admin",
+      keyName: "cursor-fixer",
+      projectNames: ["官网"],
+    });
+    expect(text).toContain("可访问项目：官网");
+    expect(text).not.toContain("可访问项目：全部项目");
+    expect(text).toContain("角色：管理员级");
+    expect(text).toContain("start_fix");
+  });
+
   it("warns when the key cannot connect yet", () => {
     expect(buildLocalMcpHandoff({ ...base, status: "disabled" })).toContain(
       "禁用状态"

@@ -1548,11 +1548,13 @@ function replaceApiKeyProjects(keyId: number, role: Role, projectIds?: number[])
     if (!projectIds || projectIds.length === 0) {
       throw new Error("用户级 Key 必须绑定至少一个项目");
     }
-    const stmt = getDb().prepare(
-      "INSERT INTO api_key_projects (api_key_id, project_id) VALUES (?, ?)"
-    );
-    for (const pid of projectIds) stmt.run(keyId, pid);
   }
+  // Admin keys: empty bindings mean all projects; non-empty limits scope.
+  if (!projectIds || projectIds.length === 0) return;
+  const stmt = getDb().prepare(
+    "INSERT INTO api_key_projects (api_key_id, project_id) VALUES (?, ?)"
+  );
+  for (const pid of projectIds) stmt.run(keyId, pid);
 }
 
 export function createApiKey(
@@ -1588,9 +1590,7 @@ export function createApiKey(
         t
       );
     const id = Number(info.lastInsertRowid);
-    if (data.role === "user") {
-      replaceApiKeyProjects(id, data.role, data.projectIds);
-    }
+    replaceApiKeyProjects(id, data.role, data.projectIds);
     return id;
   });
   const id = tx();

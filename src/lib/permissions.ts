@@ -5,7 +5,10 @@ import type { Identity } from "./types";
 export function projectAdminIds(identity: Identity, projectIds: number[]) {
   if (projectIds.length === 0) return new Set<number>();
   if (identity.kind === "api_key") {
-    return isAdminRole(identity.role) ? new Set(projectIds) : new Set<number>();
+    if (!isAdminRole(identity.role)) return new Set<number>();
+    // Empty bindings = all visible projects; otherwise only bound ones.
+    if (identity.projectIds.length === 0) return new Set(projectIds);
+    return new Set(projectIds.filter((id) => identity.projectIds.includes(id)));
   }
   const placeholders = projectIds.map(() => "?").join(",");
   const rows = getDb()
@@ -22,6 +25,10 @@ export function isProjectAdmin(identity: Identity, projectId: number) {
 }
 
 export function canAccessProject(identity: Identity, projectId: number) {
+  if (identity.kind === "api_key" && isAdminRole(identity.role)) {
+    if (identity.projectIds.length === 0) return true;
+    return identity.projectIds.includes(projectId);
+  }
   if (isAdminRole(identity.role)) return true;
   if (identity.kind === "api_key") {
     return identity.projectIds.includes(projectId);
@@ -35,6 +42,9 @@ export function canAccessProject(identity: Identity, projectId: number) {
 }
 
 export function listAccessibleProjectIds(identity: Identity): number[] | "all" {
+  if (identity.kind === "api_key" && isAdminRole(identity.role)) {
+    return identity.projectIds.length === 0 ? "all" : identity.projectIds;
+  }
   if (isAdminRole(identity.role)) return "all";
   if (identity.kind === "api_key") return identity.projectIds;
   return (

@@ -659,6 +659,75 @@ describe("services integration", () => {
     }
   });
 
+  it("lets admin api keys optionally bind to projects", async () => {
+    const services = await import("../src/lib/services");
+    const { resolveApiKeyIdentity } = await import("../src/lib/auth");
+    const {
+      canAccessProject,
+      listAccessibleProjectIds,
+      isProjectAdmin,
+    } = await import("../src/lib/permissions");
+    const { getDb } = await import("../src/lib/db");
+
+    const owner = await services.setupAdmin("admin-scope-keys", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: owner.id,
+      role: "superadmin" as const,
+      username: owner.username,
+    };
+    const p1 = services.createProject(adminId, { name: "Scoped-A" });
+    const p2 = services.createProject(adminId, { name: "Scoped-B" });
+
+    const openKey = services.createApiKey(adminId, {
+      name: "fixer-all",
+      role: "admin",
+    });
+    const openIdentity = resolveApiKeyIdentity(`Bearer ${openKey.rawKey}`)!;
+    expect(openIdentity.projectIds).toEqual([]);
+    expect(listAccessibleProjectIds(openIdentity)).toBe("all");
+    expect(canAccessProject(openIdentity, p1.id)).toBe(true);
+    expect(canAccessProject(openIdentity, p2.id)).toBe(true);
+    expect(isProjectAdmin(openIdentity, p2.id)).toBe(true);
+
+    const scoped = services.createApiKey(adminId, {
+      name: "fixer-a",
+      role: "admin",
+      projectIds: [p1.id],
+    });
+    const bound = (
+      getDb()
+        .prepare(
+          "SELECT project_id FROM api_key_projects WHERE api_key_id = ? ORDER BY project_id"
+        )
+        .all(scoped.id) as { project_id: number }[]
+    ).map((r) => r.project_id);
+    expect(bound).toEqual([p1.id]);
+
+    const scopedIdentity = resolveApiKeyIdentity(`Bearer ${scoped.rawKey}`)!;
+    expect(scopedIdentity.projectIds).toEqual([p1.id]);
+    expect(listAccessibleProjectIds(scopedIdentity)).toEqual([p1.id]);
+    expect(canAccessProject(scopedIdentity, p1.id)).toBe(true);
+    expect(canAccessProject(scopedIdentity, p2.id)).toBe(false);
+    expect(isProjectAdmin(scopedIdentity, p1.id)).toBe(true);
+    expect(isProjectAdmin(scopedIdentity, p2.id)).toBe(false);
+    expect(services.listProjects(scopedIdentity).map((p) => p.id)).toEqual([
+      p1.id,
+    ]);
+    expect(() => services.getProject(scopedIdentity, p2.id)).toThrow(/无权/);
+
+    services.updateApiKey(adminId, scoped.id, { projectIds: [p1.id, p2.id] });
+    const widened = resolveApiKeyIdentity(`Bearer ${scoped.rawKey}`)!;
+    expect(listAccessibleProjectIds(widened).slice().sort()).toEqual(
+      [p1.id, p2.id].sort((a, b) => a - b)
+    );
+
+    services.updateApiKey(adminId, scoped.id, { projectIds: [] });
+    const cleared = resolveApiKeyIdentity(`Bearer ${scoped.rawKey}`)!;
+    expect(cleared.projectIds).toEqual([]);
+    expect(listAccessibleProjectIds(cleared)).toBe("all");
+  });
+
   it("supports user edit and delete with safety guards", async () => {
     const services = await import("../src/lib/services");
     const { getDb } = await import("../src/lib/db");

@@ -514,8 +514,7 @@ export function ApiKeysAdmin({
     setSecrets((prev) => ({ ...prev, [item.id]: item.rawKey }));
   }
 
-  function projectNamesFor(roleName: string, ids: number[]) {
-    if (roleName === "admin") return [];
+  function projectNamesFor(_roleName: string, ids: number[]) {
     return ids.map((id) => projectNameById.get(id) || `#${id}`);
   }
 
@@ -564,8 +563,9 @@ export function ApiKeysAdmin({
   }
 
   function boundProjectLabel(k: KeyRow) {
-    if (k.role === "admin") return "—";
-    if (!k.projectIds.length) return "—";
+    if (!k.projectIds.length) {
+      return k.role === "admin" ? "全部项目" : "—";
+    }
     return k.projectIds
       .map((id) => projectNameById.get(id) || `#${id}`)
       .join("、");
@@ -604,7 +604,7 @@ export function ApiKeysAdmin({
         rawKey: data.rawKey,
         name: name.trim(),
         role,
-        projectIds: role === "user" ? [...projectIds] : [],
+        projectIds: [...projectIds],
       });
       setName("");
       setProjectIds([]);
@@ -671,7 +671,7 @@ export function ApiKeysAdmin({
     const result = await patchKey(editingId, {
       name: editName,
       role: editRole,
-      projectIds: editRole === "user" ? editProjectIds : [],
+      projectIds: editProjectIds,
     });
     setEditLoading(false);
     if (result.ok) setEditingId(null);
@@ -712,11 +712,16 @@ export function ApiKeysAdmin({
 
   function projectPicker(
     ids: number[],
-    setter: Dispatch<SetStateAction<number[]>>
+    setter: Dispatch<SetStateAction<number[]>>,
+    forRole: "user" | "admin"
   ) {
     return (
       <div>
-        <div className="bb-label">绑定项目（用户级必选）</div>
+        <div className="bb-label">
+          {forRole === "user"
+            ? "绑定项目（用户级必选）"
+            : "绑定项目（可选；不选则访问全部项目）"}
+        </div>
         <div className="bb-key-checks">
           {projects.map((p) => (
             <label key={p.id} className="bb-key-check">
@@ -816,11 +821,12 @@ export function ApiKeysAdmin({
             创建
           </button>
         </div>
-        {role === "user" ? (
-          projectPicker(projectIds, setProjectIds)
-        ) : (
-          <p className="bb-key-note">管理员级 Key 默认可访问全部项目</p>
-        )}
+        {projectPicker(projectIds, setProjectIds, role)}
+        {role === "admin" ? (
+          <p className="bb-key-note">
+            管理员级 Key 不选项目时可访问全部项目；勾选后仅限所选项目。
+          </p>
+        ) : null}
       </form>
       {error ? <p className="bb-error">{error}</p> : null}
       {copyNote ? (
@@ -1006,13 +1012,16 @@ export function ApiKeysAdmin({
                               <option value="admin">管理员级</option>
                             </select>
                           </div>
-                          {editRole === "user" ? (
-                            projectPicker(editProjectIds, setEditProjectIds)
-                          ) : (
-                            <p className="bb-key-note">
-                              管理员级 Key 默认可访问全部项目
-                            </p>
+                          {projectPicker(
+                            editProjectIds,
+                            setEditProjectIds,
+                            editRole
                           )}
+                          {editRole === "admin" ? (
+                            <p className="bb-key-note">
+                              管理员级 Key 不选项目时可访问全部项目；勾选后仅限所选项目。
+                            </p>
+                          ) : null}
                           <div className="bb-key-edit-actions">
                             <button
                               className="bb-btn"
