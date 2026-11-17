@@ -23,9 +23,18 @@ export function BehaviorAdmin({
 }) {
   const router = useRouter();
   const [settings, setSettings] = useState<BehaviorSettings | null>(initial);
+  const [loadedProjectId, setLoadedProjectId] = useState(projectId);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // 下拉框只改地址，这个组件不会重新挂载，useState 不会跟着新的 initial 走。
+  if (loadedProjectId !== projectId) {
+    setLoadedProjectId(projectId);
+    setSettings(initial);
+    setError("");
+    setSaved("");
+  }
 
   function chooseProject(id: string) {
     router.push(id ? `/admin?tab=behavior&project=${id}` : "/admin?tab=behavior");
