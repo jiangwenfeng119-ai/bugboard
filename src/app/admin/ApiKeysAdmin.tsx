@@ -822,11 +822,6 @@ export function ApiKeysAdmin({
           </button>
         </div>
         {projectPicker(projectIds, setProjectIds, role)}
-        {role === "admin" ? (
-          <p className="bb-key-note">
-            管理员级 Key 不选项目时可访问全部项目；勾选后仅限所选项目。
-          </p>
-        ) : null}
       </form>
       {error ? <p className="bb-error">{error}</p> : null}
       {copyNote ? (
@@ -1017,11 +1012,6 @@ export function ApiKeysAdmin({
                             setEditProjectIds,
                             editRole
                           )}
-                          {editRole === "admin" ? (
-                            <p className="bb-key-note">
-                              管理员级 Key 不选项目时可访问全部项目；勾选后仅限所选项目。
-                            </p>
-                          ) : null}
                           <div className="bb-key-edit-actions">
                             <button
                               className="bb-btn"
