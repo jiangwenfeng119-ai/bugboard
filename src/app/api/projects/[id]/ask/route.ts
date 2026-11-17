@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { askCallbackUrl } from "@/lib/ask-core";
 import { startAsk } from "@/lib/ask-store";
 import { error, json, withAuth } from "@/lib/http";
 
@@ -21,7 +22,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       identity,
       projectId,
       { question: body.question, threadId: body.threadId, force: body.force === true },
-      `${req.nextUrl.origin}/api/ask/callback`
+      askCallbackUrl({
+        configured: process.env.BUGBOARD_CALLBACK_ORIGIN || process.env.BASE_URL,
+        requestOrigin: req.nextUrl.origin,
+      })
     );
     return json({ run }, 201);
   });

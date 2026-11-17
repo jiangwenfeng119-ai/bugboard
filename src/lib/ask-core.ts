@@ -1,3 +1,21 @@
+export function askCallbackUrl(input: { configured?: string; requestOrigin: string }) {
+  const configured = String(input.configured || "").trim().replace(/\/$/, "");
+  const origin = String(input.requestOrigin || "").trim().replace(/\/$/, "");
+  return `${configured || origin}/api/ask/callback`;
+}
+
+export function wakeFailureText(body: string) {
+  const raw = body.trim();
+  if (!raw) return "";
+  try {
+    const data = JSON.parse(raw) as { error?: unknown };
+    if (typeof data.error === "string" && data.error.trim()) return data.error.trim();
+  } catch {
+    return raw;
+  }
+  return raw;
+}
+
 export const ASK_QUESTION_MAX = 2000;
 export const ASK_ANSWER_MAX = 100_000;
 

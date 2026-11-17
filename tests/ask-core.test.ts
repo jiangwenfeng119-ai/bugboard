@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  askCallbackUrl,
   answerPieces,
+  wakeFailureText,
   applyAskCallback,
   buildAskPrompt,
   emptyAskView,
@@ -80,6 +82,16 @@ describe("ask core", () => {
     expect(done.judgment).toBe("file");
     expect(done.sessionId).toBe("sess_1");
     expect(done.mirrorSha).toBe("abc1234");
+  });
+
+  it("sends the answer back to the configured Bugboard, not the browser host", () => {
+    expect(
+      askCallbackUrl({
+        configured: "http://127.0.0.1:3080/",
+        requestOrigin: "https://0.0.0.0:3000",
+      })
+    ).toBe("http://127.0.0.1:3080/api/ask/callback");
+    expect(wakeFailureText('{"error":"回调地址无效"}')).toBe("回调地址无效");
   });
 
   it("turns a source path into a link on the project branch", () => {

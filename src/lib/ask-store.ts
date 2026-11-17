@@ -11,6 +11,7 @@ import {
   documentExcerpt,
   emptyAskView,
   normalizeQuestion,
+  wakeFailureText,
   type AskJudgment,
   type AskStatus,
   type AskView,
@@ -395,7 +396,7 @@ export async function startAsk(
       saveView(row.id, {
         ...emptyAskView(),
         status: "failed",
-        error: text.slice(0, 300) || OFFLINE,
+        error: wakeFailureText(text).slice(0, 300) || OFFLINE,
       });
     }
   } catch {
