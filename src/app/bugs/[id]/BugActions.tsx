@@ -13,9 +13,10 @@ import {
 import {
   bugPageActions,
   isDangerBugAction,
+  nextStepIdleCopy,
   primaryBugAction,
 } from "./bug-page-actions";
-import type { Priority } from "@/lib/types";
+import type { BugStatus, Priority } from "@/lib/types";
 
 const NOTE_ACTIONS = new Set<TransitionAction>([
   "mark_invalid",
@@ -50,12 +51,14 @@ type ActiveAction = TransitionAction | "add_supplement";
 
 export function BugActions({
   bugId,
+  status,
   actions,
   canSupplement = false,
   isAdmin,
   currentPriority,
 }: {
   bugId: number;
+  status: BugStatus;
   actions: TransitionAction[];
   canSupplement?: boolean;
   isAdmin: boolean;
@@ -171,7 +174,7 @@ export function BugActions({
   if (pageActions.length === 0 && !canSupplement && !isAdmin) {
     return (
       <p className="bb-muted" style={{ margin: 0 }}>
-        这一步暂时轮不到你。可以先看时间线；轮到你时，这里会出现按钮。
+        {nextStepIdleCopy(status)}
       </p>
     );
   }

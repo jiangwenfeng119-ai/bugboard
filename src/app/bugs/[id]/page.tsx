@@ -249,6 +249,7 @@ export default async function BugDetailPage({
             <h2>下一步</h2>
             <BugActions
               bugId={bug.id}
+              status={bug.status}
               actions={actions}
               canSupplement={canSupplement}
               isAdmin={canHandleBugs}

@@ -76,11 +76,17 @@ function slugify(name: string) {
   return base || `project-${Date.now()}`;
 }
 
+function assertAccountCredentials(username: string, password: string) {
+  const missingName = !username.trim();
+  const shortPassword = password.length < 6;
+  if (missingName && shortPassword) throw new Error("用户名必填，密码至少 6 位");
+  if (missingName) throw new Error("用户名必填");
+  if (shortPassword) throw new Error("密码至少 6 位");
+}
+
 export async function setupAdmin(username: string, password: string) {
   if (isSetupComplete()) throw new Error("系统已完成首装");
-  if (!username.trim() || password.length < 6) {
-    throw new Error("用户名必填，密码至少 6 位");
-  }
+  assertAccountCredentials(username, password);
   const hash = await hashPassword(password);
   const t = nowIso();
   const insert = getDb().transaction(() => {
@@ -415,9 +421,7 @@ export async function createUser(
 ) {
   if (!requireAdmin(identity)) throw new Error("需要管理员权限");
   assertAssignableRole(identity, data.role);
-  if (!data.username.trim() || data.password.length < 6) {
-    throw new Error("用户名必填，密码至少 6 位");
-  }
+  assertAccountCredentials(data.username, data.password);
   const hash = await hashPassword(data.password);
   const t = nowIso();
   try {

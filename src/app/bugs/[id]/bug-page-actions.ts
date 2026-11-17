@@ -1,4 +1,5 @@
 import type { TransitionAction } from "@/lib/state-machine";
+import type { BugStatus } from "@/lib/types";
 
 /** Progress first, then secondary, then destructive — so「下一步」reads as one primary path. */
 const ACTION_ORDER: TransitionAction[] = [
@@ -45,4 +46,11 @@ export function isDangerBugAction(action: TransitionAction) {
 /** First non-destructive action earns the solid primary button. */
 export function primaryBugAction(actions: TransitionAction[]) {
   return actions.find((action) => !DANGER_ACTIONS.has(action)) ?? null;
+}
+
+export function nextStepIdleCopy(status: BugStatus) {
+  if (status === "confirmed" || status === "acknowledged") {
+    return "这张单已经结束。可以看时间线，没有下一步。";
+  }
+  return "这一步暂时轮不到你。可以先看时间线；轮到你时，这里会出现按钮。";
 }

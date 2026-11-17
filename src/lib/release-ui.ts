@@ -1,3 +1,16 @@
+export function changesEmptyDescription(input: {
+  filtered: boolean;
+  canRelease: boolean;
+  pendingCount: number;
+}) {
+  if (input.filtered) return "换一个筛选，或查看全部记录。";
+  if (!input.canRelease) return "修复推送和功能开发登记后，会出现在这里。";
+  if (input.pendingCount > 0) {
+    return "待发布报障已经列在上方。发布或登记之后，记录会出现在这里。";
+  }
+  return "修好并提交修复说明后，待发布报障会出现在上方；发布或登记后，时间线会落在这里。";
+}
+
 /** Immediate release only when there is at least one ready-to-release bug and no job in flight. */
 export function canImmediateRelease(pendingCount: number, jobInFlight = false): boolean {
   return pendingCount > 0 && !jobInFlight;

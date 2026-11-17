@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { HoverTip } from "@/components/HoverTip";
 import {
   canImmediateRelease,
+  changesEmptyDescription,
   releaseFinishedNotice,
   releaseStatusBanner,
   releaseSubmitNotice,
@@ -289,13 +290,11 @@ export function ChangesPanel({
         <EmptyState
           imageSrc="/brand/empty-bugs.png"
           title={filter ? "没有符合筛选的变更" : "暂无变更"}
-          description={
-            filter
-              ? "换一个筛选，或查看全部记录。"
-              : canRelease
-                ? "修好并提交修复说明后，待发布报障会出现在上方；发布或登记后，时间线会落在这里。"
-                : "修复推送和功能开发登记后，会出现在这里。"
-          }
+          description={changesEmptyDescription({
+            filtered: Boolean(filter),
+            canRelease,
+            pendingCount: pendingBugs.length,
+          })}
           action={
             filter ? (
               <Link href={`/projects/${projectId}/changes`} className="bb-btn bb-btn-secondary">
