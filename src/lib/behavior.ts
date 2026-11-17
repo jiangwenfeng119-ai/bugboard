@@ -38,6 +38,8 @@ type BehaviorRow = {
   capture_gap_ms?: number | null;
   capture_short_chars?: number | null;
   organize_timeout_min?: number | null;
+  ask_enabled?: number | null;
+  ask_per_hour?: number | null;
 };
 
 function bit(value: number | null | undefined, fallback: boolean) {
@@ -85,6 +87,8 @@ function fromRow(row: BehaviorRow): BehaviorSettings {
     captureGapMs: whole(row.capture_gap_ms, defaults.captureGapMs),
     captureShortChars: whole(row.capture_short_chars, defaults.captureShortChars),
     organizeTimeoutMin: whole(row.organize_timeout_min, defaults.organizeTimeoutMin),
+    askEnabled: bit(row.ask_enabled, defaults.askEnabled),
+    askPerHour: whole(row.ask_per_hour, defaults.askPerHour),
   };
 }
 
@@ -177,6 +181,8 @@ export function parseBehaviorInput(value: unknown): BehaviorSettings {
     captureGapMs: assertInt(input.captureGapMs, "走查停顿", 200, 10000),
     captureShortChars: assertInt(input.captureShortChars, "短句字数", 1, 40),
     organizeTimeoutMin: assertInt(input.organizeTimeoutMin, "整理超时", 1, 60),
+    askEnabled: assertBool(input.askEnabled, "项目问答"),
+    askPerHour: assertInt(input.askPerHour, "每小时提问", 1, 60),
   };
 }
 
@@ -206,8 +212,8 @@ export function saveBehaviorSettings(identity: Identity, projectId: number, valu
          wake_actions, wake_drain_queue, intake_priority,
          inbox_show_pending, inbox_show_needs_product, inbox_show_ready, inbox_show_own_fixing,
          inbox_pending_cap, release_advances_bugs, release_timeout_min,
-         capture_gap_ms, capture_short_chars, organize_timeout_min
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         capture_gap_ms, capture_short_chars, organize_timeout_min, ask_enabled, ask_per_hour
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(project_id) DO UPDATE SET
          updated_at = excluded.updated_at,
          wake_on_web_create = excluded.wake_on_web_create,
@@ -226,7 +232,9 @@ export function saveBehaviorSettings(identity: Identity, projectId: number, valu
          release_timeout_min = excluded.release_timeout_min,
          capture_gap_ms = excluded.capture_gap_ms,
          capture_short_chars = excluded.capture_short_chars,
-         organize_timeout_min = excluded.organize_timeout_min`
+         organize_timeout_min = excluded.organize_timeout_min,
+         ask_enabled = excluded.ask_enabled,
+         ask_per_hour = excluded.ask_per_hour`
     )
     .run(
       projectId,
@@ -247,7 +255,9 @@ export function saveBehaviorSettings(identity: Identity, projectId: number, valu
       settings.releaseTimeoutMin,
       settings.captureGapMs,
       settings.captureShortChars,
-      settings.organizeTimeoutMin
+      settings.organizeTimeoutMin,
+      settings.askEnabled ? 1 : 0,
+      settings.askPerHour
     );
   return readBehavior(projectId);
 }

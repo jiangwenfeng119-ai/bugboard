@@ -56,5 +56,6 @@ wake.config.json
 !wake.config.json.example
 wake.sessions.json
 wake-runs/
+ask-mirrors/
 .worktrees/
 .superpowers/

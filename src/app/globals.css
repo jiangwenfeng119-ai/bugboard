@@ -4977,3 +4977,135 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   background: color-mix(in srgb, var(--status-ready) 12%, white);
   border-color: color-mix(in srgb, var(--status-ready) 25%, white);
 }
+
+.bb-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.bb-ask-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.bb-ask-head p,
+.bb-ask-hint,
+.bb-ask-status,
+.bb-ask-cache {
+  margin: 0.25rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.bb-ask-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.bb-ask-turn,
+.bb-ask-earlier {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.bb-ask-q,
+.bb-ask-answer {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.bb-ask-q span {
+  display: inline-block;
+  margin-right: 0.4rem;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.bb-ask-judge {
+  display: inline-flex;
+  margin: 0.45rem 0 0;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.bb-ask-judge.is-exists {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, white);
+  border-color: color-mix(in srgb, var(--ok) 25%, white);
+}
+
+.bb-ask-judge.is-file {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, white);
+  border-color: color-mix(in srgb, var(--warning) 25%, white);
+}
+
+.bb-ask-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+
+.bb-ask-actions .bb-field-hint {
+  margin: 0;
+}
+
+.bb-ask-cache {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bb-ask-input {
+  min-height: 3.2rem;
+  background: var(--surface);
+}
+
+.bb-ask-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.bb-ask-gaps {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bb-ask-gaps li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.bb-ask-gaps span {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+

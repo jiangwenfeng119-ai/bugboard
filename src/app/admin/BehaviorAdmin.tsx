@@ -273,6 +273,26 @@ export function BehaviorAdmin({
               onCommit={(organizeTimeoutMin) => patch({ organizeTimeoutMin })}
             />
           </fieldset>
+          <fieldset className="bb-dispatch-channel">
+            <legend>项目问答</legend>
+            <label className="bb-checkline">
+              <input
+                type="checkbox"
+                checked={settings.askEnabled}
+                onChange={(event) => patch({ askEnabled: event.target.checked })}
+              />
+              打开只读问答
+            </label>
+            <BoundedNumber
+              id="bb-ask-hour"
+              label="每人每小时最多提问"
+              hint="1 到 60。超过后要等下一个小时。问答不能改代码。"
+              value={settings.askPerHour}
+              min={1}
+              max={60}
+              onCommit={(askPerHour) => patch({ askPerHour })}
+            />
+          </fieldset>
           {error ? <p className="bb-error">{error}</p> : null}
           {saved ? <p className="bb-field-hint">{saved}</p> : null}
           <button type="button" className="bb-btn" onClick={save} disabled={loading}>

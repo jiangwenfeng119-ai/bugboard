@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { AskBeforeReport } from "./AskBeforeReport";
 import {
   AttachmentComposer,
   type PendingFile,
@@ -15,7 +16,15 @@ import { PRIORITY_HINT, PRIORITY_LABEL, type Priority } from "@/lib/types";
 
 const PRIORITIES = Object.keys(PRIORITY_LABEL) as Priority[];
 
-export function NewBugPanel({ projectId }: { projectId: number }) {
+export function NewBugPanel({
+  projectId,
+  repoUrl = "",
+  branch = "",
+}: {
+  projectId: number;
+  repoUrl?: string;
+  branch?: string;
+}) {
   const router = useRouter();
   const titleId = useId();
   const priorityId = useId();
@@ -154,6 +163,21 @@ export function NewBugPanel({ projectId }: { projectId: number }) {
         </div>
 
         <div className="bb-sheet-body">
+          <AskBeforeReport
+            projectId={projectId}
+            title={title}
+            body={body}
+            repoUrl={repoUrl}
+            branch={branch}
+            onFill={(next) => {
+              setTitle(next.title);
+              setBody(next.body);
+              requestAnimationFrame(() => {
+                document.getElementById(`${titleId}-title`)?.focus();
+              });
+            }}
+          />
+
           <div className="bb-field">
             <label className="bb-label" htmlFor={`${titleId}-title`}>
               标题

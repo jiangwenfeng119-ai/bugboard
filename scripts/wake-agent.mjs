@@ -16,6 +16,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { callbackAllowed } from "./ask-protocol.mjs";
+import { enqueueAsk, executeAsk, gitSync, syncConfiguredMirrors } from "./ask-runner.mjs";
 
 export const MAX_BODY_BYTES = 1_000_000;
 export const MAX_PROMPT_CHARS = 60_000;
@@ -41,6 +43,9 @@ export function readConfig(env = process.env, cwd = process.cwd()) {
     secrets,
     cwd: env.WAKE_CWD || fromFile.cwd || "",
     projects: fromFile.projects || {},
+    askRoot: env.WAKE_ASK_ROOT || fromFile.askRoot || path.resolve(cwd, "ask-mirrors"),
+    bugboardUrl: env.BUGBOARD_URL || fromFile.bugboardUrl || "",
+    releaseKey: env.BUGBOARD_RELEASE_KEY || fromFile.releaseKey || "",
     sessionFile: path.resolve(cwd, "wake.sessions.json"),
     runDir: path.resolve(cwd, "wake-runs"),
   };
@@ -412,6 +417,20 @@ export function createWakeServer(config) {
       send(res, 202, { ok: true, spawned: true });
       return;
     }
+    if (payload.event === "project.ask") {
+      const callbackUrl = String(payload.callbackUrl || "");
+      if (!callbackAllowed(callbackUrl, config.bugboardUrl || "")) {
+        send(res, 400, { error: "回调地址无效" });
+        return;
+      }
+      const code = String(payload.project?.code || "project");
+      send(res, 202, { ok: true, spawned: true });
+      const run = config.executeAsk || ((cfg, body) => executeAsk(cfg, body));
+      void enqueueAsk(code, () => Promise.resolve(run(config, payload))).catch((error) => {
+        console.error(error instanceof Error ? error.message : error);
+      });
+      return;
+    }
     if (payload.event !== "bug.needs_agent" && payload.event !== "capture.needs_organize") {
       send(res, 400, { error: "不认识的事件" });
       return;
@@ -549,12 +568,55 @@ function main() {
   server.listen(port, bindHost, () => {
     console.log(`叫醒服务监听 http://${bindHost}:${port}/wake`);
     console.log(`Agent：${config.agent}。项目目录：${Object.keys(config.projects).join(", ") || config.cwd || "（还没配）"}`);
+    console.log(`问答镜像目录：${config.askRoot}`);
     console.log(
       config.applyEdits
         ? "已允许在项目目录里自动改文件（--force，仍限制在该目录和沙箱里）。"
         : "默认只读分析（--mode plan），不会自动改文件。要改代码，在 wake.config.json 里写 \"applyEdits\": true。"
     );
+    void syncAskProjects(config);
   });
+}
+
+async function syncAskProjects(config) {
+  if (!config.bugboardUrl || !config.releaseKey) return;
+  try {
+    const res = await fetch(`${String(config.bugboardUrl).replace(/\/$/, "")}/api/projects`, {
+      headers: { Authorization: `Bearer ${config.releaseKey}` },
+    });
+    if (!res.ok) {
+      console.error(`同步项目清单失败 HTTP ${res.status}`);
+      return;
+    }
+    const data = await res.json();
+    const projects = Array.isArray(data.projects)
+      ? data.projects.map((item) => ({
+          code: item.code,
+          githubUrl: item.github_url,
+          defaultBranch: item.default_branch,
+        }))
+      : [];
+    const synced = syncConfiguredMirrors(config, projects, gitSync);
+    for (const item of synced) {
+      if (item.error) console.error(`问答镜像 ${item.code}：${item.error}`);
+      else console.log(`问答镜像 ${item.code} ${String(item.sha).slice(0, 7)}`);
+    }
+    await resumeQueuedAsks(config);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "同步问答镜像失败");
+  }
+}
+
+async function resumeQueuedAsks(config) {
+  const res = await fetch(`${String(config.bugboardUrl).replace(/\/$/, "")}/api/ask/pending`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.releaseKey}` },
+  });
+  if (!res.ok) return;
+  const data = await res.json();
+  for (const job of Array.isArray(data.jobs) ? data.jobs : []) {
+    await executeAsk(config, job);
+  }
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

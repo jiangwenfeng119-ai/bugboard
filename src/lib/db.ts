@@ -235,6 +235,7 @@ function migrateSchema(db: Database.Database) {
   ensureBehaviorConfig(db);
   ensureEventKind(db);
   ensureProjectChanges(db);
+  ensureAsk(db);
 }
 
 function ensureProjectChanges(db: Database.Database) {
@@ -256,6 +257,57 @@ function ensureProjectChanges(db: Database.Database) {
   for (const [name, ddl] of adds) {
     if (!cols.has(name)) db.exec(`ALTER TABLE project_changes ADD COLUMN ${name} ${ddl}`);
   }
+}
+
+function ensureAsk(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ask_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      actor_type TEXT NOT NULL CHECK(actor_type IN ('user','api_key')),
+      actor_id INTEGER NOT NULL,
+      thread_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      question_norm TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('streaming','done','failed','reverted')),
+      judgment TEXT NOT NULL DEFAULT '',
+      answer TEXT NOT NULL DEFAULT '',
+      status_line TEXT NOT NULL DEFAULT '',
+      mirror_sha TEXT NOT NULL DEFAULT '',
+      cached_from_id INTEGER,
+      session_id TEXT NOT NULL DEFAULT '',
+      seq INTEGER NOT NULL DEFAULT 0,
+      error TEXT NOT NULL DEFAULT '',
+      force INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS ask_mirrors (
+      project_id INTEGER PRIMARY KEY,
+      head_sha TEXT NOT NULL DEFAULT '',
+      branch TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ask_cache ON ask_runs(project_id, question_norm, mirror_sha, status);
+    CREATE INDEX IF NOT EXISTS idx_ask_thread ON ask_runs(project_id, thread_id, id);
+
+    CREATE TABLE IF NOT EXISTS ask_maps (
+      project_id INTEGER PRIMARY KEY,
+      body TEXT NOT NULL DEFAULT '',
+      mirror_sha TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+  `);
+  const cols = new Set(columnNames(db, "ask_runs"));
+  if (!cols.has("queued")) db.exec("ALTER TABLE ask_runs ADD COLUMN queued INTEGER NOT NULL DEFAULT 0");
+  if (!cols.has("payload")) db.exec("ALTER TABLE ask_runs ADD COLUMN payload TEXT NOT NULL DEFAULT ''");
 }
 
 function ensureEventKind(db: Database.Database) {
@@ -440,6 +492,8 @@ function ensureBehaviorConfig(db: Database.Database) {
   add("capture_gap_ms", "capture_gap_ms INTEGER NOT NULL DEFAULT 1200");
   add("capture_short_chars", "capture_short_chars INTEGER NOT NULL DEFAULT 8");
   add("organize_timeout_min", "organize_timeout_min INTEGER NOT NULL DEFAULT 8");
+  add("ask_enabled", "ask_enabled INTEGER NOT NULL DEFAULT 1");
+  add("ask_per_hour", "ask_per_hour INTEGER NOT NULL DEFAULT 20");
 }
 
 function ensureProjectLogo(db: Database.Database) {

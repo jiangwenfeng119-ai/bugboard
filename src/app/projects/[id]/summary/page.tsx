@@ -1,13 +1,16 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { requireUser } from "@/lib/session-guard";
-import { projectStats } from "@/lib/services";
+import { projectStats, getProject } from "@/lib/services";
+import { answerPieces } from "@/lib/ask-core";
 import { STATUS_LABEL, type BugStatus, type DayCountSeries } from "@/lib/types";
 import { StatIcon } from "@/components/StatIcon";
 import { IconChart, IconUsers } from "@/components/Icons";
 import { TrendChart } from "../TrendChart";
 import { SeriesChart, SeriesLegend, type ChartSeries } from "../SeriesChart";
 import { DaysSwitcher } from "../DaysSwitcher";
+import { listAskGaps, readFeatureMap } from "@/lib/ask-store";
+import { RefreshFeatureMap } from "./RefreshFeatureMap";
 
 const STATUS_COLOR: Record<BugStatus, string> = {
   pending: "var(--status-pending)",
@@ -68,6 +71,9 @@ export default async function ProjectSummaryPage({
     })),
   ];
   const showAll = sp.showAll === "1";
+  const featureMap = readFeatureMap(identity, Number(id));
+  const gaps = listAskGaps(identity, Number(id));
+  const project = getProject(identity, Number(id));
   const entries = showAll
     ? allEntries
     : allEntries.filter((e) => e.key === "total" || e.value > 0);
@@ -111,6 +117,42 @@ export default async function ProjectSummaryPage({
             </>
           )}
         </p>
+      ) : null}
+
+      <section className="bb-card bb-section-card">
+        <div className="bb-section-head">
+          <h2>功能地图</h2>
+          <RefreshFeatureMap projectId={Number(id)} />
+        </div>
+        {featureMap ? (
+          <p className="bb-ask-answer">
+            {answerPieces(featureMap.body, project.github_url, project.default_branch).map((piece, index) =>
+              piece.href ? (
+                <a key={index} className="bb-ask-link" href={piece.href} target="_blank" rel="noreferrer">
+                  {piece.text}
+                </a>
+              ) : (
+                <span key={index}>{piece.text}</span>
+              )
+            )}
+          </p>
+        ) : (
+          <p className="bb-muted">还没有。更新之后，这里按当前默认分支列出模块和入口。</p>
+        )}
+      </section>
+
+      {gaps.length > 0 ? (
+        <section className="bb-card bb-section-card">
+          <h2>最近被判断为还没有的功能</h2>
+          <ul className="bb-ask-gaps">
+            {gaps.map((gap) => (
+              <li key={gap.question}>
+                {gap.question}
+                <span>{gap.count} 次</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <div className="bb-card bb-section-card">

@@ -7,5 +7,6 @@
   "releaseKey": "一把管理员级 API Key，只给本机发布任务",
   "projects": {
     "SOC": "/绝对路径/目标代码仓"
-  }
+  },
+  "askRoot": "/绝对路径/问答镜像"
 }

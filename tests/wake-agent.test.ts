@@ -247,4 +247,50 @@ describe("wake agent launch", () => {
     expect(readSession(file, key)).toBe("sess_abc");
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it("accepts a project question without launching the repair agent", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wake-ask-"));
+    const seen: string[] = [];
+    const config = {
+      listen: "127.0.0.1:0",
+      agent: "zcode",
+      argv: null,
+      allowLan: false,
+      applyEdits: true,
+      secrets: ["whsec_test"],
+      cwd: "",
+      projects: {},
+      bugboardUrl: "http://127.0.0.1:3080",
+      sessionFile: path.join(root, "sessions.json"),
+      runDir: path.join(root, "runs"),
+      executeAsk: (_cfg: unknown, payload: { event?: string }) => {
+        seen.push(payload.event || "");
+        return Promise.resolve();
+      },
+    };
+    const server = createWakeServer(config);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const body = JSON.stringify({
+      event: "project.ask",
+      runId: 3,
+      callbackUrl: "http://127.0.0.1:3080/api/ask/callback",
+      prompt: "只回答",
+      project: { code: "EMH", githubUrl: "https://github.com/acme/emh", defaultBranch: "release/1.0" },
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/wake`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Bugboard-Signature": `sha256=${sign("whsec_test", body)}`,
+      },
+      body,
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(res.status).toBe(202);
+    expect(seen).toEqual(["project.ask"]);
+  });
 });

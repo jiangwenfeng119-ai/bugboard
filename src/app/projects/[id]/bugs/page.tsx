@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/session-guard";
 import { isAdminRole, isSuperAdminRole } from "@/lib/roles";
 import { bugListQuery } from "@/lib/bug-list-query";
-import { BUG_SORT_KEYS, listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
+import { BUG_SORT_KEYS, getProject, listBugs, listProjectReporters, resolveBugSort, type BugSortKey } from "@/lib/services";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PriorityMark } from "@/components/PriorityMark";
 import { EmptyState } from "@/components/EmptyState";
@@ -115,6 +115,7 @@ export default async function BugsPage({
     sort: order?.sort,
     dir: order?.dir,
   });
+  const project = getProject(identity, Number(id));
   const filtered = Boolean(sp.status || sp.priority || sp.reporter || sp.q?.trim());
 
   return (
@@ -135,7 +136,7 @@ export default async function BugsPage({
         />
         <div className="bb-bugs-actions">
           {isAdmin ? <WidgetSnippet projectId={Number(id)} /> : null}
-          <NewBugPanel projectId={Number(id)} />
+          <NewBugPanel projectId={project.id} repoUrl={project.github_url} branch={project.default_branch} />
         </div>
       </div>
 
@@ -156,7 +157,7 @@ export default async function BugsPage({
                 清除筛选
               </Link>
             ) : (
-              <NewBugPanel projectId={Number(id)} />
+              <NewBugPanel projectId={project.id} repoUrl={project.github_url} branch={project.default_branch} />
             )
           }
         />

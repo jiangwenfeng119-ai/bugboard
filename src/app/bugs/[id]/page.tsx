@@ -22,6 +22,7 @@ import {
 import { STATUS_LABEL } from "@/lib/types";
 import { WakeBugButton } from "@/components/AgentDispatch";
 import { bugAwaitingAgent, latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
+import { AskBeforeReport } from "@/app/projects/[id]/bugs/AskBeforeReport";
 import { BugActions } from "./BugActions";
 import { bugPageActions } from "./bug-page-actions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
@@ -275,6 +276,17 @@ export default async function BugDetailPage({
 
         <div className="bb-bug-main">
           <EvidenceCard bug={bug} />
+          <section className="bb-card bb-section-card">
+            <h2>对照代码</h2>
+            <AskBeforeReport
+              projectId={project.id}
+              title=""
+              body=""
+              repoUrl={project.github_url}
+              branch={project.default_branch}
+              seed={`这个报障对应代码的哪里：${bug.title}`}
+            />
+          </section>
 
           <div className="bb-card bb-section-card">
             <h2>描述</h2>

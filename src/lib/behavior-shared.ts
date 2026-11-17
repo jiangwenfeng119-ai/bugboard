@@ -39,6 +39,8 @@ export type BehaviorSettings = {
   captureGapMs: number;
   captureShortChars: number;
   organizeTimeoutMin: number;
+  askEnabled: boolean;
+  askPerHour: number;
 };
 
 export function behaviorDefaults(): BehaviorSettings {
@@ -60,6 +62,8 @@ export function behaviorDefaults(): BehaviorSettings {
     captureGapMs: 1200,
     captureShortChars: 8,
     organizeTimeoutMin: 8,
+    askEnabled: true,
+    askPerHour: 20,
   };
 }
 
