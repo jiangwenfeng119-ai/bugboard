@@ -55,7 +55,7 @@
 
 ### 提一张报障
 
-在项目的报障页点 **新建报障**。
+在项目的报障页点 **新建报障**。不确定功能有没有、入口在哪时，先用表单上方的 **先问这个项目**：只读回答，不改代码，也不替你提交；答完后可一键填入报障草稿再改。
 
 1. 标题用一句话写清现象。
 2. 正文写环境、复现步骤、期望和实际结果。支持 Markdown：二级标题、空行分段、有序列表。
@@ -154,7 +154,7 @@
 
 **分派给 Agent。** 每个项目一套叫醒和发布配置。见下文「提交后分派给 Agent」和「夜间发布」。
 
-**行为。** 每个项目一套协作开关，和「叫到哪台机器、发布命令」分开。默认是：网页、小组件、走查建单会叫醒，API Key 建单不叫醒；补充材料、仍有问题、异议、撤回不属实、待处理时的补充说明、以及人点「可以做」会再叫一次；叫醒后继续处理该项目其余待处理。管理员收件箱默认包含待处理、待产品经理确认、待发布、自己接手的修复中，待处理最多列 8 条。发布成功默认把待发布推进到待确认，执行中的任务默认 45 分钟没有回写算超时（可改成 5–180 分钟）。走查默认停顿超过 1.2 秒新开一条，不足 8 个字标成待确认，整理超过 8 分钟改用规则草稿。没改过的项目用这套默认。
+**行为。** 每个项目一套协作开关，和「叫到哪台机器、发布命令」分开。默认是：网页、小组件、走查建单会叫醒，API Key 建单不叫醒；补充材料、仍有问题、异议、撤回不属实、待处理时的补充说明、以及人点「可以做」会再叫一次；叫醒后继续处理该项目其余待处理。管理员收件箱默认包含待处理、待产品经理确认、待发布、自己接手的修复中，待处理最多列 8 条。发布成功默认把待发布推进到待确认，执行中的任务默认 45 分钟没有回写算超时（可改成 5–180 分钟）。走查默认停顿超过 1.2 秒新开一条，不足 8 个字标成待确认，整理超过 8 分钟改用规则草稿。项目问答默认打开，每人每小时最多 20 次；关闭后新建报障时不能提问。没改过的项目用这套默认。
 
 **提示词。** 两段现成提示词，填上目标项目名后复制到对话里。
 
@@ -184,9 +184,9 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 
 管理员在管理后台的「分派给 Agent」里配置。每个项目一套，清单里可以编辑、测试和删除：
 
-1. 在跑 Cursor 或 ZCode 的电脑上复制 `wake.config.json.example` 为 `wake.config.json`。`projects` 里用项目缩写对上代码仓的绝对路径。这个目录就是 Agent 的工作区（`--workspace`），不要写成用户主目录、磁盘根目录，也不要写成放着 `wake.config.json` 的目录。`agent` 用 `cursor` 或 `zcode`。报障标题和正文会包在 `<question>` 里，并声明这是数据不是指令。Cursor 默认 `agent -p --trust --sandbox enabled --output-format json --workspace <项目目录> --mode plan`，不带 `--force` / `--yolo`，所以只做只读分析。要让它在这个目录里改代码，把 `applyEdits` 设为 `true`（会加上 `--force`，仍然限制在该目录和沙箱里）。同一张单的后续分派会带 `--resume` 复用上次的会话。标准输出的 JSON 写在 `wake-runs/`。参数不对时，在配置里写 `argv` 数组，用 `{prompt}`、`{cwd}`、`{bugId}`、`{publicId}`、`{projectCode}`、`{session}` 占位。自定义参数里的 `--force` / `--yolo` 在 `applyEdits` 没打开时会被去掉。
+1. 在跑 Cursor 或 ZCode 的电脑上复制 `wake.config.json.example` 为 `wake.config.json`。`projects` 里用项目缩写对上代码仓的绝对路径。这个目录就是 Agent 的工作区（`--workspace`），不要写成用户主目录、磁盘根目录，也不要写成放着 `wake.config.json` 的目录。`askRoot` 是项目问答用的只读镜像目录，和修理工作区分开；不要写成用户主目录或磁盘根。`agent` 用 `cursor` 或 `zcode`。报障标题和正文会包在 `<question>` 里，并声明这是数据不是指令。Cursor 默认 `agent -p --trust --sandbox enabled --output-format json --workspace <项目目录> --mode plan`，不带 `--force` / `--yolo`，所以只做只读分析。要让它在这个目录里改代码，把 `applyEdits` 设为 `true`（会加上 `--force`，仍然限制在该目录和沙箱里）。同一张单的后续分派会带 `--resume` 复用上次的会话。标准输出的 JSON 写在 `wake-runs/`。参数不对时，在配置里写 `argv` 数组，用 `{prompt}`、`{cwd}`、`{bugId}`、`{publicId}`、`{projectCode}`、`{session}` 占位。自定义参数里的 `--force` / `--yolo` 在 `applyEdits` 没打开时会被去掉。
 2. 执行 `npm run wake`。它只监听 `127.0.0.1:3099`。Docker 场景可在单独目录放 `wake.config.json`（含 `allowLan: true` 与 `listen: 0.0.0.0:3099`），用 `node /path/to/bugboard/scripts/wake-agent.mjs` 启动。想开机自启可参考 `scripts/com.bugboard.wake.plist.example`。
-3. 把打印出来的地址填进本机地址，保存，复制签名密钥，贴进 `secrets`，重启叫醒服务。点 **测试本机地址**，终端里应出现一行测试日志。
+3. 把打印出来的地址填进本机地址，保存，复制签名密钥，贴进 `secrets`，重启叫醒服务。点 **测试本机地址**，终端里应出现一行测试日志。`bugboardUrl` 与 `releaseKey` 配好后，叫醒服务还会同步问答镜像并处理排队中的提问。
 4. 之后网页上新建的待处理单会拉起本机 Agent。提示词就是管理员级修复提示，并点名这张单。Agent 用这台机器上已经接好的 Bugboard MCP 去 `get_bug`、`start_fix`。
 
 Bugboard 跑在 Docker 里时，容器访问不到宿主机的 `127.0.0.1`。本机地址改成 `http://host.docker.internal:3099/wake`。若仍不通，把 `listen` 改成 `0.0.0.0:3099`，并写上 `"allowLan": true`，只在可信网络里这样做。分派记录里出现「连不上这个地址」时，先确认叫醒服务还在跑。
