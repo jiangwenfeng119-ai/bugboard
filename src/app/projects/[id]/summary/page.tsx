@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { requireUser } from "@/lib/session-guard";
 import { projectStats, getProject } from "@/lib/services";
-import { answerPieces } from "@/lib/ask-core";
 import { STATUS_LABEL, type BugStatus, type DayCountSeries } from "@/lib/types";
 import { StatIcon } from "@/components/StatIcon";
 import { IconChart, IconUsers } from "@/components/Icons";
@@ -10,6 +9,7 @@ import { TrendChart } from "../TrendChart";
 import { SeriesChart, SeriesLegend, type ChartSeries } from "../SeriesChart";
 import { DaysSwitcher } from "../DaysSwitcher";
 import { listAskGaps, readFeatureMap } from "@/lib/ask-store";
+import { FeatureMapBody } from "./FeatureMapBody";
 import { RefreshFeatureMap } from "./RefreshFeatureMap";
 
 const STATUS_COLOR: Record<BugStatus, string> = {
@@ -101,7 +101,7 @@ export default async function ProjectSummaryPage({
         ))}
       </div>
       {hiddenZeros > 0 || showAll ? (
-        <p className="bb-muted" style={{ margin: "0.65rem 0 0" }}>
+        <p className="bb-muted bb-summary-span" style={{ margin: "0.65rem 0 0" }}>
           {showAll ? (
             <Link href={`/projects/${id}/summary${sp.days ? `?days=${sp.days}` : ""}`}>
               收起为零的状态
@@ -119,43 +119,7 @@ export default async function ProjectSummaryPage({
         </p>
       ) : null}
 
-      <section className="bb-card bb-section-card">
-        <div className="bb-section-head">
-          <h2>功能地图</h2>
-          <RefreshFeatureMap projectId={Number(id)} />
-        </div>
-        {featureMap ? (
-          <p className="bb-ask-answer">
-            {answerPieces(featureMap.body, project.github_url, project.default_branch).map((piece, index) =>
-              piece.href ? (
-                <a key={index} className="bb-ask-link" href={piece.href} target="_blank" rel="noreferrer">
-                  {piece.text}
-                </a>
-              ) : (
-                <span key={index}>{piece.text}</span>
-              )
-            )}
-          </p>
-        ) : (
-          <p className="bb-muted">还没有。更新之后，这里按当前默认分支列出模块和入口。</p>
-        )}
-      </section>
-
-      {gaps.length > 0 ? (
-        <section className="bb-card bb-section-card">
-          <h2>最近被判断为还没有的功能</h2>
-          <ul className="bb-ask-gaps">
-            {gaps.map((gap) => (
-              <li key={gap.question}>
-                {gap.question}
-                <span>{gap.count} 次</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <div className="bb-card bb-section-card">
+      <div className="bb-card bb-section-card bb-summary-trend">
         <div className="bb-section-head">
           <h2 className="bb-title-with-icon">
             <span className="bb-title-icon is-sm" aria-hidden>
@@ -205,6 +169,36 @@ export default async function ProjectSummaryPage({
           caption="每人每天推动的状态变更，不含建单。"
         />
       </div>
+
+      <section className="bb-card bb-section-card bb-summary-span">
+        <div className="bb-section-head">
+          <h2>功能地图</h2>
+          <RefreshFeatureMap projectId={Number(id)} />
+        </div>
+        {featureMap ? (
+          <FeatureMapBody
+            body={featureMap.body}
+            githubUrl={project.github_url}
+            branch={project.default_branch}
+          />
+        ) : (
+          <p className="bb-muted">还没有。更新之后，这里按当前默认分支列出模块和入口。</p>
+        )}
+      </section>
+
+      {gaps.length > 0 ? (
+        <section className="bb-card bb-section-card bb-summary-span">
+          <h2>最近被判断为还没有的功能</h2>
+          <ul className="bb-ask-gaps">
+            {gaps.map((gap) => (
+              <li key={gap.question}>
+                {gap.question}
+                <span>{gap.count} 次</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

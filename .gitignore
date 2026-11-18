@@ -59,3 +59,8 @@ wake-runs/
 ask-mirrors/
 .worktrees/
 .superpowers/
+
+# 本机 Cursor 钩子、预览缓存
+.cursor/hooks.json
+.next-role-preview/
+.impeccable/hook.cache.json

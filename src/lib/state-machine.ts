@@ -151,6 +151,16 @@ export function isReporter(
   return reporterType === "api_key" && reporterId === identity.apiKeyId;
 }
 
+function canConfirmFix(
+  identity: Identity,
+  reporterType: ActorType,
+  reporterId: number,
+  asAdmin: boolean
+) {
+  if (isReporter(identity, reporterType, reporterId)) return true;
+  return asAdmin && reporterType === "api_key";
+}
+
 export function allowedActions(
   identity: Identity,
   status: BugStatus,
@@ -162,6 +172,9 @@ export function allowedActions(
   const reporter = isReporter(identity, reporterType, reporterId);
   return TRANSITIONS.filter((t) => {
     if (!t.from.includes(status)) return false;
+    if (t.action === "confirm_fix") {
+      return canConfirmFix(identity, reporterType, reporterId, admin);
+    }
     if (t.who === "admin") return admin;
     return reporter;
   }).map((t) => t.action);
@@ -184,7 +197,24 @@ export function validateTransition(params: {
   if (spec.who === "admin" && !admin) {
     return { ok: false, error: "需要管理员权限" };
   }
-  if (
+  if (spec.action === "confirm_fix") {
+    if (
+      !canConfirmFix(
+        params.identity,
+        params.reporterType,
+        params.reporterId,
+        admin
+      )
+    ) {
+      return {
+        ok: false,
+        error:
+          params.reporterType === "api_key"
+            ? "仅原报障人或该项目的管理员可确认 Agent 提交的报障"
+            : "仅原报障人可执行此操作",
+      };
+    }
+  } else if (
     spec.who === "reporter" &&
     !isReporter(params.identity, params.reporterType, params.reporterId)
   ) {

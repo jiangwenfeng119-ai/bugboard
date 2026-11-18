@@ -685,7 +685,7 @@ server.tool(
 
 server.tool(
   "confirm_fix",
-  "确认已修复：待确认 → 已确认（仅原报障人 Key）",
+  "确认已修复：待确认 → 已确认。原报障人可以确认。报障人是 API Key 时，该项目的管理员也可以确认。人提交的单不能代确认。",
   { bugId: z.number().int().positive(), note: transitionNote },
   async ({ bugId, note }) => {
     try {

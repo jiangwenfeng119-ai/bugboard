@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import fs from "fs";
+import path from "path";
 import { actorFromIdentity } from "./auth";
 import {
   ASK_MAP_QUESTION,
@@ -16,9 +17,11 @@ import {
   type AskStatus,
   type AskView,
 } from "./ask-core";
+import { askImageToken, takeAskImages } from "./ask-images";
 import { readBehavior } from "./behavior";
 import { getDb, nowIso } from "./db";
 import { canAccessProject } from "./permissions";
+import { uploadsRoot } from "./paths";
 import { getProject } from "./services";
 import type { Identity } from "./types";
 import { absoluteAttachmentPath } from "./uploads";
@@ -287,10 +290,53 @@ export function stopAsk(identity: Identity, projectId: number, runId: number) {
   return readAsk(identity, projectId, runId);
 }
 
+function attachmentBuffers(projectId: number, ids: number[]) {
+  const files: { filename: string; buffer: Buffer }[] = [];
+  const stmt = getDb().prepare(
+    `SELECT a.filename, a.storage_path
+     FROM attachments a
+     LEFT JOIN bugs b ON a.owner_type = 'bug' AND a.owner_id = b.id
+     LEFT JOIN bug_status_events e ON a.owner_type = 'status_event' AND a.owner_id = e.id
+     LEFT JOIN bugs eb ON e.bug_id = eb.id
+     WHERE a.id = ? AND (b.project_id = ? OR eb.project_id = ?)`
+  );
+  for (const id of ids) {
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const row = stmt.get(id, projectId, projectId) as { filename: string; storage_path: string } | undefined;
+    if (!row) continue;
+    try {
+      files.push({ filename: row.filename, buffer: fs.readFileSync(absoluteAttachmentPath(row.storage_path)) });
+    } catch {
+      // 缺文件就跳过
+    }
+  }
+  return files;
+}
+
+function saveAskImageFiles(runId: number, files: { filename: string; buffer: Buffer }[]) {
+  const dir = path.join(uploadsRoot(), "ask", String(runId));
+  fs.mkdirSync(dir, { recursive: true });
+  const names: string[] = [];
+  for (const file of files) {
+    const ext = path.extname(file.filename).toLowerCase();
+    const name = `${randomBytes(6).toString("hex")}${ext}`;
+    fs.writeFileSync(path.join(dir, name), file.buffer);
+    names.push(name);
+  }
+  return names;
+}
+
 export async function startAsk(
   identity: Identity,
   projectId: number,
-  input: { question: string; threadId: string; force?: boolean },
+  input: {
+    question: string;
+    threadId: string;
+    force?: boolean;
+    draft?: string;
+    images?: { filename: string; buffer: Buffer }[];
+    attachmentIds?: number[];
+  },
   callbackUrl: string
 ) {
   if (!canAccessProject(identity, projectId)) throw new Error("无权访问该项目");
@@ -363,13 +409,26 @@ export async function startAsk(
     question,
     openBugs: openBugLines(projectId),
     documents: projectDocumentExcerpt(projectId),
+    featureMap: featureMapExcerpt(projectId),
+    draft: input.draft,
   });
+  const taken = takeAskImages([
+    ...attachmentBuffers(projectId, input.attachmentIds || []),
+    ...(input.images || []),
+  ]);
+  const names = taken.kept.length ? saveAskImageFiles(row.id, taken.kept) : [];
+  const origin = new URL(callbackUrl).origin;
   const payload = {
     event: "project.ask",
     runId: row.id,
     callbackUrl,
     sessionId: input.force ? "" : previous?.session_id || "",
     prompt,
+    images: names.map((name) => ({
+      name,
+      url: `${origin}/api/ask-images/${row.id}/${encodeURIComponent(name)}?t=${askImageToken(dispatch.webhook_secret, row.id, name)}`,
+    })),
+    imagesOmitted: taken.omitted,
     project: {
       id: project.id,
       code: project.code,
@@ -379,7 +438,7 @@ export async function startAsk(
     },
   };
   const body = JSON.stringify(payload);
-  getDb().prepare("UPDATE ask_runs SET payload = ? WHERE id = ?").run(body, row.id);
+  getDb().prepare("UPDATE ask_runs SET payload = ?, status_line = ? WHERE id = ?").run(body, "已交给代码机", row.id);
   try {
     const res = await askFetch(dispatch.webhook_url, {
       method: "POST",
@@ -411,6 +470,13 @@ export async function startAsk(
   const saved = getRun(row.id);
   if (!saved) throw new Error("这次提问不存在");
   return toPublicAsk(saved);
+}
+
+function featureMapExcerpt(projectId: number) {
+  const row = getDb().prepare("SELECT body FROM ask_maps WHERE project_id = ?").get(projectId) as
+    | { body: string }
+    | undefined;
+  return row?.body || "";
 }
 
 function openBugLines(projectId: number) {

@@ -80,16 +80,52 @@ describe("state machine", () => {
     expect(actions).toContain("mark_invalid");
   });
 
-  it("only reporter can confirm", () => {
+  it("only reporter can confirm a ticket filed by a person", () => {
     expect(allowedActions(reporter, "awaiting_confirm", "user", 2, reporter.role !== "user")).toContain(
       "confirm_fix"
     );
     expect(allowedActions(other, "awaiting_confirm", "user", 2, other.role !== "user")).not.toContain(
       "confirm_fix"
     );
-    expect(allowedActions(admin, "awaiting_confirm", "user", 2, admin.role !== "user")).not.toContain(
+    expect(allowedActions(admin, "awaiting_confirm", "user", 2, true)).not.toContain(
       "confirm_fix"
     );
+  });
+
+  it("lets a project admin confirm a ticket filed by an api key", () => {
+    const agent: Identity = {
+      kind: "api_key",
+      apiKeyId: 9,
+      role: "user",
+      name: "qa-agent",
+      projectIds: [1],
+    };
+    expect(allowedActions(admin, "awaiting_confirm", "api_key", 9, true)).toContain(
+      "confirm_fix"
+    );
+    expect(allowedActions(agent, "awaiting_confirm", "api_key", 9, false)).toContain(
+      "confirm_fix"
+    );
+    expect(allowedActions(reporter, "awaiting_confirm", "api_key", 9, false)).not.toContain(
+      "confirm_fix"
+    );
+    expect(allowedActions(admin, "awaiting_confirm", "api_key", 9, false)).not.toContain(
+      "confirm_fix"
+    );
+    expect(allowedActions(admin, "awaiting_confirm", "api_key", 9, true)).not.toContain(
+      "reject_fix"
+    );
+
+    const confirmed = validateTransition({
+      action: "confirm_fix",
+      from: "awaiting_confirm",
+      identity: admin,
+      reporterType: "api_key",
+      reporterId: 9,
+      asAdmin: true,
+    });
+    expect(confirmed.ok).toBe(true);
+    if (confirmed.ok) expect(confirmed.to).toBe("confirmed");
   });
 
   it("lets an admin withdraw a wrong invalid mark back to pending", () => {

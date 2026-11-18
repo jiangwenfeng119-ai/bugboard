@@ -16,7 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { callbackAllowed } from "./ask-protocol.mjs";
+import { callbackAllowed, isFeatureMapPrompt } from "./ask-protocol.mjs";
 import { enqueueAsk, executeAsk, gitSync, syncConfiguredMirrors } from "./ask-runner.mjs";
 
 export const MAX_BODY_BYTES = 1_000_000;
@@ -55,14 +55,18 @@ export function sign(secret, body) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
-export function signatureOk(secrets, body, header) {
+export function matchedSecret(secrets, body, header) {
   const got = Buffer.from(String(header || "").replace(/^sha256=/, ""));
-  let matched = false;
+  let found = "";
   for (const secret of secrets) {
     const expected = Buffer.from(sign(secret, body));
-    if (expected.length === got.length && timingSafeEqual(expected, got)) matched = true;
+    if (expected.length === got.length && timingSafeEqual(expected, got)) found = secret;
   }
-  return matched;
+  return found;
+}
+
+export function signatureOk(secrets, body, header) {
+  return Boolean(matchedSecret(secrets, body, header));
 }
 
 export function usableSessionId(value) {
@@ -424,9 +428,11 @@ export function createWakeServer(config) {
         return;
       }
       const code = String(payload.project?.code || "project");
+      const callbackSecret = matchedSecret(config.secrets, raw, req.headers["x-bugboard-signature"]);
       send(res, 202, { ok: true, spawned: true });
       const run = config.executeAsk || ((cfg, body) => executeAsk(cfg, body));
-      void enqueueAsk(code, () => Promise.resolve(run(config, payload))).catch((error) => {
+      const lane = isFeatureMapPrompt(payload.prompt) ? "map" : "user";
+      void enqueueAsk(code, () => Promise.resolve(run({ ...config, callbackSecret }, payload)), lane).catch((error) => {
         console.error(error instanceof Error ? error.message : error);
       });
       return;

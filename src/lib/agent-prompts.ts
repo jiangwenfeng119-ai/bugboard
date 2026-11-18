@@ -104,7 +104,7 @@ MCP 只注册了工具。项目、报障正文、时间线和 actions 都要调�
 - upload_project_logo：给项目上传 logo。path 是本机图片绝对路径，只接受 png、jpg、jpeg、webp，单张不超过 2MB。再上传会替换。显示在项目列表卡片和项目标题上。修报障时不要调用。
 - remove_project_logo：移除项目 logo。修报障时不要调用。
 修报障时不要改项目资料。
-get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字。确认、打回、异议、认可不属实、补充材料留给原报障人：confirm_fix、reject_fix、dispute_invalid、accept_invalid、provide_info。不要调用 accept_invalid。管理员提交修复后的结果是待发布。发布成功之后才变成待确认，由原报障人验收。要求补充后的结果是待补充，由原报障人补材料。标成不属实后停在不属实，等原报障人认可或提出异议。
+get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字。确认、打回、异议、认可不属实、补充材料留给原报障人：confirm_fix、reject_fix、dispute_invalid、accept_invalid、provide_info。API Key 提交的单在待确认时，项目管理员也可以 confirm_fix；人提交的单不能代确认，打回仍只有原报障人。不要调用 accept_invalid。管理员提交修复后的结果是待发布。发布成功之后才变成待确认。要求补充后的结果是待补充，由原报障人补材料。标成不属实后停在不属实，等原报障人认可或提出异议。
 
 说明用报障人在界面上能看懂的话。不要写文件名、函数名、接口、字段或实现过程。界面按 Markdown 渲染说明：用二级标题、空行分段、有序列表。标题单独成行，写成 ## 标题。步骤写成 1. 2. 。不要写 HTML，不要用代码块包整段说明。
 

@@ -1,9 +1,28 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { bugBodyUntouched } from "@/lib/bug-body";
-import { answerPieces, fillBugDraft, judgmentLabel, type AskJudgment, type AskStatus } from "@/lib/ask-core";
+import { answerPieces, ASK_IMAGE_MAX_BYTES, ASK_IMAGE_MAX_COUNT, fillBugDraft, judgmentLabel, type AskJudgment, type AskStatus } from "@/lib/ask-core";
 import { speechSupported, startLiveSpeech } from "@/components/live-speech";
+import type { PendingFile } from "@/components/AttachmentComposer";
+
+function askForm(input: {
+  question: string;
+  threadId: string;
+  force: boolean;
+  draft: string;
+  files: PendingFile[];
+  imageIds: number[];
+}) {
+  const form = new FormData();
+  form.set("question", input.question);
+  form.set("threadId", input.threadId);
+  form.set("force", input.force ? "1" : "");
+  form.set("draft", input.draft);
+  form.set("attachmentIds", input.imageIds.join(","));
+  for (const item of input.files) form.append("image", item.file, item.file.name);
+  return form;
+}
 
 type AskRun = {
   id: number;
@@ -25,6 +44,8 @@ export function AskBeforeReport({
   branch = "",
   seed = "",
   onFill,
+  files = [],
+  imageIds = [],
 }: {
   projectId: number;
   title: string;
@@ -33,6 +54,8 @@ export function AskBeforeReport({
   branch?: string;
   seed?: string;
   onFill?: (next: { title: string; body: string }) => void;
+  files?: PendingFile[];
+  imageIds?: number[];
 }) {
   const labelId = useId();
   const [threadId] = useState(() => crypto.randomUUID().replace(/-/g, "").slice(0, 20));
@@ -79,11 +102,23 @@ export function AskBeforeReport({
     setFormError("");
     setHint("");
     try {
-      const res = await fetch(`/api/projects/${projectId}/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: clean, threadId, force }),
-      });
+      const draft = [title.trim(), bugBodyUntouched(body) ? "" : body.trim()].filter(Boolean).join("\n\n").slice(0, 2000);
+      const pictures = files.filter((item) => item.file.type.startsWith("image/"));
+      const chosen = pictures.filter((item) => item.file.size <= ASK_IMAGE_MAX_BYTES).slice(0, ASK_IMAGE_MAX_COUNT);
+      if (pictures.length > chosen.length) setHint("有的图片太大或超过 4 张，这次没带上。");
+      const res = await fetch(
+        `/api/projects/${projectId}/ask`,
+        chosen.length
+          ? {
+              method: "POST",
+              body: askForm({ question: clean, threadId, force, draft, files: chosen, imageIds }),
+            }
+          : {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ question: clean, threadId, force, draft, attachmentIds: imageIds }),
+            }
+      );
       const data = (await res.json().catch(() => ({}))) as { run?: AskRun; error?: string };
       if (!res.ok || !data.run) {
         setFormError(data.error || "没有发出去");
@@ -115,7 +150,7 @@ export function AskBeforeReport({
         bodyUntouched: bugBodyUntouched(body),
       })
     );
-    setHint("已填入，提交前请改一改");
+    setHint("已整理进下方标题和描述，提交前请改一改");
   }
 
   const streaming = liveId !== 0;
@@ -124,7 +159,7 @@ export function AskBeforeReport({
     <section className="bb-ask" aria-labelledby={labelId}>
       <div className="bb-ask-head">
         <h3 id={labelId}>问问项目助理</h3>
-        <p>不确定功能有没有、入口在哪，可以先问。只回答，不改代码，也不替你提交。</p>
+        <p>问入口时马上回答在哪个菜单。带了截图，或写的是故障，会在项目镜像里对照代码后再答。只回答，不改代码，也不替你提交。</p>
       </div>
 
       {turns.length > 0 ? (
@@ -235,9 +270,13 @@ function AskTurn({
         <span>问</span>
         {turn.question}
       </p>
-      {turn.status === "streaming" && turn.statusLine ? <p className="bb-ask-status">{turn.statusLine}</p> : null}
+      {turn.status === "streaming" && !turn.answer ? (
+        <WaitingLine text={turn.statusLine || "正在准备回答"} />
+      ) : null}
+      {turn.status === "streaming" && turn.answer && turn.statusLine ? (
+        <p className="bb-ask-status">{turn.statusLine}</p>
+      ) : null}
       {turn.answer ? <AnswerText text={turn.answer} repoUrl={repoUrl} branch={branch} /> : null}
-      {turn.status === "streaming" && !turn.answer ? <p className="bb-ask-status">正在准备回答</p> : null}
       {label ? <p className={`bb-ask-judge is-${turn.judgment}`}>{label}</p> : null}
       {turn.cached ? (
         <p className="bb-ask-cache">
@@ -250,8 +289,12 @@ function AskTurn({
       {turn.error ? <p className="bb-error">{turn.error}</p> : null}
       <div className="bb-ask-actions">
         {turn.status === "done" && onFill ? (
-          <button type="button" className="bb-btn bb-btn-secondary" onClick={onFill}>
-            填入报障
+          <button
+            type="button"
+            className={turn.judgment === "file" || turn.judgment === "unsure" ? "bb-btn" : "bb-btn bb-btn-secondary"}
+            onClick={onFill}
+          >
+            {turn.judgment === "exists" ? "仍要填入报障" : "整理并填入报障"}
           </button>
         ) : null}
         {turn.status === "streaming" ? (
@@ -260,7 +303,35 @@ function AskTurn({
           </button>
         ) : null}
       </div>
+      {turn.status === "streaming" && onFill ? (
+        <p className="bb-ask-status">答完后，建议报障或没有把握时，这里会出现「整理并填入报障」。</p>
+      ) : null}
+      {turn.status === "done" && onFill && turn.judgment !== "exists" ? (
+        <p className="bb-ask-status">写进下方标题和描述，不直接提交。</p>
+      ) : null}
     </article>
+  );
+}
+
+function WaitingLine({ text }: { text: string }) {
+  const started = useRef(Date.now());
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSeconds(Math.floor((Date.now() - started.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <p className="bb-ask-status bb-ask-wait">
+      <span className="bb-ask-ink" aria-hidden="true" />
+      <span className="bb-ask-wait-text">{text}</span>
+      {seconds > 0 ? (
+        <span className="bb-ask-wait-time" aria-hidden="true">
+          {seconds} 秒
+        </span>
+      ) : null}
+    </p>
   );
 }
 

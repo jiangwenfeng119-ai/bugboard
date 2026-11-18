@@ -257,14 +257,14 @@ describe("wake agent launch", () => {
       argv: null,
       allowLan: false,
       applyEdits: true,
-      secrets: ["whsec_test"],
+      secrets: ["whsec_other", "whsec_test"],
       cwd: "",
       projects: {},
       bugboardUrl: "http://127.0.0.1:3080",
       sessionFile: path.join(root, "sessions.json"),
       runDir: path.join(root, "runs"),
-      executeAsk: (_cfg: unknown, payload: { event?: string }) => {
-        seen.push(payload.event || "");
+      executeAsk: (cfg: { callbackSecret?: string }, payload: { event?: string }) => {
+        seen.push(`${payload.event || ""}:${cfg.callbackSecret || ""}`);
         return Promise.resolve();
       },
     };
@@ -291,6 +291,6 @@ describe("wake agent launch", () => {
     server.close();
     fs.rmSync(root, { recursive: true, force: true });
     expect(res.status).toBe(202);
-    expect(seen).toEqual(["project.ask"]);
+    expect(seen).toEqual(["project.ask:whsec_test"]);
   });
 });

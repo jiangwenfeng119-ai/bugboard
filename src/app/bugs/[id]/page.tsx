@@ -285,6 +285,7 @@ export default async function BugDetailPage({
               repoUrl={project.github_url}
               branch={project.default_branch}
               seed={`这个报障对应代码的哪里：${bug.title}`}
+              imageIds={attachments.filter((file) => mediaKind(file) === "image").map((file) => file.id)}
             />
           </section>
 

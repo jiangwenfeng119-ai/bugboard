@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T04:41:25Z",
+  "title": "Design System: Bugboard",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Intranet Blue",
+        "canonical": "#1f6feb",
+        "tonalRamp": ["#0a1f4a", "#0b3d91", "#1457c4", "#1f6feb", "#4d8ff0", "#7eb0f5", "#b7d4fa", "#e8f1fc"]
+      },
+      "accent-strong": {
+        "role": "primary",
+        "displayName": "Ledger Navy",
+        "canonical": "#0b3d91",
+        "tonalRamp": ["#061428", "#0b3d91", "#1450b0", "#1f6feb", "#4d8ff0", "#7eb0f5", "#b7d4fa", "#e8f1fc"]
+      },
+      "accent-ink": {
+        "role": "neutral",
+        "displayName": "Accent Ink",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#152033", "#2a3548", "#5a6678", "#8a93a1", "#c5cad2", "#e2e5ea", "#f2f5f9", "#ffffff"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#e9eef5",
+        "tonalRamp": ["#152033", "#3a4658", "#6b7789", "#9aa3b0", "#c5ced9", "#d7e0ec", "#e9eef5", "#f5f8fc"]
+      },
+      "paper-deep": {
+        "role": "neutral",
+        "displayName": "Paper Deep",
+        "canonical": "#d7e0ec",
+        "tonalRamp": ["#152033", "#3a4658", "#6b7789", "#9aa3b0", "#c5ced9", "#d7e0ec", "#e9eef5", "#f5f8fc"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Ledger White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#152033", "#5a6678", "#9aa3b0", "#d3dce8", "#e9eef5", "#f2f5f9", "#f7f9fc", "#ffffff"]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Surface Mist",
+        "canonical": "#f2f5f9",
+        "tonalRamp": ["#152033", "#5a6678", "#9aa3b0", "#d3dce8", "#e9eef5", "#f2f5f9", "#f7f9fc", "#ffffff"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#152033",
+        "tonalRamp": ["#0a1018", "#152033", "#2a3548", "#5a6678", "#8a93a1", "#c5cad2", "#e9eef5", "#f8fafc"]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "#5a6678",
+        "tonalRamp": ["#152033", "#2a3548", "#3f4b5c", "#5a6678", "#7a8494", "#a3abb7", "#d3dce8", "#f2f5f9"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#d3dce8",
+        "tonalRamp": ["#5a6678", "#8a93a1", "#a8b2bf", "#c0cad6", "#d3dce8", "#e2e8f0", "#eef2f7", "#f8fafc"]
+      },
+      "danger": {
+        "role": "primary",
+        "displayName": "Alarm Red",
+        "canonical": "#c62828",
+        "tonalRamp": ["#4a0f0f", "#7a1616", "#a01e1e", "#c62828", "#d95a5a", "#e89a9a", "#f3d0d0", "#fceeee"]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Amber Caution",
+        "canonical": "#b45309",
+        "tonalRamp": ["#3d1c04", "#6b3106", "#8f4208", "#b45309", "#d97706", "#e8a84a", "#f5d5a0", "#fef3e2"]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Confirm Green",
+        "canonical": "#1b7f4a",
+        "tonalRamp": ["#0a2e1a", "#115533", "#166b3f", "#1b7f4a", "#34a06a", "#6fc497", "#b8e3cb", "#e8f6ef"]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Focus Blue",
+        "canonical": "#1f6feb",
+        "tonalRamp": ["#0a1f4a", "#0b3d91", "#1457c4", "#1f6feb", "#4d8ff0", "#7eb0f5", "#b7d4fa", "#e8f1fc"]
+      },
+      "status-pending": {
+        "role": "secondary",
+        "displayName": "Pending Amber",
+        "canonical": "#b45309",
+        "tonalRamp": ["#3d1c04", "#6b3106", "#8f4208", "#b45309", "#d97706", "#e8a84a", "#f5d5a0", "#fef3e2"]
+      },
+      "status-fixing": {
+        "role": "secondary",
+        "displayName": "Fixing Blue",
+        "canonical": "#1f6feb",
+        "tonalRamp": ["#0a1f4a", "#0b3d91", "#1457c4", "#1f6feb", "#4d8ff0", "#7eb0f5", "#b7d4fa", "#e8f1fc"]
+      },
+      "status-needs": {
+        "role": "secondary",
+        "displayName": "Needs Teal",
+        "canonical": "#0f766e",
+        "tonalRamp": ["#042f2c", "#0a5550", "#0c6860", "#0f766e", "#14b8a6", "#5eead4", "#99f6e4", "#ccfbf1"]
+      },
+      "status-product": {
+        "role": "secondary",
+        "displayName": "Product Rust",
+        "canonical": "#9a3412",
+        "tonalRamp": ["#3b1408", "#6b2410", "#82270f", "#9a3412", "#c2410c", "#ea580c", "#fdba74", "#ffedd5"]
+      },
+      "status-ready": {
+        "role": "secondary",
+        "displayName": "Ready Teal",
+        "canonical": "#0d9488",
+        "tonalRamp": ["#042f2c", "#0a5550", "#0c7a70", "#0d9488", "#14b8a6", "#5eead4", "#99f6e4", "#ccfbf1"]
+      },
+      "status-awaiting": {
+        "role": "secondary",
+        "displayName": "Awaiting Slate Blue",
+        "canonical": "#0c4a6e",
+        "tonalRamp": ["#041e2e", "#0c4a6e", "#075985", "#0369a1", "#0284c7", "#38bdf8", "#7dd3fc", "#e0f2fe"]
+      },
+      "status-confirmed": {
+        "role": "secondary",
+        "displayName": "Confirmed Green",
+        "canonical": "#1b7f4a",
+        "tonalRamp": ["#0a2e1a", "#115533", "#166b3f", "#1b7f4a", "#34a06a", "#6fc497", "#b8e3cb", "#e8f6ef"]
+      },
+      "status-acknowledged": {
+        "role": "secondary",
+        "displayName": "Acknowledged Sage",
+        "canonical": "#3d5c4e",
+        "tonalRamp": ["#1a2822", "#2a3f36", "#3d5c4e", "#547a68", "#7a9a8a", "#a8c0b4", "#d4e2db", "#eef4f1"]
+      },
+      "status-invalid": {
+        "role": "neutral",
+        "displayName": "Invalid Gray",
+        "canonical": "#6b7280",
+        "tonalRamp": ["#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#e5e7eb", "#f3f4f6"]
+      },
+      "priority-p1": {
+        "role": "secondary",
+        "displayName": "P1 Red",
+        "canonical": "#c62828",
+        "tonalRamp": ["#4a0f0f", "#7a1616", "#a01e1e", "#c62828", "#d95a5a", "#e89a9a", "#f3d0d0", "#fceeee"]
+      },
+      "priority-p2": {
+        "role": "secondary",
+        "displayName": "P2 Amber",
+        "canonical": "#b45309",
+        "tonalRamp": ["#3d1c04", "#6b3106", "#8f4208", "#b45309", "#d97706", "#e8a84a", "#f5d5a0", "#fef3e2"]
+      },
+      "priority-p3": {
+        "role": "neutral",
+        "displayName": "P3 Slate",
+        "canonical": "#5c6570",
+        "tonalRamp": ["#1e2329", "#3a4149", "#5c6570", "#7a8490", "#9aa3ae", "#c5cad2", "#e2e5ea", "#f2f4f6"]
+      },
+      "series-1": {
+        "role": "tertiary",
+        "displayName": "Series 1",
+        "canonical": "#1f6feb",
+        "tonalRamp": ["#0a1f4a", "#0b3d91", "#1457c4", "#1f6feb", "#4d8ff0", "#7eb0f5", "#b7d4fa", "#e8f1fc"]
+      },
+      "series-2": {
+        "role": "tertiary",
+        "displayName": "Series 2",
+        "canonical": "#0f766e",
+        "tonalRamp": ["#042f2c", "#0a5550", "#0c6860", "#0f766e", "#14b8a6", "#5eead4", "#99f6e4", "#ccfbf1"]
+      },
+      "series-3": {
+        "role": "tertiary",
+        "displayName": "Series 3",
+        "canonical": "#9a3412",
+        "tonalRamp": ["#3b1408", "#6b2410", "#82270f", "#9a3412", "#c2410c", "#ea580c", "#fdba74", "#ffedd5"]
+      },
+      "series-4": {
+        "role": "tertiary",
+        "displayName": "Series 4",
+        "canonical": "#0c4a6e",
+        "tonalRamp": ["#041e2e", "#0c4a6e", "#075985", "#0369a1", "#0284c7", "#38bdf8", "#7dd3fc", "#e0f2fe"]
+      },
+      "series-5": {
+        "role": "tertiary",
+        "displayName": "Series 5",
+        "canonical": "#334155",
+        "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+      },
+      "series-6": {
+        "role": "tertiary",
+        "displayName": "Series 6",
+        "canonical": "#be123c",
+        "tonalRamp": ["#4c0519", "#881337", "#9f1239", "#be123c", "#e11d48", "#fb7185", "#fda4af", "#ffe4e6"]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles, sheet heads, project names, bug titles (1.25rem / 600)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Inbox and capture section heads (~1.05rem / 600)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Forms, prose, table titles, muted leads (0.875rem / 1.7)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Table headers, badges, chips, meta, crumbs (0.75rem)."
+      }
+    },
+    "shadows": [
+      {
+        "name": "rest",
+        "value": "0 1px 2px rgba(21, 32, 51, 0.06), 0 10px 24px rgba(21, 32, 51, 0.06)",
+        "purpose": "Cards, inbox groups, and stats at rest (--shadow)."
+      },
+      {
+        "name": "hover",
+        "value": "0 12px 24px rgba(21, 32, 51, 0.08), 0 28px 52px rgba(21, 32, 51, 0.14)",
+        "purpose": "Interactive card hover, menus, capture stage (--shadow-hover)."
+      },
+      {
+        "name": "sheet",
+        "value": "-28px 0 64px rgba(21, 32, 51, 0.2)",
+        "purpose": "Right create/detail sheet."
+      },
+      {
+        "name": "modal",
+        "value": "0 28px 64px rgba(21, 32, 51, 0.22)",
+        "purpose": "Centered modal cards."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Default easing for transitions and entrances."
+      },
+      {
+        "name": "ease-spring",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Alias of ease-out — no overshoot; used by sheets, menus, buttons."
+      },
+      {
+        "name": "duration-fast",
+        "value": "160ms",
+        "purpose": "Color, border, and small control transitions."
+      },
+      {
+        "name": "duration-enter",
+        "value": "420ms–480ms",
+        "purpose": "Modal, sheet, and main rise entrances."
+      }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "560px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "800px" },
+      { "name": "tablet", "value": "820px" },
+      { "name": "sheet-overlay", "value": "980px" },
+      { "name": "bug-aside", "value": "1100px" },
+      { "name": "summary-split", "value": "1180px" },
+      { "name": "project-4col", "value": "1400px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid next-step action — one per bug action row.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">开始修复</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-family: var(--font); font-size: 0.875rem; white-space: nowrap; border: 1px solid transparent; border-radius: 10px; padding: 0.5rem 0.95rem; background: var(--accent); color: var(--accent-ink); cursor: pointer; box-shadow: 0 1px 2px rgba(21, 32, 51, 0.08); transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease, transform 280ms var(--ease-spring), box-shadow 280ms var(--ease-spring); } .ds-btn-primary:hover { background: var(--accent-strong); transform: translateY(-2px); box-shadow: 0 8px 18px rgba(21, 32, 51, 0.16); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(0); } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined ledger control for secondary paths.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">标记已发布</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-family: var(--font); font-size: 0.875rem; border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem 0.95rem; background: var(--surface); color: var(--ink); cursor: pointer; box-shadow: 0 1px 2px rgba(21, 32, 51, 0.05); transition: background 160ms ease, box-shadow 280ms var(--ease-spring), transform 280ms var(--ease-spring); } .ds-btn-secondary:hover { background: var(--surface-2); box-shadow: 0 8px 16px rgba(21, 32, 51, 0.1); transform: translateY(-2px); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet text control for cancel / tertiary moves.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">取消</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-family: var(--font); font-size: 0.875rem; border: 1px solid transparent; border-radius: 10px; padding: 0.5rem 0.95rem; background: transparent; color: var(--ink-muted); cursor: pointer; box-shadow: none; transition: background 160ms ease, color 160ms ease; } .ds-btn-ghost:hover { background: var(--surface-2); color: var(--ink); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive bug transition — always last in the row.",
+      "html": "<button class=\"ds-btn-danger\" type=\"button\">标为不属实</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-family: var(--font); font-size: 0.875rem; border: 1px solid transparent; border-radius: 10px; padding: 0.5rem 0.95rem; background: var(--danger); color: var(--accent-ink); cursor: pointer; box-shadow: 0 1px 2px rgba(21, 32, 51, 0.08); transition: background 160ms ease, transform 280ms var(--ease-spring), box-shadow 280ms var(--ease-spring); } .ds-btn-danger:hover { background: color-mix(in srgb, var(--danger) 85%, black); transform: translateY(-2px); box-shadow: 0 8px 18px rgba(21, 32, 51, 0.16); } .ds-btn-danger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard ledger field — hairline border, accent on focus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-label\">标题</span><input class=\"ds-input\" type=\"text\" placeholder=\"一句话说明问题\" /></label>",
+      "css": ".ds-field { display: block; width: 100%; font-family: var(--font); } .ds-label { display: block; width: 100%; font-size: 0.875rem; color: var(--ink-muted); margin-bottom: 0.35rem; } .ds-input { width: 100%; font-family: inherit; font-size: 0.875rem; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 0.6rem 0.75rem; transition: border-color 160ms ease, box-shadow 160ms ease; } .ds-input:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); } .ds-input:focus { outline: none; border-color: var(--accent); box-shadow: none; } .ds-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Section Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "White ledger page — hover deepens shadow only.",
+      "html": "<article class=\"ds-card\"><h2 class=\"ds-card-title\">报障列表</h2><p class=\"ds-card-body\">按状态筛选，一眼看到该你处理的单。</p></article>",
+      "css": ".ds-card { background: color-mix(in srgb, var(--surface) 94%, white); border: 1px solid color-mix(in srgb, var(--line) 88%, white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.3rem 1.4rem 1.35rem; font-family: var(--font); transition: box-shadow 200ms var(--ease-out), border-color 200ms ease; } .ds-card:hover { box-shadow: var(--shadow-hover); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); } .ds-card-title { margin: 0 0 0.75rem; font-size: 0.875rem; font-weight: 600; line-height: 1.45; color: var(--ink); } .ds-card-body { margin: 0; font-size: 0.875rem; line-height: 1.7; color: var(--ink-muted); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "Pill with tinted fill — always includes Chinese status text.",
+      "html": "<span class=\"ds-badge ds-badge-awaiting\">待确认</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 0.18rem 0.65rem; font-family: var(--font); font-size: 0.75rem; font-weight: 400; border: 1px solid transparent; } .ds-badge-awaiting { color: var(--status-awaiting); background: color-mix(in srgb, var(--status-awaiting) 12%, white); border-color: color-mix(in srgb, var(--status-awaiting) 25%, white); }"
+    },
+    {
+      "name": "Attention Chip",
+      "kind": "chip",
+      "refersTo": "chip-status",
+      "description": "Project card attention — hot only when count > 0; else quiet 暂无待办.",
+      "html": "<div class=\"ds-chips\"><a class=\"ds-chip ds-chip-hot\" href=\"#\">3 待处理</a><span class=\"ds-chip ds-chip-quiet\">暂无待办</span></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; font-family: var(--font); } .ds-chip { font-size: 0.75rem; font-weight: 400; padding: 0.2rem 0.55rem; border-radius: 999px; color: var(--ink-muted); background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; text-decoration: none; } .ds-chip-quiet { cursor: default; opacity: 0.85; } .ds-chip-hot { color: var(--status-pending); background: color-mix(in srgb, var(--status-pending) 12%, white); border-color: color-mix(in srgb, var(--status-pending) 22%, white); } .ds-chip-hot:hover { filter: brightness(0.98); } .ds-chip-hot:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    },
+    {
+      "name": "Topbar Nav",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Sticky frosted shell brand + ghost nav with active wash.",
+      "html": "<header class=\"ds-topbar\"><a class=\"ds-brand\" href=\"#\">Bugboard</a><nav class=\"ds-nav\"><a class=\"ds-nav-link\" href=\"#\">项目</a><a class=\"ds-nav-link is-active\" href=\"#\" aria-current=\"page\">管理</a></nav></header>",
+      "css": ".ds-topbar { display: flex; align-items: center; gap: 1rem; min-height: 4.5rem; padding: 0.85rem clamp(1.15rem, 2vw, 2.25rem); background: color-mix(in srgb, var(--surface) 82%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent); backdrop-filter: blur(14px) saturate(1.2); font-family: var(--font); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset; } .ds-brand { font-weight: 600; font-size: 1.25rem; color: var(--ink); text-decoration: none; } .ds-nav { display: flex; align-items: center; gap: 0.45rem; margin-left: auto; } .ds-nav-link { display: inline-flex; align-items: center; font-size: 0.875rem; padding: 0.5rem 0.95rem; border-radius: 10px; color: var(--ink-muted); text-decoration: none; background: transparent; border: 1px solid transparent; } .ds-nav-link:hover { background: var(--surface-2); color: var(--ink); } .ds-nav-link.is-active { background: var(--surface-2); color: var(--ink); } .ds-nav-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Intranet Ledger",
+    "overview": "Bugboard is a daytime desktop work ledger for Chinese intranet operators. The interface reads like a shared paper book of tickets: calm blues and cool paper fields, one sans family (IBM Plex Sans + Noto Sans SC), and status language that a person can scan in seconds. Density stays operational — tables, sheets, chips, and one clear next action — never marketing chrome.\n\nPersonality is restrained Operate craft: precise, scannable, and quiet when there is nothing to do. Color carries state machine meaning, not decoration. Surfaces sit on a soft paper wash with a faint grid; cards and sheets are white ledger pages with a light ambient shadow. Motion eases out without spring overshoot. Confirmed rejections: no purple SaaS gradients, no cyber/terminal skin, no second display face.",
+    "keyCharacteristics": [
+      "Single UI sans stack; Chinese-first labels and status names",
+      "Semantic color reserved for status, priority, and charts — not brand fills",
+      "One solid primary action per bug; destructive actions last",
+      "Attention chips and summary tiles stay quiet at zero",
+      "Card hover deepens shadow only (no lift translate)"
+    ],
+    "rules": [
+      {
+        "name": "The Status-Only Color Rule",
+        "body": "Hue beyond neutrals and the single accent exists to name a state, priority, or series point — never to paint a marketing surface.",
+        "section": "colors"
+      },
+      {
+        "name": "The Quiet Zero Rule",
+        "body": "Project attention chips render only when count > 0; otherwise a quiet「暂无待办」chip. Summary tiles hide zero counts unless showAll=1.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "Never introduce a second UI family or a display serif. Mono is reserved for tokens and technical strings.",
+        "section": "typography"
+      },
+      {
+        "name": "The Shadow-Not-Lift Rule",
+        "body": "Card hover changes shadow and border only. Do not add card translateY on hover.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No-Overshoot Rule",
+        "body": "--ease-spring equals --ease-out (cubic-bezier(0.16, 1, 0.3, 1)). Entrance animations ease out; they do not bounce past the end state. Honor prefers-reduced-motion.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep Chinese status names and one primary next action visible within ~10 seconds of opening a bug or project.",
+      "Do use --status-* / --priority-* tokens for badges, chips, and chart series only.",
+      "Do hide zero summary tiles unless the operator opts into showAll=1.",
+      "Do disable「立即发布」when the release queue is empty; keep「标记已发布」available as the ledger note path.",
+      "Do match motion to --ease-out / --ease-spring (identical curves) and respect reduced motion."
+    ],
+    "donts": [
+      "Don't introduce purple SaaS gradients, neon/cyber terminal skins, or a second display typeface.",
+      "Don't invent decorative color blocks that do not map to a status, priority, or chart series.",
+      "Don't lift cards on hover or add spring overshoot to entrances.",
+      "Don't show a stack of equal-weight bug actions — one primary, danger last.",
+      "Don't rely on color alone for status; badge and chip copy stays required."
+    ]
+  }
+}

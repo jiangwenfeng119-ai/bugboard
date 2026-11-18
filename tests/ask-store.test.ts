@@ -160,7 +160,8 @@ describe("ask store", () => {
       prompt = JSON.parse(String(init?.body)).prompt as string;
       return new Response("{}", { status: 202 });
     });
-    await startAsk(admin, projectId, { question: "积分入口在哪", threadId: "threadask09" }, "http://127.0.0.1:3080/api/ask/callback");
+    const run = await startAsk(admin, projectId, { question: "积分入口在哪", threadId: "threadask09" }, "http://127.0.0.1:3080/api/ask/callback");
+    expect(run.statusLine).toBe("已交给代码机");
     expect(prompt).toContain("EMH261117001");
     expect(prompt).toContain("积分入口在个人中心");
     expect(prompt).toContain("不能修改文件");
@@ -211,7 +212,11 @@ describe("ask store", () => {
     const projectId = await seed();
     const { setAskFetchForTests, startFeatureMap, acceptAskCallback, readFeatureMap, startAsk, listAskGaps } =
       await import("../src/lib/ask-store");
-    setAskFetchForTests(async () => new Response("{}", { status: 202 }));
+    let prompt = "";
+    setAskFetchForTests(async (_url, init) => {
+      prompt = JSON.parse(String(init?.body)).prompt as string;
+      return new Response("{}", { status: 202 });
+    });
     const map = await startFeatureMap(admin, projectId, "http://127.0.0.1:3080/api/ask/callback");
     const done = JSON.stringify({
       runId: map.id,
@@ -230,6 +235,8 @@ describe("ask store", () => {
       { question: "有导出工资条吗", threadId: "threadask31" },
       "http://127.0.0.1:3080/api/ask/callback"
     );
+    expect(prompt).toContain("src/app/login/page.tsx");
+    expect(prompt).toContain("不要再搜索仓库");
     const gap = JSON.stringify({
       runId: asked.id,
       seq: 1,

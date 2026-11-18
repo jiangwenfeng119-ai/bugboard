@@ -155,7 +155,7 @@ export function NewBugPanel({
         <div className="bb-sheet-head">
           <div>
             <h2 id={titleId}>新建报障</h2>
-            <p className="bb-muted">写清现象，选好优先级，需要的话再补附件。</p>
+            <p className="bb-muted">分两步：可以先问，也可以直接写下面。</p>
           </div>
           <button type="button" className="bb-btn bb-btn-ghost" onClick={closePanel}>
             关闭
@@ -169,6 +169,7 @@ export function NewBugPanel({
             body={body}
             repoUrl={repoUrl}
             branch={branch}
+            files={files}
             onFill={(next) => {
               setTitle(next.title);
               setBody(next.body);
@@ -178,90 +179,99 @@ export function NewBugPanel({
             }}
           />
 
-          <div className="bb-field">
-            <label className="bb-label" htmlFor={`${titleId}-title`}>
-              标题
-            </label>
-            <input
-              id={`${titleId}-title`}
-              className="bb-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="一句话说明哪里不对"
-              maxLength={BUG_TITLE_MAX}
-              autoFocus
-              required
-            />
-          </div>
-
-          <div className="bb-field">
-            <label className="bb-label" htmlFor={`${titleId}-body`}>
-              描述
-            </label>
-            <textarea
-              id={`${titleId}-body`}
-              className="bb-textarea"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="写清环境、步骤、期望和实际"
-              maxLength={BUG_BODY_MAX}
-              rows={8}
-            />
-            <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
-          </div>
-
-          <div className="bb-field">
-            <div className="bb-label" id={priorityId}>
-              优先级
+          <section className="bb-report-step" aria-labelledby={`${titleId}-step`}>
+            <div className="bb-ask-head">
+              <h3 id={`${titleId}-step`}>再写这张报障</h3>
+              <p>
+                现象清楚就直接填写，然后提交。也可以等上面问完：判断是建议报障或没有把握时，点「整理并填入报障」。问题和回答会整理进标题和描述，不会直接提交，改完再交。
+              </p>
             </div>
-            <div className="bb-priority-grid" role="radiogroup" aria-labelledby={priorityId}>
-              {PRIORITIES.map((p) => {
-                const name = PRIORITY_LABEL[p].replace(/^P\d\s*/, "");
-                return (
-                  <label
-                    key={p}
-                    className={`bb-priority-card is-${p}${priority === p ? " is-on" : ""}`}
-                  >
-                    <input
-                      type="radio"
-                      name={`${titleId}-priority`}
-                      checked={priority === p}
-                      onChange={() => setPriority(p)}
-                    />
-                    <span className={`bb-priority-kicker bb-priority-${p}`}>
-                      {p.toUpperCase()}
-                    </span>
-                    <strong>{name}</strong>
-                    <span className="bb-muted">{PRIORITY_HINT[p]}</span>
-                  </label>
-                );
-              })}
+
+            <div className="bb-field">
+              <label className="bb-label" htmlFor={`${titleId}-title`}>
+                标题
+              </label>
+              <input
+                id={`${titleId}-title`}
+                className="bb-input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="一句话说明哪里不对"
+                maxLength={BUG_TITLE_MAX}
+                autoFocus
+                required
+              />
             </div>
-          </div>
 
-          <CaptureTools
-            projectId={projectId}
-            essentials
-            draftPending={Boolean(
-              title.trim() || !bugBodyUntouched(body) || files.length || quote.trim()
-            )}
-            onSnap={({ file, note, strokes: marks }) => {
-              addCapturedFile(file);
-              setStrokes(marks);
-              applySpoken(note);
-            }}
-            onVoice={({ file, text }) => {
-              addCapturedFile(file);
-              applySpoken(text);
-            }}
-          />
+            <div className="bb-field">
+              <label className="bb-label" htmlFor={`${titleId}-body`}>
+                描述
+              </label>
+              <textarea
+                id={`${titleId}-body`}
+                className="bb-textarea"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="写清环境、步骤、期望和实际"
+                maxLength={BUG_BODY_MAX}
+                rows={8}
+              />
+              <p className="bb-field-hint">支持 Markdown：二级标题、空行分段、1. 步骤。</p>
+            </div>
 
-          <div className="bb-field bb-attach-field">
-            <div className="bb-label">附件</div>
-            <AttachmentComposer files={files} onChange={setFiles} compact />
-          </div>
+            <div className="bb-field">
+              <div className="bb-label" id={priorityId}>
+                优先级
+              </div>
+              <div className="bb-priority-grid" role="radiogroup" aria-labelledby={priorityId}>
+                {PRIORITIES.map((p) => {
+                  const name = PRIORITY_LABEL[p].replace(/^P\d\s*/, "");
+                  return (
+                    <label
+                      key={p}
+                      className={`bb-priority-card is-${p}${priority === p ? " is-on" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name={`${titleId}-priority`}
+                        checked={priority === p}
+                        onChange={() => setPriority(p)}
+                      />
+                      <span className={`bb-priority-kicker bb-priority-${p}`}>
+                        {p.toUpperCase()}
+                      </span>
+                      <strong>{name}</strong>
+                      <span className="bb-muted">{PRIORITY_HINT[p]}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-          {error ? <p className="bb-error">{error}</p> : null}
+            <CaptureTools
+              projectId={projectId}
+              essentials
+              draftPending={Boolean(
+                title.trim() || !bugBodyUntouched(body) || files.length || quote.trim()
+              )}
+              onSnap={({ file, note, strokes: marks }) => {
+                addCapturedFile(file);
+                setStrokes(marks);
+                applySpoken(note);
+              }}
+              onVoice={({ file, text }) => {
+                addCapturedFile(file);
+                applySpoken(text);
+              }}
+            />
+
+            <div className="bb-field bb-attach-field">
+              <div className="bb-label">附件</div>
+              <AttachmentComposer files={files} onChange={setFiles} compact />
+            </div>
+
+            {error ? <p className="bb-error">{error}</p> : null}
+          </section>
         </div>
 
         <div className="bb-sheet-foot">

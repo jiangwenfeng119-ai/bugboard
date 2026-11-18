@@ -165,6 +165,79 @@ describe("services integration", () => {
     );
   });
 
+  it("lets a project admin confirm a ticket filed by an api key", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-agent-confirm", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const outsider = await services.createUser(adminId, {
+      username: "account-admin-outsider",
+      password: "secret1",
+      role: "admin",
+    });
+    const member = await services.createUser(adminId, {
+      username: "project-user",
+      password: "secret1",
+      role: "user",
+    });
+    const outsiderId = {
+      kind: "user" as const,
+      userId: outsider.id,
+      role: "admin" as const,
+      username: outsider.username,
+    };
+    const memberId = {
+      kind: "user" as const,
+      userId: member.id,
+      role: "user" as const,
+      username: member.username,
+    };
+    const project = services.createProject(adminId, {
+      name: "Agent Confirm",
+      description: "demo",
+    });
+    services.addMember(adminId, project.id, adminId.userId, "admin");
+    services.addMember(adminId, project.id, member.id);
+    const key = services.createApiKey(adminId, {
+      name: "filing-agent",
+      role: "user",
+      projectIds: [project.id],
+    });
+    const keyId = {
+      kind: "api_key" as const,
+      apiKeyId: key.id,
+      role: "user" as const,
+      name: "filing-agent",
+      projectIds: [project.id],
+    };
+    const bug = services.createBug(keyId, {
+      projectId: project.id,
+      title: "Agent 发现的空白页",
+      body: "打开后没有内容",
+    });
+    services.transitionBug(adminId, bug.id, "start_fix");
+    services.transitionBug(adminId, bug.id, "submit_fix", "已经补上内容");
+    services.transitionBug(adminId, bug.id, "release_fixes");
+    const waiting = services.getBug(adminId, bug.id);
+    expect(waiting.status).toBe("awaiting_confirm");
+    expect(services.bugActions(adminId, waiting)).toContain("confirm_fix");
+    expect(services.bugActions(adminId, waiting)).not.toContain("reject_fix");
+    expect(services.bugActions(keyId, waiting)).toEqual(
+      expect.arrayContaining(["confirm_fix", "reject_fix"])
+    );
+    expect(services.bugActions(memberId, waiting)).not.toContain("confirm_fix");
+    expect(services.bugActions(outsiderId, waiting)).not.toContain("confirm_fix");
+    expect(() => services.transitionBug(outsiderId, bug.id, "confirm_fix")).toThrow(
+      /仅原报障人或该项目的管理员/
+    );
+    services.transitionBug(adminId, bug.id, "confirm_fix", "本机已经看到内容");
+    expect(services.getBug(adminId, bug.id).status).toBe("confirmed");
+  });
+
   it("buckets daily stats by the Shanghai calendar day", async () => {
     const services = await import("../src/lib/services");
     const { getDb } = await import("../src/lib/db");

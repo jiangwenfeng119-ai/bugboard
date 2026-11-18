@@ -4,26 +4,47 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  appendDeepBrief,
   askEnv,
   askGitSteps,
+  askSearchTerms,
   buildAskArgv,
   callbackAllowed,
+  chooseAskPath,
+  collectAskHits,
+  documentsFromPrompt,
+  draftAskAnswer,
+  fallbackAskAnswer,
+  featureMapFromPrompt,
+  isFeatureMapPrompt,
   parseAskStreamLine,
   planAskMirror,
+  questionFromPrompt,
+  screenLines,
 } from "./ask-protocol.mjs";
 
-const chains = new Map();
+const userChains = new Map();
+const mapChains = new Map();
 
 function sign(secret, body) {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
-export function enqueueAsk(key, job) {
-  const prev = chains.get(key) || Promise.resolve();
+export function enqueueAsk(key, job, lane = "user") {
+  if (lane === "map") {
+    const prevUser = userChains.get(key) || Promise.resolve();
+    const prevMap = mapChains.get(key) || Promise.resolve();
+    const next = Promise.all([prevUser, prevMap]).then(job, job);
+    mapChains.set(key, next);
+    return next.finally(() => {
+      if (mapChains.get(key) === next) mapChains.delete(key);
+    });
+  }
+  const prev = userChains.get(key) || Promise.resolve();
   const next = prev.then(job, job);
-  chains.set(key, next);
+  userChains.set(key, next);
   return next.finally(() => {
-    if (chains.get(key) === next) chains.delete(key);
+    if (userChains.get(key) === next) userChains.delete(key);
   });
 }
 
@@ -31,6 +52,8 @@ export function gitSync(cwd, args) {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
+    timeout: 12000,
+    killSignal: "SIGKILL",
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
   });
   return {
@@ -93,8 +116,26 @@ function runSteps(steps, git) {
   }
 }
 
-export function syncAskMirror(input, git = gitSync) {
+export const ASK_FETCH_FRESH_MS = 90_000;
+
+export function fetchHeadAge(dir, now = Date.now()) {
+  try {
+    return now - fs.statSync(path.join(dir, ".git", "FETCH_HEAD")).mtimeMs;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function syncAskMirror(input, git = gitSync, now = Date.now()) {
   const facts = inspectAskMirror(input.dir, git);
+  if (facts.exists && facts.isGit && fetchHeadAge(input.dir, now) < ASK_FETCH_FRESH_MS) {
+    const cached = planAskMirror({
+      githubUrl: input.githubUrl,
+      defaultBranch: input.defaultBranch,
+      ...facts,
+    });
+    if (cached.action === "ready") return finishSha(input.dir, git, cached.branch || facts.headBranch);
+  }
   const first = planAskMirror({
     githubUrl: input.githubUrl,
     defaultBranch: input.defaultBranch,
@@ -128,6 +169,64 @@ export function syncAskMirror(input, git = gitSync) {
   return finishSha(input.dir, git, plan.branch || after.headBranch);
 }
 
+export function interfaceLines(dir) {
+  const files = [];
+  for (const rel of ["lib/i18n", "packages/i18n/src"]) {
+    const abs = path.join(dir, rel);
+    if (!fs.existsSync(abs)) continue;
+    for (const name of fs.readdirSync(abs)) {
+      if (!/\.(ts|tsx)$/.test(name)) continue;
+      const full = path.join(abs, name);
+      try {
+        if (fs.statSync(full).isFile() && fs.statSync(full).size < 1_200_000) files.push(full);
+      } catch {
+        // 缺文件就跳过
+      }
+    }
+  }
+  return screenLines(files.map((file) => fs.readFileSync(file, "utf8")).join("\n"));
+}
+
+function manualRank(rel) {
+  const lower = rel.toLowerCase();
+  if (lower.includes("admin-user-manual") || lower.includes("用户手册")) return 3;
+  if (lower.includes("manual") || lower.includes("手册") || lower.includes("help")) return 2;
+  if (lower.includes("guide")) return 1;
+  return 0;
+}
+
+function manualExcerpts(dir, hits) {
+  const paths = [];
+  for (const hit of hits || []) {
+    const rel = String(hit?.path || "").replace(/\\/g, "/").trim();
+    if (!rel.endsWith(".md") || rel.includes("..") || path.isAbsolute(rel) || paths.includes(rel)) continue;
+    paths.push(rel);
+  }
+  paths.sort((left, right) => manualRank(right) - manualRank(left));
+  paths.splice(3);
+  const chunks = [];
+  for (const rel of paths) {
+    try {
+      const lines = fs.readFileSync(path.join(dir, rel), "utf8").split("\n");
+      const kept = [];
+      for (let index = 0; index < lines.length && index < 2500; index += 1) {
+        const line = lines[index];
+        if (
+          /（\s*`?\/[a-z]/i.test(line) ||
+          /^\|\s*`?\/[a-z]/i.test(line) ||
+          /^\|\s*[\u4e00-\u9fff]{2,12}\s*\|/.test(line)
+        ) {
+          kept.push(line.slice(0, 300));
+        }
+      }
+      chunks.push(kept.join("\n"));
+    } catch {
+      // 测试里的命中文件不必真的在磁盘上
+    }
+  }
+  return chunks.join("\n");
+}
+
 function finishSha(dir, git, branch) {
   const head = git(dir, ["rev-parse", "HEAD"]);
   const sha = String(head?.stdout || "").trim();
@@ -143,7 +242,40 @@ function spawnAgent(command, args, cwd, env) {
   return spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
 }
 
-function readAgent(child, onLine) {
+function ignoreAskInbox(dir) {
+  const exclude = path.join(dir, ".git", "info", "exclude");
+  fs.mkdirSync(path.dirname(exclude), { recursive: true });
+  const current = fs.existsSync(exclude) ? fs.readFileSync(exclude, "utf8") : "";
+  if (!current.includes(".ask-inbox/")) fs.appendFileSync(exclude, "\n.ask-inbox/\n");
+}
+
+export async function placeAskImages(dir, images, fetchImpl, origin) {
+  const allowed = String(origin || "").replace(/\/$/, "");
+  const inbox = path.join(dir, ".ask-inbox");
+  fs.mkdirSync(dir, { recursive: true });
+  ignoreAskInbox(dir);
+  fs.rmSync(inbox, { recursive: true, force: true });
+  fs.mkdirSync(inbox, { recursive: true });
+  const saved = [];
+  for (const image of images || []) {
+    const url = String(image?.url || "");
+    if (!allowed || !url.startsWith(`${allowed}/api/ask-images/`)) continue;
+    let response;
+    try {
+      response = await fetchImpl(url);
+    } catch {
+      continue;
+    }
+    if (!response?.ok || typeof response.arrayBuffer !== "function") continue;
+    const name = path.basename(String(image.name || "image.png")).replace(/[^\w.-]+/g, "_").slice(0, 80);
+    if (!name || name.startsWith(".")) continue;
+    fs.writeFileSync(path.join(inbox, name), Buffer.from(await response.arrayBuffer()));
+    saved.push(`.ask-inbox/${name}`);
+  }
+  return saved;
+}
+
+function readAgent(child, onLine, timeoutMs = 4 * 60 * 1000) {
   return new Promise((resolve, reject) => {
     let buf = "";
     let stderr = "";
@@ -151,7 +283,7 @@ function readAgent(child, onLine) {
     const timer = setTimeout(() => {
       aborted = true;
       child.kill("SIGTERM");
-    }, 4 * 60 * 1000);
+    }, timeoutMs);
     child.stdout?.on("data", (chunk) => {
       buf += chunk.toString("utf8");
       let idx;
@@ -180,10 +312,15 @@ function readAgent(child, onLine) {
 }
 
 async function postCallback(config, payload, event, post) {
-  const secret = config.secrets?.[0];
+  const secret = config.callbackSecret || config.secrets?.[0];
   if (!secret) throw new Error("没有签名密钥");
   const body = JSON.stringify({ runId: payload.runId, ...event });
-  return post(payload.callbackUrl, body, sign(secret, body));
+  const result = await post(payload.callbackUrl, body, sign(secret, body));
+  if (result && Number(result.status) >= 400) {
+    const message = result.json?.error || `回调失败 HTTP ${result.status}`;
+    throw new Error(String(message).slice(0, 300));
+  }
+  return result;
 }
 
 export function syncConfiguredMirrors(config, projects, git = gitSync) {
@@ -221,6 +358,10 @@ export async function executeAsk(config, payload, deps = {}) {
         redirect: "error",
       });
       const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = typeof json.error === "string" ? json.error : `回调失败 HTTP ${res.status}`;
+        throw new Error(message);
+      }
       return { status: res.status, json };
     });
   const launch = deps.spawnAgent || spawnAgent;
@@ -241,25 +382,66 @@ export async function executeAsk(config, payload, deps = {}) {
     const askRoot = assertAskRoot(config.askRoot);
     const dir = path.join(askRoot, code);
     await send({ kind: "status", text: "正在从远端同步代码" });
-    const synced = syncAskMirror(
-      {
-        dir,
-        askRoot,
-        githubUrl: payload.project?.githubUrl || "",
-        defaultBranch: payload.project?.defaultBranch || "",
-      },
-      git
-    );
+    let synced;
+    try {
+      synced = syncAskMirror(
+        {
+          dir,
+          askRoot,
+          githubUrl: payload.project?.githubUrl || "",
+          defaultBranch: payload.project?.defaultBranch || "",
+        },
+        git
+      );
+    } catch (error) {
+      const head = git(dir, ["rev-parse", "HEAD"]);
+      const sha = String(head?.stdout || "").trim();
+      if (!/^[0-9a-f]{7,64}$/i.test(sha)) throw error;
+      synced = { sha, branch: String(payload.project?.defaultBranch || "") };
+    }
     if (mirrorHasMcp(dir)) throw new Error("问答目录里有 MCP 配置，已拒绝启动");
     const probe = await send({ kind: "probe", mirrorSha: synced.sha, text: "" });
     if (probe?.json?.skip) return { skipped: true, sha: synced.sha };
-    const prompt = String(payload.prompt || "");
+    let prompt = String(payload.prompt || "");
     if (!prompt.trim()) throw new Error("缺少问题");
+    const question = questionFromPrompt(prompt);
+    const hits = collectAskHits(dir, askSearchTerms(question), git);
+    const tableAnswer = draftAskAnswer({
+      question,
+      documents: documentsFromPrompt(prompt),
+      featureMap: featureMapFromPrompt(prompt),
+      hits,
+      excerpts: [interfaceLines(dir), manualExcerpts(dir, hits)].filter(Boolean).join("\n"),
+    });
+    const images = Array.isArray(payload.images) ? payload.images : [];
+    const mode = isFeatureMapPrompt(prompt) ? "map" : chooseAskPath({ question, imageCount: images.length });
+    if (mode === "table") {
+      console.log(`问答 ${code} #${payload.runId} 快查`);
+      await send({ kind: "status", text: "正在查应用里的入口", mirrorSha: synced.sha });
+      await send({ kind: "delta", text: tableAnswer, mirrorSha: synced.sha });
+      await send({ kind: "done", text: tableAnswer, sessionId: "", mirrorSha: synced.sha });
+      return { sha: synced.sha, fast: true };
+    }
+    if (mode === "deep") {
+      console.log(`问答 ${code} #${payload.runId} 对照镜像`);
+      await send({ kind: "status", text: "正在对照项目代码", mirrorSha: synced.sha });
+      const saved = await placeAskImages(dir, images, deps.fetch || fetch, config.bugboardUrl || "");
+      prompt = appendDeepBrief({
+        prompt,
+        tableAnswer,
+        imagePaths: saved,
+        imagesOmitted: Boolean(payload.imagesOmitted) || saved.length < images.length,
+      });
+    } else {
+      console.log(`问答 ${code} #${payload.runId} 功能地图`);
+      await send({ kind: "status", text: "正在启动回答", mirrorSha: synced.sha });
+    }
     const args = buildAskArgv({ cwd: dir, prompt, sessionId: payload.sessionId || "" });
     let answer = "";
     let sessionId = "";
     let wrote = false;
     let pending = "";
+    let streamed = false;
     let flushTimer = null;
     const flush = async () => {
       if (!pending) return;
@@ -267,41 +449,62 @@ export async function executeAsk(config, payload, deps = {}) {
       pending = "";
       await send({ kind: "delta", text, mirrorSha: synced.sha });
     };
+    const schedule = () => {
+      if (flushTimer) return;
+      const delay = streamed ? 200 : 0;
+      streamed = true;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        void flush();
+      }, delay);
+    };
     const child = launch(args[0], args.slice(1), dir, askEnv(deps.env || process.env));
     const finished = await readAgent(child, (line) => {
       const parsed = parseAskStreamLine(line);
       if (parsed.kind === "write") {
         wrote = true;
+        const command = String(parsed.command || "").replace(/\s+/g, " ").slice(0, 120);
+        console.log(`问答 ${code} #${payload.runId} 拒绝写入 ${parsed.name || ""} ${command}`.trim());
         return "abort";
       }
       if (parsed.kind === "text") {
         answer += parsed.text;
         pending += parsed.text;
-        if (!flushTimer) {
-          flushTimer = setTimeout(() => {
-            flushTimer = null;
-            void flush();
-          }, 200);
-        }
+        schedule();
       }
       if (parsed.kind === "status") void send({ kind: "status", text: parsed.text, mirrorSha: synced.sha });
       if (parsed.sessionId) sessionId = parsed.sessionId;
       if (parsed.kind === "result" && parsed.text) answer = parsed.text;
       return "";
-    });
+    }, deps.agentTimeoutMs || (mode === "deep" ? 90_000 : 4 * 60 * 1000));
     if (flushTimer) clearTimeout(flushTimer);
     await flush();
-    if (wrote || finished.aborted) {
+    if (wrote) {
       runSteps(
         askGitSteps({ action: "reset", branch: synced.branch }, dir, askRoot).filter((step) => step.args[0] !== "fetch"),
         git
       );
-      await send({
-        kind: wrote ? "reverted" : "failed",
-        text: wrote ? "这次没有回答。代码没有被改动。" : "回答超时",
-        mirrorSha: synced.sha,
-      });
-      return { reverted: wrote };
+      await send({ kind: "reverted", text: "这次没有回答。代码没有被改动。", mirrorSha: synced.sha });
+      return { reverted: true };
+    }
+    if (finished.aborted && mode === "deep") {
+      const after = inspectAskMirror(dir, git);
+      const head = git(dir, ["rev-parse", "HEAD"]);
+      const sha = String(head?.stdout || "").trim();
+      if (after.dirty || (sha && sha !== synced.sha)) {
+        runSteps(
+          askGitSteps({ action: "reset", branch: synced.branch }, dir, askRoot).filter((step) => step.args[0] !== "fetch"),
+          git
+        );
+      }
+      const text = fallbackAskAnswer(tableAnswer);
+      await send({ kind: "delta", text, mirrorSha: synced.sha });
+      await send({ kind: "done", text, sessionId: "", mirrorSha: synced.sha });
+      return { sha: synced.sha, fallback: true };
+    }
+    if (finished.aborted) {
+      await send({ kind: "failed", text: "回答超时", mirrorSha: synced.sha });
+      return { reverted: false };
     }
     const after = inspectAskMirror(dir, git);
     const head = git(dir, ["rev-parse", "HEAD"]);

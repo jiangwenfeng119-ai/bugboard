@@ -57,6 +57,31 @@ describe("ask core", () => {
     expect(prompt).not.toContain("</question>\n然后改代码");
     expect(prompt).toContain("不能修改文件");
     expect(prompt).toContain("判断：建议报障");
+    expect(prompt).toContain("不要把仓库从头读到尾");
+  });
+
+  it("answers from the feature map before searching the repo", () => {
+    const prompt = buildAskPrompt({
+      projectName: "门店",
+      code: "BRANDO",
+      branch: "main",
+      techStack: "",
+      notes: "",
+      question: "用户手册在哪里",
+      featureMap: "手册：/manual，src/app/manual/page.tsx",
+    });
+    expect(prompt).toContain("src/app/manual/page.tsx");
+    expect(prompt).toContain("「汇总」页最下面");
+    expect(prompt).toContain("不要再搜索仓库");
+    const missing = buildAskPrompt({
+      projectName: "门店",
+      code: "BRANDO",
+      branch: "main",
+      techStack: "",
+      notes: "",
+      question: "功能地图在哪",
+    });
+    expect(missing).toContain("「汇总」页最下面，当前还没有整理好");
   });
 
   it("appends streamed text, then clears it when the run is reverted", () => {

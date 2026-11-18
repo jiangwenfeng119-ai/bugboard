@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "sfmono-regular",
+        "createdAt": "2026-11-16T05:07:07.297Z",
+        "reason": "DESIGN.md reserves ui-monospace / SFMono for keys, SHAs, and code chips; these pre-existing rules are that exception."
+      }
+    ]
+  }
+}
