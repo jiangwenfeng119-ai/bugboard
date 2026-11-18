@@ -123,7 +123,7 @@ export function AskBeforeReport({
   return (
     <section className="bb-ask" aria-labelledby={labelId}>
       <div className="bb-ask-head">
-        <h3 id={labelId}>先问这个项目</h3>
+        <h3 id={labelId}>问问项目助理</h3>
         <p>不确定功能有没有、入口在哪，可以先问。只回答，不改代码，也不替你提交。</p>
       </div>
 
