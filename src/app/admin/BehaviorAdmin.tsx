@@ -114,60 +114,77 @@ export function BehaviorAdmin({
           </div>
           <fieldset className="bb-dispatch-channel">
             <legend>叫醒</legend>
-            <label className="bb-checkline">
-              <input
-                type="checkbox"
-                checked={settings.wakeOnWebCreate}
-                onChange={(event) => patch({ wakeOnWebCreate: event.target.checked })}
-              />
-              网页建单后叫醒
-            </label>
-            <label className="bb-checkline">
-              <input
-                type="checkbox"
-                checked={settings.wakeOnWidgetCreate}
-                onChange={(event) => patch({ wakeOnWidgetCreate: event.target.checked })}
-              />
-              小组件上报后叫醒
-            </label>
-            <label className="bb-checkline">
-              <input
-                type="checkbox"
-                checked={settings.wakeOnCaptureCreate}
-                onChange={(event) => patch({ wakeOnCaptureCreate: event.target.checked })}
-              />
-              走查提交后叫醒
-            </label>
-            <label className="bb-checkline">
-              <input
-                type="checkbox"
-                checked={settings.wakeOnApiCreate}
-                onChange={(event) => patch({ wakeOnApiCreate: event.target.checked })}
-              />
-              MCP / API Key 建单后叫醒
-            </label>
-            {WAKE_ACTIONS.map((action) => (
-              <label className="bb-checkline" key={action}>
-                <input
-                  type="checkbox"
-                  checked={settings.wakeActions.includes(action)}
-                  onChange={() => toggleAction(action)}
-                />
-                {WAKE_ACTION_LABELS[action]}
-              </label>
-            ))}
-            <p className="bb-field-hint">
-              人点「可以做」才会叫醒。Agent 或 API Key 自己点不另开。开始修复、提交修复、确认、标不属实、要求补充、请产品确认、拒绝产品和发布都不会叫醒。
-            </p>
-            <label className="bb-checkline">
-              <input
-                type="checkbox"
-                checked={settings.wakeDrainQueue}
-                onChange={(event) => patch({ wakeDrainQueue: event.target.checked })}
-              />
-              处理完继续其余待处理
-            </label>
-            <p className="bb-field-hint">项目没开本机修理、也没开 Cursor 时，这些开关开着也不会发出请求。</p>
+            <div className="bb-wake-options">
+              <div className="bb-wake-group">
+                <p className="bb-wake-group-title">建单后</p>
+                <div className="bb-wake-checks">
+                  <label className="bb-checkline">
+                    <input
+                      type="checkbox"
+                      checked={settings.wakeOnWebCreate}
+                      onChange={(event) => patch({ wakeOnWebCreate: event.target.checked })}
+                    />
+                    网页建单后叫醒
+                  </label>
+                  <label className="bb-checkline">
+                    <input
+                      type="checkbox"
+                      checked={settings.wakeOnWidgetCreate}
+                      onChange={(event) => patch({ wakeOnWidgetCreate: event.target.checked })}
+                    />
+                    小组件上报后叫醒
+                  </label>
+                  <label className="bb-checkline">
+                    <input
+                      type="checkbox"
+                      checked={settings.wakeOnCaptureCreate}
+                      onChange={(event) => patch({ wakeOnCaptureCreate: event.target.checked })}
+                    />
+                    走查提交后叫醒
+                  </label>
+                  <label className="bb-checkline">
+                    <input
+                      type="checkbox"
+                      checked={settings.wakeOnApiCreate}
+                      onChange={(event) => patch({ wakeOnApiCreate: event.target.checked })}
+                    />
+                    MCP / API Key 建单后叫醒
+                  </label>
+                </div>
+              </div>
+              <div className="bb-wake-group">
+                <p className="bb-wake-group-title">状态变化后再叫</p>
+                <div className="bb-wake-checks">
+                  {WAKE_ACTIONS.map((action) => (
+                    <label className="bb-checkline" key={action}>
+                      <input
+                        type="checkbox"
+                        checked={settings.wakeActions.includes(action)}
+                        onChange={() => toggleAction(action)}
+                      />
+                      {WAKE_ACTION_LABELS[action]}
+                    </label>
+                  ))}
+                </div>
+                <p className="bb-field-hint">
+                  人点「可以做」才会叫醒。Agent 或 API Key 自己点不另开。开始修复、提交修复、确认、标不属实、要求补充、请产品确认、拒绝产品和发布都不会叫醒。
+                </p>
+              </div>
+              <div className="bb-wake-group">
+                <p className="bb-wake-group-title">处理范围</p>
+                <div className="bb-wake-checks">
+                  <label className="bb-checkline">
+                    <input
+                      type="checkbox"
+                      checked={settings.wakeDrainQueue}
+                      onChange={(event) => patch({ wakeDrainQueue: event.target.checked })}
+                    />
+                    处理完继续其余待处理
+                  </label>
+                </div>
+                <p className="bb-field-hint">项目没开本机修理、也没开 Cursor 时，这些开关开着也不会发出请求。</p>
+              </div>
+            </div>
           </fieldset>
           <fieldset className="bb-dispatch-channel">
             <legend>建单默认</legend>

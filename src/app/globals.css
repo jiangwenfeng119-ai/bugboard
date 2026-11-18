@@ -4341,6 +4341,57 @@ a.bb-bug-id:hover {
   margin: 0;
 }
 
+.bb-wake-options {
+  display: grid;
+  gap: 0.95rem;
+  margin: 0.1rem 0 0;
+}
+
+.bb-wake-group {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.bb-wake-group-title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+.bb-wake-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
+  gap: 0.35rem 0.85rem;
+}
+
+.bb-wake-checks .bb-checkline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: normal;
+}
+
+.bb-wake-checks .bb-checkline:hover {
+  background: var(--surface-2);
+}
+
+.bb-wake-checks .bb-checkline input {
+  flex-shrink: 0;
+  margin-top: 0.12rem;
+}
+
+.bb-wake-group .bb-field-hint {
+  margin: 0;
+  max-width: 68ch;
+}
+
 .bb-bugs-actions {
   display: flex;
   flex-wrap: wrap;
