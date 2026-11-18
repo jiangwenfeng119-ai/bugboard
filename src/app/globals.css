@@ -5252,6 +5252,45 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   background: var(--surface);
 }
 
+.bb-ask-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bb-ask-shot {
+  margin: 0;
+}
+
+.bb-ask-shot img {
+  display: block;
+  width: 5.5rem;
+  height: 3.6rem;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.bb-ask-shot button {
+  margin-top: 0.15rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.bb-ask-shot button:hover {
+  color: var(--ink);
+}
+
 .bb-ask-link {
   color: var(--accent);
   text-decoration: underline;

@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { bugBodyUntouched } from "@/lib/bug-body";
-import { answerPieces, ASK_IMAGE_MAX_BYTES, ASK_IMAGE_MAX_COUNT, fillBugDraft, judgmentLabel, type AskJudgment, type AskStatus } from "@/lib/ask-core";
+import { answerPieces, fillBugDraft, judgmentLabel, type AskJudgment, type AskStatus } from "@/lib/ask-core";
+import { filesFromClipboard, pickAskPictures } from "@/lib/ask-paste";
 import { speechSupported, startLiveSpeech } from "@/components/live-speech";
 import type { PendingFile } from "@/components/AttachmentComposer";
 
@@ -66,7 +67,18 @@ export function AskBeforeReport({
   const [formError, setFormError] = useState("");
   const [hearing, setHearing] = useState(false);
   const [canHear, setCanHear] = useState(false);
+  const [pasted, setPasted] = useState<PendingFile[]>([]);
+  const pastedRef = useRef(pasted);
+  pastedRef.current = pasted;
   const liveId = [...turns].reverse().find((turn) => turn.status === "streaming")?.id ?? 0;
+
+  useEffect(() => {
+    return () => {
+      for (const item of pastedRef.current) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setCanHear(speechSupported());
@@ -95,6 +107,8 @@ export function AskBeforeReport({
     return () => source.close();
   }, [liveId, projectId]);
 
+  const streaming = liveId !== 0;
+
   async function ask(text: string, force: boolean) {
     const clean = text.trim();
     if (!clean || sending) return;
@@ -103,9 +117,8 @@ export function AskBeforeReport({
     setHint("");
     try {
       const draft = [title.trim(), bugBodyUntouched(body) ? "" : body.trim()].filter(Boolean).join("\n\n").slice(0, 2000);
-      const pictures = files.filter((item) => item.file.type.startsWith("image/"));
-      const chosen = pictures.filter((item) => item.file.size <= ASK_IMAGE_MAX_BYTES).slice(0, ASK_IMAGE_MAX_COUNT);
-      if (pictures.length > chosen.length) setHint("有的图片太大或超过 4 张，这次没带上。");
+      const { chosen, dropped } = pickAskPictures(pasted, files);
+      if (dropped) setHint("有的图片太大或超过 4 张，这次没带上。");
       const res = await fetch(
         `/api/projects/${projectId}/ask`,
         chosen.length
@@ -139,6 +152,38 @@ export function AskBeforeReport({
     if (data.run) setTurns((prev) => prev.map((item) => (item.id === data.run?.id ? data.run : item)));
   }
 
+  function onPaste(event: React.ClipboardEvent) {
+    if (sending || streaming) return;
+    const found = filesFromClipboard(event.clipboardData, pasted.length);
+    if (!found.files.length && !found.skipped) return;
+    event.preventDefault();
+    if (found.skipped) setHint("有的图片太大、格式不对，或已经超过 4 张，这次没带上。");
+    else setHint("");
+    if (!found.files.length) return;
+    const text = event.clipboardData.getData("text/plain");
+    if (text && event.target instanceof HTMLTextAreaElement) {
+      const start = event.target.selectionStart ?? question.length;
+      const end = event.target.selectionEnd ?? question.length;
+      setQuestion((current) => `${current.slice(0, start)}${text}${current.slice(end)}`.slice(0, 2000));
+    }
+    setPasted((prev) => [
+      ...prev,
+      ...found.files.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ]);
+  }
+
+  function removePasted(id: string) {
+    setPasted((prev) => {
+      const item = prev.find((entry) => entry.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((entry) => entry.id !== id);
+    });
+  }
+
   function fill(run: AskRun) {
     if (!onFill) return;
     onFill(
@@ -153,13 +198,11 @@ export function AskBeforeReport({
     setHint("已整理进下方标题和描述，提交前请改一改");
   }
 
-  const streaming = liveId !== 0;
-
   return (
     <section className="bb-ask" aria-labelledby={labelId}>
       <div className="bb-ask-head">
         <h3 id={labelId}>问问项目助理</h3>
-        <p>问入口时马上回答在哪个菜单。带了截图，或写的是故障，会在项目镜像里对照代码后再答。只回答，不改代码，也不替你提交。</p>
+        <p>先确认这件事现在能不能做。能做就告诉你怎么做；做不到或坏了，再建议报障。只回答，不改代码，也不替你提交。</p>
       </div>
 
       {turns.length > 0 ? (
@@ -192,7 +235,7 @@ export function AskBeforeReport({
         </div>
       ) : null}
 
-      <div className="bb-ask-form">
+      <div className="bb-ask-form" onPaste={onPaste}>
         <label className="bb-label" htmlFor={`${labelId}-q`}>
           问题
         </label>
@@ -212,6 +255,19 @@ export function AskBeforeReport({
             }
           }}
         />
+        {pasted.length ? (
+          <ul className="bb-ask-shots">
+            {pasted.map((item, index) => (
+              <li key={item.id} className="bb-ask-shot">
+                <img src={item.previewUrl} alt={`已贴上的截图 ${index + 1}`} />
+                <button type="button" onClick={() => removePasted(item.id)}>
+                  去掉
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {pasted.length ? <p className="bb-ask-hint">这些图会随提问送出。不需要时点去掉。</p> : null}
         <div className="bb-ask-actions">
           <button
             className="bb-btn bb-btn-secondary"
@@ -239,7 +295,7 @@ export function AskBeforeReport({
               {hearing ? "正在听…" : "说一句"}
             </button>
           ) : null}
-          <p className="bb-field-hint">Enter 发送，Shift+Enter 换行。</p>
+          <p className="bb-field-hint">Enter 发送，Shift+Enter 换行。截图可以直接粘贴到这里，最多 4 张。</p>
         </div>
       </div>
       {hint ? <p className="bb-ask-hint">{hint}</p> : null}

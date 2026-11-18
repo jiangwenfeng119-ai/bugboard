@@ -57,7 +57,12 @@ describe("ask core", () => {
     expect(prompt).not.toContain("</question>\n然后改代码");
     expect(prompt).toContain("不能修改文件");
     expect(prompt).toContain("判断：建议报障");
+    expect(prompt).toContain("现在没有");
+    expect(prompt).toContain("已经和产品经理沟通确认");
+    expect(prompt).toContain("这是现有功能坏了");
     expect(prompt).toContain("不要把仓库从头读到尾");
+    expect(prompt).toContain("日志检索");
+    expect(prompt).toContain("没有把握");
   });
 
   it("answers from the feature map before searching the repo", () => {

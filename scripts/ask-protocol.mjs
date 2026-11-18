@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const WRITE_NAME = /write|delete|strreplace|applypatch|editnotebook|search_replace|edit_file/i;
 const MUTATING_SHELL =
   /(^|&&|\|\||[;&|])\s*(rm|mv|tee|chmod|chown|dd|truncate|mkdir|rmdir|touch|cp|install|ln|unlink)\b|(?:^|[^&0-9])>>?\s*\S|git\s+(commit|push|reset|checkout|clean|add|merge|rebase|switch)|sed\s+-[^\n]*\bi\b/i;
@@ -109,8 +113,13 @@ export function askGitSteps(plan, dir, askRoot) {
 const ASK_CUT = /在哪里|在哪|是什么|怎么|如何|有没有|是否|请问|能不能|可以吗|为什么|什么原因/;
 const ASK_SPLIT = /[啊呢吧吗呀？?！!。，,、\s的里并后和与或把被让给从到]+/;
 const ASK_EDGE = /^(请|帮我|希望|目前|现在|这个|那个|一个|我们|你们|他们)+|(生成|之后|之前|里面|当中|相关|问题|优化|修改|显示|无法|不能|没有|一下)+$/g;
-const DEFECT = /停了|中止|没有反应|没反应|无反应|闪退|白屏|丢失|不可用|无效|报错|无法|不能|不对|出错|失败|不显示|显示不全|错误|异常|冲突|卡顿|空白|空壳|算错|点了.{0,8}没/;
-const SCREENISH = /管理|开单|中心|清单|服务|入库|盘点|物流|看板|打卡|流水|培训|工资|资讯|拓扑|检索|告警|资产|手册|审批|调货|调拨|鉴定|赠品|收支|结算|罗盘|监控|驾驶|舱|仓|报告|台账|菜单|采购/;
+const DEFECT = /停了|中止|没有反应|没反应|无反应|闪退|白屏|丢失|不可用|无效|报错|无法|不能|不对|出错|失败|不显示|显示不全|错误|异常|冲突|卡顿|空白|空壳|算错|混乱|点了.{0,8}没/;
+const VAGUE_PLACE = /^(页面|菜单|按钮|界面|功能|系统|登录|登陆|设置|问题|状态|动作|搜索|项目|密码|报告|中心|管理|字段)$/;
+const GENERIC_LABEL = /^(中文|选择|创建|描述|内容|报障|标题|财务|商品|物流|客户|语言|确定|取消|保存|删除|编辑|返回|关闭|提交|新增|添加|修改|查看|详情|全部|更多|其他|提示|成功|失败|加载|暂无|当前|已经|可以|没有|确认|实际|系统)$/;
+const LOGIN_HEAD = /^(退出|显示|选择|点击|直接|确认|修改|处理|修复|查询|移除|升级|进入|使用|打开|返回|关闭|取消|删除|新增|添加|所有|全部|其他|没有|一个|这个|那个)$/;
+const FEATURE_WORD =
+  "管理|开单|中心|清单|服务|入库|盘点|物流|看板|打卡|流水|培训|工资|资讯|拓扑|检索|告警|资产|手册|审批|调货|调拨|鉴定|赠品|收支|结算|罗盘|监控|驾驶|舱|仓|报告|台账|菜单|采购|录音|纪要|架构|找货|估价|上架|寄卖|登录|登陆|后台|设置|关联|登记|周报|审计|申请|移库|草稿|密码|汇率|通知|收款|催收|邮件|发布|接单";
+const SCREENISH = new RegExp(FEATURE_WORD);
 
 export function isFeatureMapPrompt(prompt) {
   return String(prompt || "").includes("请根据当前默认分支列出功能模块和用户入口");
@@ -158,6 +167,34 @@ function placesIn(text) {
   return found;
 }
 
+const FEATURE_AT = new RegExp(FEATURE_WORD, "g");
+
+function featureWindows(text) {
+  const found = [];
+  const push = (slice) => {
+    if (slice.length < 2 || slice.length > 8 || slice.includes("的") || !SCREENISH.test(slice) || found.includes(slice)) return;
+    found.push(slice);
+  };
+  for (const run of String(text || "").match(/[\u4e00-\u9fff]{2,}/g) || []) {
+    FEATURE_AT.lastIndex = 0;
+    for (const match of run.matchAll(FEATURE_AT)) {
+      const word = match[0];
+      const start = match.index;
+      push(word);
+      if (start >= 2 && !/^[次一个下上前后这那]/.test(run.slice(start - 2, start))) push(run.slice(start - 2, start) + word);
+      const rest = run.slice(start + word.length);
+      const one = rest.slice(0, 1);
+      const two = rest.slice(0, 2);
+      if (/^[\u4e00-\u9fff]$/.test(one) && !/^[在哪里吗呢啊吧的了还是]$/.test(one)) push(word + one);
+      if (/^[\u4e00-\u9fff]{2}$/.test(two) && SCREENISH.test(two)) {
+        push(word + two);
+        if (start >= 2) push(run.slice(start - 2, start) + word + two);
+      }
+    }
+  }
+  return found.filter((slice) => !found.some((other) => other.length > slice.length && other.includes(slice)));
+}
+
 export function askSearchTerms(question) {
   const head = String(question || "").split(ASK_CUT)[0];
   const terms = [];
@@ -167,6 +204,7 @@ export function askSearchTerms(question) {
     terms.push(clean);
   };
   for (const name of placesIn(question)) push(name);
+  for (const name of featureWindows(question)) push(name);
   for (const piece of head.split(ASK_SPLIT)) {
     for (const chunk of piece.match(/[\u4e00-\u9fff]{2,8}/g) || []) push(chunk);
   }
@@ -174,6 +212,15 @@ export function askSearchTerms(question) {
     if (!terms.includes(word)) terms.push(word);
   }
   return terms.slice(0, 8);
+}
+
+function newFeatureAnswer(question, place) {
+  const where = place ? `在${place}` : "哪个页面";
+  const confirmed = /已经和产品经理[\s\S]{0,12}确认|已经和\s*Marshal\s*确认|已经沟通确认/.test(question);
+  if (confirmed) {
+    return `现在没有。这是新功能。你已经写了和产品经理确认，报障里保留这句，系统可以按确认过的做法做。请写清：${where}希望怎样。`;
+  }
+  return `现在没有。这是新功能。请先和产品经理讨论。讨论确认后，在报障里写上「已经和产品经理沟通确认」。请写清：${where}希望怎样。`;
 }
 
 export function looksLikeDefect(question) {
@@ -189,13 +236,24 @@ export function chooseAskPath({ question, imageCount = 0 }) {
   return "table";
 }
 
+export function askReplyGuide() {
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../.cursor/skills/ask-before-report/SKILL.md");
+  try {
+    return fs.readFileSync(file, "utf8").replace(/^---[\s\S]*?---\s*/, "").trim();
+  } catch {
+    return "";
+  }
+}
+
 export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted }) {
   const lines = [
     String(prompt || "").trimEnd(),
     "",
     "这次只读当前工作区。它是问答镜像，不是开发目录。不要改文件，不要提交。",
-    "先看附上的图片，再看相关页面的代码。已经有的功能只是没用对，就写菜单或页面，判断：已经有了。现有功能坏了，或这是现在没有的能力，判断：建议报障，并写清页面、做了什么、实际怎样。对不上就判断：没有把握。",
+    "先看附上的图片，再看相关页面的代码。按下面的确认规则作答。查表结果只供对照，以代码和图片为准。",
   ];
+  const guide = askReplyGuide();
+  if (guide && !String(prompt || "").includes("# 报障前确认")) lines.push("", guide);
   const table = String(tableAnswer || "").trim();
   if (table) lines.push("", "查表先找到这些，只供对照，以代码和图片为准：", table);
   const paths = (imagePaths || []).map((item) => String(item || "").trim()).filter(Boolean);
@@ -216,6 +274,64 @@ export function fallbackAskAnswer(tableAnswer) {
     return lines.join("\n");
   }
   return `${base}\n${note}`;
+}
+
+export function phraseLabels(source) {
+  const lines = [];
+  const seen = new Set();
+  const push = (name) => {
+    const clean = String(name || "").trim();
+    if (!clean || seen.has(clean) || VAGUE_PLACE.test(clean) || GENERIC_LABEL.test(clean)) return;
+    if (!/^[\u4e00-\u9fff]{2,10}$/.test(clean) && clean !== "OCR") return;
+    seen.add(clean);
+    lines.push(`界面「${clean}」`);
+  };
+  const text = String(source || "");
+  for (const match of text.matchAll(/\b[\w.]+\s*:\s*["']([\u4e00-\u9fff]{5,10})["']/g)) push(match[1]);
+  for (const match of text.matchAll(/[（]([\u4e00-\u9fff]{2,4})[）]/g)) push(match[1]);
+  for (const match of text.matchAll(/["']([\u4e00-\u9fff]{2,6})（[^"']{1,16}）["']/g)) push(match[1]);
+  for (const match of text.matchAll(/\bzh:\s*['"]([^'"]{2,8})['"]/g)) {
+    if (/(^|[^A-Za-z])OCR([^A-Za-z]|$)/.test(match[1])) push("OCR");
+  }
+  for (const match of text.matchAll(/\b(?:label|placeholder|aria-label)=["']([\u4e00-\u9fff]{2,8})["']/g)) push(match[1]);
+  for (const match of text.matchAll(/Error\(\s*["']([\u4e00-\u9fff]{4,10})["']/g)) push(match[1]);
+  if (text.includes("bb-project-card")) push("项目卡片");
+  if (text.includes("内部共享")) push("内部共享");
+  if (/\bCursor\b/.test(text) && !seen.has("Cursor")) {
+    seen.add("Cursor");
+    lines.push("界面「Cursor」");
+  }
+  if (/本机 Agent|云端 Agent/.test(text) && !seen.has("Agent")) {
+    seen.add("Agent");
+    lines.push("界面「Agent」");
+  }
+  if (/["']English["']/.test(text) && /简体中文|Italiano/.test(text) && !seen.has("English")) {
+    seen.add("English");
+    lines.push("界面「English」");
+  }
+  if (/["']Italiano["']/.test(text) && /简体中文|English/.test(text) && !seen.has("Italiano")) {
+    seen.add("Italiano");
+    lines.push("界面「Italiano」");
+  }
+  if (/["']登录["']/.test(text) && !seen.has("登录")) {
+    seen.add("登录");
+    lines.push("界面「登录」");
+  }
+  return lines.join("\n");
+}
+
+export function headingLabels(source) {
+  const lines = [];
+  const seen = new Set();
+  const push = (name) => {
+    const clean = String(name || "").trim();
+    if (!/^[\u4e00-\u9fff]{2,8}$/.test(clean) || VAGUE_PLACE.test(clean) || GENERIC_LABEL.test(clean) || seen.has(clean)) return;
+    seen.add(clean);
+    lines.push(`界面「${clean}」`);
+  };
+  for (const match of String(source || "").matchAll(/<h[1-3][^>]*>\s*([^<{]{2,16})\s*<\/h[1-3]>/g)) push(match[1]);
+  for (const match of String(source || "").matchAll(/\blabel:\s*["']([\u4e00-\u9fff]{2,8})["']/g)) push(match[1]);
+  return lines.join("\n");
 }
 
 export function screenLines(source) {
@@ -247,8 +363,30 @@ export function screenLines(source) {
   for (const match of text.matchAll(/「([\u4e00-\u9fff]{2,8})」(?:里|界面|页面)/g)) {
     push(match[1], "");
   }
-  for (const match of text.matchAll(/["']([\u4e00-\u9fff]{2,8})["']\s*:/g)) {
-    if (SCREENISH.test(match[1])) push(match[1], "");
+  for (const match of text.matchAll(/(?:^|[\s{,])[A-Za-z][\w.-]*\s*:\s*["']([A-Z][A-Za-z][A-Za-z0-9]{3,15})["']/g)) {
+    push(match[1], "");
+  }
+  for (const match of text.matchAll(/["']([\u4e00-\u9fff]{2,8})["']\s*:\s*["']([^"'\n]{1,48})["']/g)) {
+    if (/[\u4e00-\u9fff，。！？]/.test(match[2])) continue;
+    if (SCREENISH.test(match[1]) || match[1].length >= 4) push(match[1], "");
+    if (/^[A-Z][A-Za-z][A-Za-z0-9]{3,15}$/.test(match[2])) push(match[2], "");
+  }
+  for (const match of text.matchAll(/\bzh:\s*['"]([^'"]{4,16})['"]/g)) {
+    if (/[，。！？]/.test(match[1])) continue;
+    if (/^[\u4e00-\u9fff]{4,8}$/.test(match[1]) || (/^[\u4e00-\u9fff]{2,3}$/.test(match[1]) && SCREENISH.test(match[1]))) push(match[1], "");
+    for (const name of featureWindows(match[1])) {
+      if (name.length >= 2 && name.length <= 8) push(name, "");
+    }
+  }
+  for (const match of text.matchAll(/(?:^|\\n)([\u4e00-\u9fff]{2,8})\|[^|\n]{1,24}\|(\/[a-z][a-z0-9/_-]*)/g)) {
+    push(match[1], match[2]);
+  }
+  for (const match of text.matchAll(/(?:['"][\w.-]{2,}['"]|[\w.-]{2,})\s*:\s*['"]([^'"\n]{2,16})['"]/g)) {
+    if (/[，。！？]/.test(match[1])) continue;
+    if (/^[\u4e00-\u9fff]{4,8}$/.test(match[1]) || (/^[\u4e00-\u9fff]{2,3}$/.test(match[1]) && SCREENISH.test(match[1]))) push(match[1], "");
+    for (const name of featureWindows(match[1])) {
+      if (name.length >= 2 && name.length <= 8) push(name, "");
+    }
   }
   return lines.join("\n");
 }
@@ -319,7 +457,8 @@ function featureOverlaps(name, term) {
   const left = String(name || "");
   const right = String(term || "");
   if (left.length < 2 || right.length < 2) return false;
-  if (left.includes(right) || right.includes(left)) return true;
+  const fold = (value) => value.replaceAll("登陆", "登录");
+  if (left.includes(right) || right.includes(left) || fold(left).includes(fold(right)) || fold(right).includes(fold(left))) return true;
   const stem = (value) => value.replace(/(单|管理|审批|中心|页面|按钮)$/, "");
   const a = stem(left);
   const b = stem(right);
@@ -378,14 +517,47 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
           piece.length >= 3 &&
           piece.length <= 12 &&
           sentence.includes(piece) &&
-          terms.some((term) => piece === term || (term.length >= 3 && piece.includes(term))),
+          (SCREENISH.test(piece) ||
+            terms.some((term) => piece === term || (term.length >= 3 && piece.includes(term)))),
       ) || "";
   const named = [];
+  const exactNamed = catalog.some((item) => sentence.includes(item.name) && !VAGUE_PLACE.test(item.name) && !GENERIC_LABEL.test(item.name));
   for (const item of catalog) {
     const bare = !item.route && !item.detail && item.name.length >= 3 && SCREENISH.test(item.name) && sentence.includes(item.name);
-    const nameTerm = terms.find((term) => inSentence(term) && featureOverlaps(item.name, term)) || "";
+    const login = !exactNamed && /^([\u4e00-\u9fff]{2,4})登录$/.exec(item.name);
+    const loginHead = login && !LOGIN_HEAD.test(login[1]) && sentence.includes(login[1]) ? login[1] : "";
+    const nameTerm = loginHead ||
+      terms
+        .filter(
+          (term) =>
+            inSentence(term) &&
+            term.length >= 2 &&
+            item.name.startsWith(term) &&
+            item.name.length - term.length <= 4,
+        )
+        .sort((a, b) => b.length - a.length)[0] || "";
     const piece = detailPiece(item);
-    const because = bare ? item.name : sentence.includes(item.name) ? item.name : nameTerm || piece;
+    const loginPage =
+      (item.name === "登录" || item.name === "登陆") && sentence.includes("登陆页")
+        ? "登陆页"
+        : (item.name === "登录" || item.name === "登陆") && sentence.includes("登录页")
+          ? "登录页"
+          : "";
+    const shared = item.name === "内部共享" && sentence.includes("商品共享") ? "商品共享" : "";
+    const language =
+      item.name === "English" && sentence.includes("英文")
+        ? "英文"
+        : item.name === "Italiano" && sentence.includes("意大利语")
+          ? "意大利语"
+          : "";
+    const latinTarget = item.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const spelled =
+      latinTarget.length >= 5 && /[A-Za-z]/.test(item.name) && !/[\u4e00-\u9fff]/.test(item.name)
+        ? (sentence.match(/[A-Za-z][A-Za-z0-9]*(?:[\s_-]+[A-Za-z0-9]+)*/g) || []).find(
+            (span) => span.toLowerCase().replace(/[^a-z0-9]/g, "") === latinTarget,
+          ) || ""
+        : "";
+    const because = loginPage || shared || language || spelled || (bare ? item.name : sentence.includes(item.name) ? item.name : nameTerm || piece);
     if (!because || !sentence.includes(because)) continue;
     const shorter = sentence.includes(item.name)
       ? []
@@ -396,6 +568,14 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
     chosen.because = because;
     chosen.alias = Boolean(shorter[0] && shorter[0] !== item);
     chosen.viaDetail = Boolean(piece) && !sentence.includes(item.name);
+    chosen.quote =
+      loginPage ||
+      shared ||
+      language ||
+      spelled ||
+      (!chosen.detail && !sentence.includes(chosen.name) && sentence.includes(because) && (because.length >= 4 || because === loginHead)
+        ? because
+        : "");
     const sameRoute = chosen.route ? named.findIndex((have) => have.route === chosen.route) : -1;
     if (sameRoute >= 0) {
       const existing = named[sameRoute];
@@ -430,30 +610,59 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
     entries.push(line);
   }
   const whereAsked = /在哪里|在哪|怎么找|怎么看|怎么进|哪儿/.test(question);
+  const usefulLine = (line) => {
+    const names = [...String(line).matchAll(/「([^」]{2,16})」/g)].map((match) => match[1]);
+    if (!names.length) return true;
+    if (names.some((name) => !VAGUE_PLACE.test(name))) return true;
+    return names.some((name) => name === "登录" || name === "登陆") && /登录后|登陆后|登陆页|登录页|无法进入/.test(sentence);
+  };
   const finish = (lines) => {
-    if (looksLikeDefect(question) || !whereAsked) {
-      const place = lines.join("").match(/「([^」]{2,16})」/)?.[1] || "";
-      const hint = place
-        ? `这更像使用中的故障。报障时写清：在${place}做了什么、实际怎样。`
-        : "这更像使用中的故障。报障时写清：哪个页面、做了什么、实际怎样。";
-      return [...lines, hint, "判断：建议报障"].join("\n");
+    const concrete = lines.filter(usefulLine);
+    const quotes = [...concrete.join("").matchAll(/「([^」]{2,16})」/g)].map((match) => match[1]);
+    const screenQuotes = quotes.filter((name) => SCREENISH.test(name));
+    const placeName =
+      (screenQuotes.length ? screenQuotes : quotes).sort(
+        (a, b) => b.length - a.length || sentence.indexOf(a) - sentence.indexOf(b),
+      )[0] || "";
+    const place = (placeName === "登录" || placeName === "登陆") && sentence.includes("登陆页") ? "登陆页" : placeName;
+    const spokenLines =
+      place === "登陆页"
+        ? concrete.map((line) => line.replaceAll("「登录」", "「登陆页」").replaceAll("「登陆」", "「登陆页」"))
+        : concrete;
+    const asksForNew = /增加|新增|加一个|新功能|功能扩展|应做|应该有|希望能|希望增加|希望有|能否|可以吗/.test(question);
+    if (whereAsked && !looksLikeDefect(question) && !asksForNew) {
+      if (!spokenLines.length) return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
+      return ["现在可以这样做：", ...spokenLines, "判断：已经有了"].join("\n");
     }
-    return [...lines, "判断：已经有了"].join("\n");
+    if (asksForNew) {
+      return [newFeatureAnswer(question, place), ...spokenLines, "判断：建议报障"].join("\n");
+    }
+    const hint = place
+      ? `这需要报障。请写清：在${place}做了什么、实际怎样。`
+      : "这需要报障。请写清：哪个页面、做了什么、实际怎样。";
+    return [hint, ...spokenLines, "判断：建议报障"].join("\n");
   };
   const phrase = (item) => {
+    const quoted = item.quote ? item.text.replaceAll(`「${item.name}」`, `「${item.quote}」`) : item.text;
     const inName = terms.some((term) => featureOverlaps(item.name, term) && item.name.includes(term.slice(0, 2)));
-    if (inName || !item.detail) return item.text;
+    if (inName || !item.detail) return quoted;
     const term = terms.find((itemTerm) => item.detail.includes(itemTerm) || featureOverlaps(item.detail, itemTerm));
     const clause = String(item.detail || "")
       .split(/[、，,；;]/)
       .map((part) => part.trim())
       .find((part) => term && (part.includes(term) || featureOverlaps(part, term)));
-    if (!clause || clause === item.name) return item.text;
-    return `${item.text}，其中有${clause}`.slice(0, 140);
+    const spoken = String(item.detail || "")
+      .split(/[、，,；;（）()]/)
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 2 && part.length <= 12 && sentence.includes(part))
+      .sort((a, b) => b.length - a.length)[0];
+    if (spoken && spoken !== item.name) return `${quoted}，其中有${spoken}`.slice(0, 140);
+    if (!clause || clause === item.name) return quoted;
+    return `${quoted}，其中有${clause}`.slice(0, 140);
   };
   const aboutManual = terms.some((term) => term.includes("手册") || term.toLowerCase().includes("manual"));
   const strong = entries.filter((line) => /手册|manual/i.test(line) && /\/[a-z]/i.test(line));
-  if (aboutManual && strong.length) return finish(["在应用里可以这样找到：", strong[0]]);
+  if (aboutManual && strong.length) return finish([strong[0]]);
   if (named.length) {
     named.sort((a, b) => {
       const rank = (item) => {
@@ -463,15 +672,17 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
         return via >= 0 ? via + 20 : 100;
       };
       const routed = (item) => (item.route ? 0 : 1);
-      return rank(a) - rank(b) || routed(a) - routed(b) || b.name.length - a.name.length;
+      const screenRank = (item) => (VAGUE_PLACE.test(item.quote || item.name) ? 2 : SCREENISH.test(item.name) ? 0 : 1);
+      return screenRank(a) - screenRank(b) || b.name.length - a.name.length || rank(a) - rank(b) || routed(a) - routed(b);
     });
     const focused = named.filter(
       (item) =>
         sentence.includes(item.name) ||
+        (item.quote && sentence.includes(item.quote)) ||
         (item.alias && item.because && sentence.includes(item.because)) ||
         (item.viaDetail && item.because && sentence.includes(item.because)),
     );
-    const exact = focused.filter((item) => sentence.includes(item.name));
+    const exact = focused.filter((item) => sentence.includes(item.name) && !VAGUE_PLACE.test(item.name));
     const picked = exact.length ? exact : focused;
     const shown = [];
     const menu = picked.find((item) => item.kind === "menu");
@@ -481,18 +692,30 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
       shown.push(phrase(item));
       if (shown.length >= 2) break;
     }
-    if (shown.length) return finish(["在应用里可以这样找到：", ...shown.slice(0, 2)]);
+    if (shown.length) return finish(shown.slice(0, 2));
   }
   const shown = (strong.length ? strong : entries).slice(0, strong.length ? 1 : 2);
   for (const hit of hits || []) {
     const pathName = String(hit?.path || "").replace(/\\/g, "/").trim();
     if (/\.md$/i.test(pathName) && !pathName.includes("..") && !sources.includes(pathName)) sources.push(pathName);
   }
-  if (shown.length) return finish(["在应用里可以这样找到：", ...shown]);
-  const places = placesIn(String(question || "").split("。")[0]).filter((name) => SCREENISH.test(name));
-  if (places.length) return finish([`你说的是「${places[0]}」。`]);
-  if (sources.length) return `文档里提到这件事，但没有写清在应用的哪个菜单或页面进入。\n判断：没有把握`;
-  return "在应用的菜单和页面里，没有对上这个问题里的入口。如果仍要报障，请写清：哪个页面、做了什么、实际怎样。\n判断：没有把握";
+  if (shown.length) return finish(shown);
+  const places = placesIn(sentence).filter((name) => SCREENISH.test(name) && !VAGUE_PLACE.test(name));
+  const spoken = featureWindows(sentence)
+    .map((name) => name.replace(/^(选择|点击|直接|放到|进入|使用|打开|新增|增加|没有|不能|无法)/, ""))
+    .filter((name) => name.length >= 4 && sentence.includes(name) && !VAGUE_PLACE.test(name))
+    .sort((a, b) => b.length - a.length)[0] || "";
+  const said = spoken.length >= (places[0] || "").length ? spoken : places[0];
+  if (said && !(whereAsked && !looksLikeDefect(question))) return finish([`你说的是「${said}」。`]);
+  if (!whereAsked && /增加|新增|加一个|新功能|功能扩展|应做|应该有|希望能|希望增加|希望有|能否|可以吗/.test(question)) {
+    return `${newFeatureAnswer(question, "")}\n判断：建议报障`;
+  }
+  if (looksLikeDefect(question)) return "这需要报障。请写清：哪个页面、做了什么、实际怎样。\n判断：建议报障";
+  if (sources.length && whereAsked) return `文档里提到这件事，但没有写清在应用的哪个菜单或页面进入。\n判断：没有把握`;
+  if (!whereAsked && (sources.length || /优化|希望|应该/.test(question))) {
+    return "这需要报障。请写清：哪个页面、做了什么、你希望怎样。\n判断：建议报障";
+  }
+  return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
 }
 
 export function buildAskArgv({ cwd, prompt, sessionId }) {

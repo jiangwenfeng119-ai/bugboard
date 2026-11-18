@@ -20,6 +20,8 @@ import {
   parseAskStreamLine,
   planAskMirror,
   questionFromPrompt,
+  headingLabels,
+  phraseLabels,
   screenLines,
 } from "./ask-protocol.mjs";
 
@@ -169,22 +171,81 @@ export function syncAskMirror(input, git = gitSync, now = Date.now()) {
   return finishSha(input.dir, git, plan.branch || after.headBranch);
 }
 
+function addInterfaceFile(files, full) {
+  if (files.includes(full) || !/\.(ts|tsx)$/.test(full)) return;
+  try {
+    if (fs.statSync(full).isFile() && fs.statSync(full).size < 1_200_000) files.push(full);
+  } catch {
+    // 缺文件就跳过
+  }
+}
+
 export function interfaceLines(dir) {
   const files = [];
   for (const rel of ["lib/i18n", "packages/i18n/src"]) {
     const abs = path.join(dir, rel);
     if (!fs.existsSync(abs)) continue;
-    for (const name of fs.readdirSync(abs)) {
-      if (!/\.(ts|tsx)$/.test(name)) continue;
-      const full = path.join(abs, name);
-      try {
-        if (fs.statSync(full).isFile() && fs.statSync(full).size < 1_200_000) files.push(full);
-      } catch {
-        // 缺文件就跳过
+    for (const name of fs.readdirSync(abs)) addInterfaceFile(files, path.join(abs, name));
+  }
+  const skip = new Set(["node_modules", "dist", ".git", "target", "build", "coverage", ".next", "vendor"]);
+  const enter = new Set(["src", "platform", "frontend", "locales", "langs", "lib", "packages", "app", "i18n", "modules"]);
+  const walk = (abs, depth) => {
+    if (depth > 7 || files.length >= 80) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (skip.has(entry.name)) continue;
+      const full = path.join(abs, entry.name);
+      if (entry.isDirectory()) {
+        if (depth === 0 || enter.has(entry.name)) walk(full, depth + 1);
+      } else if (/zh-cn\.ts$|zh_CN\.ts$|page-titles\.ts$|siteChrome\.ts$|navigation\.ts$/i.test(entry.name)) addInterfaceFile(files, full);
+    }
+  };
+  walk(dir, 0);
+  const localeText = files.map((file) => fs.readFileSync(file, "utf8")).join("\n");
+  const headings = [];
+  const seenHeads = new Set();
+  const walkViews = (abs, depth) => {
+    if (depth > 6 || seenHeads.size >= 400) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (skip.has(entry.name) || entry.name === "test" || entry.name === "tests") continue;
+      const full = path.join(abs, entry.name);
+      if (entry.isDirectory()) walkViews(full, depth + 1);
+      else if (/\.(tsx|vue|ts)$/.test(entry.name) && !/\.test\./.test(entry.name) && !seenHeads.has(full)) {
+        seenHeads.add(full);
+        try {
+          const text = fs.readFileSync(full, "utf8");
+          if (text.length < 800_000) {
+            if (/\.(tsx|vue|ts)$/.test(entry.name)) headings.push(headingLabels(text));
+            if (/ui-dict|ui-web|ui-gaps/.test(entry.name)) headings.push(screenLines(text));
+            if (/\.(tsx|vue)$/.test(entry.name) || /types|state-machine|labels|status/i.test(entry.name)) headings.push(phraseLabels(text));
+          }
+        } catch {
+          // 读不到的页面不参与入口名称
+        }
       }
     }
+  };
+  walkViews(dir, 0);
+  for (const rel of ["scripts/ask-runner.mjs", "scripts/wake-agent.mjs"]) {
+    try {
+      const abs = path.join(dir, rel);
+      if (fs.existsSync(abs)) headings.push(phraseLabels(fs.readFileSync(abs, "utf8")));
+    } catch {
+      // 读不到的脚本不参与入口名称
+    }
   }
-  return screenLines(files.map((file) => fs.readFileSync(file, "utf8")).join("\n"));
+  return [screenLines(localeText), phraseLabels(localeText), ...headings].filter(Boolean).join("\n");
 }
 
 function manualRank(rel) {
