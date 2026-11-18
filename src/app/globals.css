@@ -42,7 +42,7 @@
   --bb-topbar-h: 4.5rem;
   --bb-gutter: clamp(1.15rem, 2vw, 2.25rem);
   --bb-measure: 40em;
-  --bb-sheet-w: clamp(36rem, 48vw, 58rem);
+  --bb-sheet-w: max(36rem, 50vw);
 }
 
 @theme inline {
@@ -1292,7 +1292,7 @@ a.bb-bug-id:hover {
   .bb-panel-sheet {
     position: relative;
     z-index: 1;
-    width: min(920px, 100%);
+    width: min(max(36rem, 50vw), 100%);
     margin-left: auto;
     border-radius: 0;
   }
