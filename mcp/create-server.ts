@@ -559,6 +559,25 @@ server.tool(
 );
 
 server.tool(
+  "release_return",
+  "发布退回：待发布 → 待处理（管理员级 Key，note 必填）。撤回已经 push 的提交之后才调用。note 要写清为什么退回，修复 Agent 会按这句重做。",
+  {
+    bugId: z.number().int().positive(),
+    note: z
+      .string()
+      .min(1)
+      .describe("退回原因（必填）。和邮件、变更里的原因用同一句话。"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("release_return", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
   "record_change",
   "登记一次已 push 的代码变更（管理员级 Key）。修报障用 kind=fix，并带上 bugIds 和 commitShas。没有报障单的功能用 feature。",
   {
@@ -611,7 +630,7 @@ server.tool(
 
 server.tool(
   "list_pending_release",
-  "列出某项目待发布的报障，以及还没挂上发布的代码变更（管理员级 Key）。",
+  "列出某项目待发布的报障、还没挂上发布的代码变更，以及 deployMode 和 deployCommand（管理员级 Key）。",
   { projectId: z.number().int().positive() },
   async ({ projectId }) => {
     try {

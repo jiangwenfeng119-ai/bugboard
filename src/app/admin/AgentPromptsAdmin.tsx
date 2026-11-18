@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { IconPencil, IconSearch, IconWrench } from "@/components/Icons";
+import { IconClock, IconPencil, IconSearch, IconWrench } from "@/components/Icons";
 import {
   ADMIN_AGENT_PROMPT,
+  RELEASE_AGENT_PROMPT,
   USER_AGENT_PROMPT,
   applyProjectName,
 } from "@/lib/agent-prompts";
@@ -47,6 +48,13 @@ const PROMPTS = [
     summary: "故障就修好。没用对或配置不对标不属实，还没有的新能力交给产品经理确认。",
     icon: IconWrench,
     text: ADMIN_AGENT_PROMPT,
+  },
+  {
+    id: "release",
+    title: "发布 · 夜间复核",
+    summary: "每天复核待发布，能单独撤回的退回待处理，通过的才发布并做健康检查。",
+    icon: IconClock,
+    text: RELEASE_AGENT_PROMPT,
   },
 ] as const;
 

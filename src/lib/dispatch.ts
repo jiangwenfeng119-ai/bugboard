@@ -16,6 +16,7 @@ export type DispatchReason =
   | "created"
   | "provide_info"
   | "reject_fix"
+  | "release_return"
   | "dispute_invalid"
   | "reopen_invalid"
   | "supplement"
@@ -155,6 +156,7 @@ type DispatchLogRow = {
 const AUTO_WAKE = new Set<DispatchReason>([
   "provide_info",
   "reject_fix",
+  "release_return",
   "dispute_invalid",
   "reopen_invalid",
   "supplement",
@@ -734,6 +736,11 @@ export function buildWakePrompt(project: ProjectRow, bug: BugRow, reason?: Dispa
     ...(reason === "accept_product"
       ? [
           "产品经理已经在台账上点了「可以做」，这张现在是修复中。按修复流程里「页面上点了可以做」那一条改完，不要再 request_product，也不要 start_fix。",
+        ]
+      : []),
+    ...(reason === "release_return"
+      ? [
+          "这张是发布退回。先读进入待处理的那条说明，按说明重做。已经撤回的提交不是还在的修复。",
         ]
       : []),
     readBehavior(project.id).wakeDrainQueue

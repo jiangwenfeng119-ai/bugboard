@@ -68,6 +68,7 @@ describe("project behavior", () => {
     expect(settings.wakeActions).toEqual([
       "provide_info",
       "reject_fix",
+      "release_return",
       "dispute_invalid",
       "reopen_invalid",
       "supplement",
@@ -285,5 +286,35 @@ describe("project behavior", () => {
     const settled = captures.getCaptureSession(identity, session.id);
     expect(settled.organizeStatus).toBe("failed");
     expect(settled.organizeDetail).toContain("整理超时");
+  });
+
+  it("adds release_return only to saved wake lists that still include reject_fix", async () => {
+    const { behavior, dispatch, identity, project } = await setup();
+    const { storedWakeActionsWithReleaseReturn } = await import("../src/lib/behavior-shared");
+    expect(storedWakeActionsWithReleaseReturn("")).toBe("");
+    expect(storedWakeActionsWithReleaseReturn("supplement")).toBe("supplement");
+    expect(storedWakeActionsWithReleaseReturn("reject_fix,supplement")).toBe(
+      "reject_fix,supplement,release_return"
+    );
+
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+    });
+    const { getDb, resetDbForTests } = await import("../src/lib/db");
+    getDb()
+      .prepare("UPDATE project_dispatch SET wake_actions = ? WHERE project_id = ?")
+      .run("provide_info,reject_fix,supplement", project.id);
+    resetDbForTests();
+    const reopened = await import("../src/lib/behavior");
+    const migrated = reopened.getBehaviorSettings(identity, project.id).wakeActions;
+    expect(migrated).toContain("reject_fix");
+    expect(migrated).toContain("release_return");
+
+    getDb()
+      .prepare("UPDATE project_dispatch SET wake_actions = '' WHERE project_id = ?")
+      .run(project.id);
+    resetDbForTests();
+    expect(reopened.getBehaviorSettings(identity, project.id).wakeActions).toEqual([]);
   });
 });

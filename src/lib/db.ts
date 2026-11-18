@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { dbPath, ensureDataDirs } from "./paths";
+import { storedWakeActionsWithReleaseReturn } from "./behavior-shared";
 import { PROFILE_FIELDS } from "./project-profile";
 import { allocateProjectCode, nextPublicId } from "./ticket-id";
 
@@ -478,8 +479,18 @@ function ensureBehaviorConfig(db: Database.Database) {
   add("wake_on_api_create", "wake_on_api_create INTEGER NOT NULL DEFAULT 0");
   add(
     "wake_actions",
-    "wake_actions TEXT NOT NULL DEFAULT 'provide_info,reject_fix,dispute_invalid,reopen_invalid,supplement,accept_product'"
+    "wake_actions TEXT NOT NULL DEFAULT 'provide_info,reject_fix,release_return,dispute_invalid,reopen_invalid,supplement,accept_product'"
   );
+  const rows = db
+    .prepare("SELECT project_id, wake_actions FROM project_dispatch")
+    .all() as { project_id: number; wake_actions: string }[];
+  const update = db.prepare(
+    "UPDATE project_dispatch SET wake_actions = ? WHERE project_id = ?"
+  );
+  for (const row of rows) {
+    const next = storedWakeActionsWithReleaseReturn(row.wake_actions);
+    if (next !== row.wake_actions) update.run(next, row.project_id);
+  }
   add("wake_drain_queue", "wake_drain_queue INTEGER NOT NULL DEFAULT 1");
   add("intake_priority", "intake_priority TEXT NOT NULL DEFAULT 'p2'");
   add("inbox_show_pending", "inbox_show_pending INTEGER NOT NULL DEFAULT 1");

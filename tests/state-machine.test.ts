@@ -402,4 +402,49 @@ describe("state machine", () => {
     );
     expect(allowedActions(reporter, "ready_to_release", "user", 2, reporter.role !== "user")).toEqual([]);
   });
+
+  it("release_return goes from ready_to_release to pending and requires an admin note", () => {
+    const returned = validateTransition({
+      action: "release_return",
+      from: "ready_to_release",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "测试没过，撤回后重做",
+      asAdmin: admin.role !== "user",
+    });
+    expect(returned.ok && returned.to).toBe("pending");
+
+    const missing = validateTransition({
+      action: "release_return",
+      from: "ready_to_release",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      asAdmin: true,
+    });
+    expect(missing.ok).toBe(false);
+
+    const member = validateTransition({
+      action: "release_return",
+      from: "ready_to_release",
+      identity: reporter,
+      reporterType: "user",
+      reporterId: 2,
+      note: "我想退回",
+      asAdmin: false,
+    });
+    expect(member.ok).toBe(false);
+
+    const wrong = validateTransition({
+      action: "release_return",
+      from: "fixing",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "还不该退",
+      asAdmin: true,
+    });
+    expect(wrong.ok).toBe(false);
+  });
 });

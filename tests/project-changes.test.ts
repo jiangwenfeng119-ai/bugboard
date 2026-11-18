@@ -338,4 +338,75 @@ describe("project changes ledger", () => {
       })
     ).toThrow(/标题/);
   });
+
+  it("does not advance bugs when the switch is off, and leaves a returned chore unreleased", async () => {
+    const { services, adminId, qaId, project } = await setup();
+    const changes = await import("../src/lib/project-changes");
+    const release = await import("../src/lib/release");
+    const behavior = await import("../src/lib/behavior");
+    const dispatch = await import("../src/lib/dispatch");
+
+    dispatch.saveDispatchSettings(adminId, project.id, {
+      webhookUrl: "",
+      cursorEnabled: false,
+      deployMode: "restart",
+      deployCommand: "/Users/shzx/Apps/bugboard-wake/deploy-bugboard",
+    });
+    const pending = release.listPendingRelease(adminId, project.id);
+    expect(pending.deployMode).toBe("restart");
+    expect(pending.deployCommand).toBe("/Users/shzx/Apps/bugboard-wake/deploy-bugboard");
+
+    const passed = await readyBug(services, qaId, adminId, project.id, "通过的");
+    const returned = await readyBug(services, qaId, adminId, project.id, "退回的");
+    services.transitionBug(adminId, returned.id, "release_return", "这张单独撤回");
+    const chore = changes.recordChange(adminId, project.id, {
+      kind: "chore",
+      title: "撤回退回的",
+      commitShas: ["revert1"],
+      bugIds: [returned.id],
+    });
+    changes.recordChange(adminId, project.id, {
+      kind: "fix",
+      title: "通过的修复",
+      commitShas: ["pass111"],
+      bugIds: [passed.id],
+    });
+
+    const marked = release.markReleased(adminId, project.id, {
+      trigger: "scheduled",
+      bugIds: [passed.id],
+      headSha: "head222",
+      detail: "200",
+    });
+    expect(services.getBug(adminId, passed.id).status).toBe("awaiting_confirm");
+    expect(services.getBug(adminId, returned.id).status).toBe("pending");
+    const rows = changes.listChanges(adminId, project.id, { kind: "code" }).changes;
+    const byTitle = Object.fromEntries(rows.map((row) => [row.title, row.release_change_id]));
+    expect(byTitle["通过的修复"]).toBe(marked.release.id);
+    expect(byTitle["撤回退回的"]).toBeNull();
+    expect(chore.change.release_change_id).toBeNull();
+
+    const heldBug = await readyBug(services, qaId, adminId, project.id, "开关关闭");
+    const current = behavior.getBehaviorSettings(adminId, project.id);
+    behavior.saveBehaviorSettings(adminId, project.id, {
+      ...current,
+      releaseAdvancesBugs: false,
+    });
+    release.markReleased(adminId, project.id, {
+      trigger: "scheduled",
+      bugIds: [heldBug.id],
+      headSha: "head333",
+      detail: "发布后推进已关闭",
+    });
+    expect(services.getBug(adminId, heldBug.id).status).toBe("ready_to_release");
+
+    release.markReleased(adminId, project.id, {
+      trigger: "scheduled",
+      result: "failed",
+      bugIds: [returned.id],
+      detail: "失败不把已退回的单改回去",
+    });
+    expect(services.getBug(adminId, returned.id).status).toBe("pending");
+    expect(services.getBug(adminId, passed.id).status).toBe("awaiting_confirm");
+  });
 });

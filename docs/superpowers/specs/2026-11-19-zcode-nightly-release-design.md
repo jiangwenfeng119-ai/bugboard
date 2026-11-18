@@ -1,7 +1,7 @@
 # ZCode 夜间发布 — Design
 
 - **日期**：2026-11-19
-- **状态**：待评审
+- **状态**：已确认
 - **背景**：问答 Agent 和修复 Agent 用 Cursor。发布交给 ZCode，用来复核 Cursor 已经 push 的待发布改动。现有 `release-runner` 只做 git 同步和部署命令，成功后把该项目全部待发布推进到待确认，中间不审查、不跑测试、不做地址健康检查。
 
 ## Goal
@@ -53,13 +53,13 @@ ZCode 是发布 Agent。Cursor 继续做问答和修复。交叉检查的含义�
 下面任何一条成立，整个项目今晚不动：待发布保持原样，`mark_released` 记一条 `result=failed`、`trigger=scheduled`，`detail` 写原因。不撤回，不部署。
 
 - `wake.config.json` 没有这个项目的目录，或目录不是 git 仓库
-- origin 和 `github_url` 对不上
+- origin 和 `github_url` 不是同一个仓库。`git@host:path` 和 `https://host/path` 只比较主机名和仓库路径，写法不同不算不一致
 - 当前分支不是 `default_branch`
-- 工作区不干净
+- `git status --porcelain` 有输出。被忽略的文件不算不干净
 - 和远端分叉（两边都有新提交）
 - `releaseFeedback.activeStatus` 是 `queued` 或 `running`
 
-只落后则 `git pull --ff-only`。只超前则 `git push`。已经对齐则继续。同步失败同样整项目停手。
+只落后则 `git pull --ff-only`。只超前则 `git push`。只超前不算工作区不干净。已经对齐则继续。同步失败同样整项目停手。
 
 ### 3. 逐张审查，再跑现有测试
 
@@ -143,7 +143,7 @@ ZCode 是发布 Agent。Cursor 继续做问答和修复。交叉检查的含义�
 实现时把下面这份放进 `src/lib/agent-prompts.ts` 的 `RELEASE_AGENT_PROMPT`。管理后台「给 Agent 的提示词」增加第三张卡片「发布 · 夜间复核」，供复制到 ZCode 定时任务。任务指令使用这份全文，不依赖当次会话里的背景。
 
 ```text
-你是 Bugboard 的发布 Agent。问答和修复由 Cursor 做。你复核已经 push、状态为待发布的改动，通过后才发布。能改仓库的唯一动作是 git revert 没过的提交。不重写修复，不调用 confirm_fix、reject_fix、start_fix、submit_fix、withdraw_fix、run_release。
+你是 Bugboard 的发布 Agent。问答和修复由 Cursor 做。你复核已经 push、状态为待发布的改动，通过后才发布。能改仓库的唯一动作是 git revert 没过的提交。不重写修复，不调用 confirm_fix，也不调用 run_release。也不调用 reject_fix、start_fix、submit_fix、withdraw_fix。
 
 MCP 用已连接的管理员级 Bugboard。id 只用工具返回值。本地目录读工作区 wake.config.json 的 projects，键是项目缩写或 slug。
 
@@ -151,7 +151,7 @@ MCP 用已连接的管理员级 Bugboard。id 只用工具返回值。本地目�
 
 一个项目接一个项目做。每做完一个，把结果写进当夜报告。全部做完再发邮件。你中途停住时，把已完成的结果和停住的原因发出去。
 
-仓库任何一条不满足就整项目停手：目录不存在或不是 git；origin 与 github_url 不一致；当前分支不是 default_branch；工作区不干净；与远端分叉；releaseFeedback.activeStatus 为 queued 或 running。只落后则 git pull --ff-only。只超前则 git push。停手时 mark_released，trigger=scheduled，result=failed，detail 写原因。不传已经不在待发布的 bugIds。不撤回，不部署。
+仓库任何一条不满足就整项目停手：目录不存在或不是 git；origin 与 github_url 不是同一个仓库（git@host:path 和 https://host/path 主机名与路径相同就算对齐）；当前分支不是 default_branch；git status --porcelain 有输出（被忽略的文件不算不干净）；与远端分叉；releaseFeedback.activeStatus 为 queued 或 running。只落后则 git pull --ff-only。只超前则 git push，只超前不算不干净。停手时 mark_released，trigger=scheduled，result=failed，detail 写原因。不传已经不在待发布的 bugIds。不撤回，不部署。
 
 对每张待发布 get_bug。用未上线变更里的 commit SHA 看 diff。说明对不上、改动面明显超出这张单、或 diff 里有密钥、token、私钥，这张没过。没有 SHA，或一个 SHA 同时属于通过和没过的单：不猜，整个项目按上一段停手。
 

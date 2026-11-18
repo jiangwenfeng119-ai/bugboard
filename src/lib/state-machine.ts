@@ -18,6 +18,7 @@ export type TransitionAction =
   | "accept_invalid"
   | "reopen_invalid"
   | "withdraw_fix"
+  | "release_return"
   | "release_fixes";
 
 export type TransitionSpec = {
@@ -134,6 +135,13 @@ export const TRANSITIONS: TransitionSpec[] = [
     who: "admin",
     noteRequired: true,
   },
+  {
+    from: ["ready_to_release"],
+    to: "pending",
+    action: "release_return",
+    who: "admin",
+    noteRequired: true,
+  },
 ];
 
 export function findTransition(action: TransitionAction, from: BugStatus) {
@@ -241,5 +249,6 @@ export const ACTION_LABEL: Record<TransitionAction, string> = {
   accept_invalid: "认可不属实",
   reopen_invalid: "撤回不属实",
   withdraw_fix: "撤回修复提交",
+  release_return: "发布退回",
   release_fixes: "发布后待确认",
 };

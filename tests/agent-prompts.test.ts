@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_AGENT_PROMPT,
   PROJECT_PLACEHOLDER,
+  RELEASE_AGENT_PROMPT,
   USER_AGENT_PROMPT,
   applyProjectName,
 } from "../src/lib/agent-prompts";
@@ -125,5 +126,24 @@ describe("agent prompts", () => {
     expect(USER_AGENT_PROMPT).toContain("不要对待发布确认");
     expect(USER_AGENT_PROMPT).toContain("ready_to_release");
     expect(USER_AGENT_PROMPT).toContain("run_release、mark_released");
+  });
+
+  it("tells the fixer how to redo a release return", () => {
+    expect(ADMIN_AGENT_PROMPT).toContain("release_return");
+    expect(ADMIN_AGENT_PROMPT).toContain("发布退回");
+    expect(ADMIN_AGENT_PROMPT).toContain("先读");
+    expect(ADMIN_AGENT_PROMPT).toContain("已经撤回的提交不是还在的修复");
+  });
+
+  it("keeps the nightly release prompt inside the product", () => {
+    expect(RELEASE_AGENT_PROMPT).toContain("不调用 confirm_fix");
+    expect(RELEASE_AGENT_PROMPT).toContain("不调用 run_release");
+    expect(RELEASE_AGENT_PROMPT).toContain("git revert");
+    expect(RELEASE_AGENT_PROMPT).toContain("marshal.jiang@zhaoxuntec.com");
+    expect(RELEASE_AGENT_PROMPT).toContain("result=failed");
+    expect(RELEASE_AGENT_PROMPT).toContain("今晚没有待发布");
+    expect(RELEASE_AGENT_PROMPT).toContain("git status --porcelain");
+    expect(RELEASE_AGENT_PROMPT).toContain("git@host:path");
+    expect(RELEASE_AGENT_PROMPT).toContain("release_return");
   });
 });

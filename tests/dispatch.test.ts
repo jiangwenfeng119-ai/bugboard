@@ -656,4 +656,43 @@ describe("agent wake", () => {
     expect(release).toMatchObject({ target: "release_runner", status: "queued" });
     expect(release?.detail).toContain("run");
   });
+
+  it("wakes on release_return and tells the fixer to read the note", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const behavior = await import("../src/lib/behavior");
+    const calls: string[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input.body);
+      return { status: 204, text: "" };
+    });
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+    });
+    const bug = services.createBug(identity, { projectId: project.id, title: "按钮没反应" });
+    services.transitionBug(identity, bug.id, "start_fix");
+    services.transitionBug(identity, bug.id, "submit_fix", "已改");
+    await dispatch.flushDispatches();
+    const before = calls.length;
+    services.transitionBug(identity, bug.id, "release_return", "测试没过，按说明重做");
+    await dispatch.flushDispatches();
+    expect(services.getBug(identity, bug.id).status).toBe("pending");
+    expect(calls).toHaveLength(before + 1);
+    const payload = JSON.parse(calls.at(-1) || "{}") as { reason: string; prompt: string };
+    expect(payload.reason).toBe("release_return");
+    expect(payload.prompt).toContain("发布退回");
+    expect(payload.prompt).toContain("先读");
+
+    const quiet = services.createBug(identity, { projectId: project.id, title: "不再叫" });
+    services.transitionBug(identity, quiet.id, "start_fix");
+    services.transitionBug(identity, quiet.id, "submit_fix", "已改");
+    await dispatch.flushDispatches();
+    const current = behavior.getBehaviorSettings(identity, project.id);
+    behavior.saveBehaviorSettings(identity, project.id, { ...current, wakeActions: [] });
+    const afterQuiet = calls.length;
+    services.transitionBug(identity, quiet.id, "release_return", "空列表不叫醒");
+    await dispatch.flushDispatches();
+    expect(calls).toHaveLength(afterQuiet);
+    expect(services.getBug(identity, quiet.id).status).toBe("pending");
+  });
 });

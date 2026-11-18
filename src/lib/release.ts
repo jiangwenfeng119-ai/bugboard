@@ -1,6 +1,6 @@
 import { readBehavior, readBehaviors } from "./behavior";
 import { getDb, nowIso } from "./db";
-import { pokeReleaseRunner, type DeployMode } from "./dispatch";
+import { deployModeOf, pokeReleaseRunner, type DeployMode } from "./dispatch";
 import { isProjectAdmin, requireAdmin } from "./permissions";
 import {
   assertProjectChangeAdmin,
@@ -103,7 +103,14 @@ export function listPendingRelease(identity: Identity, projectId: number) {
     unreleased: true,
     limit: 100,
   });
+  const deploy = getDb()
+    .prepare(
+      "SELECT deploy_mode, deploy_command FROM project_dispatch WHERE project_id = ?"
+    )
+    .get(projectId) as { deploy_mode?: string; deploy_command?: string } | undefined;
   return {
+    deployMode: deployModeOf(deploy?.deploy_mode),
+    deployCommand: deploy?.deploy_command || "",
     bugs,
     changes: changes.map((change) => ({
       id: change.id,

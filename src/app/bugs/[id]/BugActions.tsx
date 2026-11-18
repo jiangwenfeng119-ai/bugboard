@@ -29,6 +29,7 @@ const NOTE_ACTIONS = new Set<TransitionAction>([
   "dispute_invalid",
   "reopen_invalid",
   "withdraw_fix",
+  "release_return",
 ]);
 
 const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
@@ -45,6 +46,7 @@ const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
   provide_info: "写上补了什么。可以同时附上截图或记录。",
   reopen_invalid: "写清上次漏看或判错的是哪一处。",
   withdraw_fix: "写清为什么先收回这次修复说明，还有哪一点要再改。",
+  release_return: "写清为什么退回待处理。这句会叫醒修复，并要按这句重做。",
 };
 
 type ActiveAction = TransitionAction | "add_supplement";

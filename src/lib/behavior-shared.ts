@@ -3,6 +3,7 @@ import type { Priority } from "./types";
 export const WAKE_ACTIONS = [
   "provide_info",
   "reject_fix",
+  "release_return",
   "dispute_invalid",
   "reopen_invalid",
   "supplement",
@@ -15,6 +16,7 @@ export type WakeSource = "web" | "widget" | "capture" | "api";
 export const WAKE_ACTION_LABELS: Record<WakeAction, string> = {
   provide_info: "补充说明后仍是待处理",
   reject_fix: "打回修复，回到待处理",
+  release_return: "发布退回，回到待处理",
   dispute_invalid: "对不属实提出异议，回到待处理",
   reopen_invalid: "重新打开不属实，回到待处理",
   supplement: "待处理时补充说明",
@@ -42,6 +44,13 @@ export type BehaviorSettings = {
   askEnabled: boolean;
   askPerHour: number;
 };
+
+/** 已保存的叫醒列表里还有 reject_fix 时补上发布退回。空列表保持为空。 */
+export function storedWakeActionsWithReleaseReturn(raw: string) {
+  const items = raw.split(",").map((item) => item.trim()).filter(Boolean);
+  if (!items.includes("reject_fix") || items.includes("release_return")) return raw;
+  return `${items.join(",")},release_return`;
+}
 
 export function behaviorDefaults(): BehaviorSettings {
   return {
