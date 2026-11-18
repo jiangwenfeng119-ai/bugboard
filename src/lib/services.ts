@@ -894,7 +894,8 @@ export function listBugs(
 
 function listBugOrderSql(sort?: string | null, dir?: string | null) {
   if (!sort) {
-    return `CASE WHEN b.status = 'confirmed' THEN 1 ELSE 0 END ASC, b.updated_at DESC, b.id DESC`;
+    // Match STATUS_FILTER_GROUPS: in-flight first, terminal (confirmed / acknowledged / invalid) last.
+    return `CASE WHEN b.status IN ('confirmed', 'acknowledged', 'invalid') THEN 1 ELSE 0 END ASC, b.updated_at DESC, b.id DESC`;
   }
   const order = resolveBugSort(sort, dir);
   const sqlDir = order.dir === "asc" ? "ASC" : "DESC";

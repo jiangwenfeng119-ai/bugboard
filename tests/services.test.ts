@@ -1097,44 +1097,77 @@ describe("services integration", () => {
       "2026-11-02T00:00:00.000Z",
       middle.id
     );
+    const acknowledged = services.createBug(liId, {
+      projectId: project.id,
+      title: "已认可项",
+      priority: "p2",
+    });
+    const invalid = services.createBug(zhangId, {
+      projectId: project.id,
+      title: "不属实项",
+      priority: "p2",
+    });
+    const ready = services.createBug(liId, {
+      projectId: project.id,
+      title: "待发布项",
+      priority: "p2",
+    });
+    db.prepare("UPDATE bugs SET status = 'acknowledged', updated_at = ? WHERE id = ?").run(
+      "2026-11-05T12:00:00.000Z",
+      acknowledged.id
+    );
+    db.prepare("UPDATE bugs SET status = 'invalid', updated_at = ? WHERE id = ?").run(
+      "2026-11-05T11:00:00.000Z",
+      invalid.id
+    );
+    db.prepare("UPDATE bugs SET status = 'ready_to_release', updated_at = ? WHERE id = ?").run(
+      "2026-11-03T00:00:00.000Z",
+      ready.id
+    );
 
     const titles = (rows: { title: string }[]) => rows.map((b) => b.title);
 
     expect(titles(services.listBugs(adminId, project.id))).toEqual([
       "登录失败",
+      "待发布项",
       "界面错位",
+      "已认可项",
+      "不属实项",
       "文案错误",
     ]);
     expect(services.listBugs(adminId, project.id)[0].reporter_label).toBe("李四");
     expect(
       titles(services.listBugs(adminId, project.id, { reporter: `user:${li.id}` }))
-    ).toEqual(["登录失败"]);
+    ).toEqual(["登录失败", "待发布项", "已认可项"]);
     expect(
       services.listProjectReporters(adminId, project.id).map((row) => row.reporter_label)
     ).toEqual(["张三", "李四"]);
     expect(titles(services.listBugs(adminId, project.id, { sort: "nope" }))).toEqual([
+      "已认可项",
+      "不属实项",
       "登录失败",
+      "待发布项",
       "文案错误",
       "界面错位",
     ]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "updated", dir: "desc" }))
-    ).toEqual(["登录失败", "文案错误", "界面错位"]);
+    ).toEqual(["已认可项", "不属实项", "登录失败", "待发布项", "文案错误", "界面错位"]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "updated", dir: "asc" }))
-    ).toEqual(["界面错位", "文案错误", "登录失败"]);
+    ).toEqual(["界面错位", "文案错误", "待发布项", "登录失败", "不属实项", "已认可项"]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "priority", dir: "asc" }))
-    ).toEqual(["登录失败", "文案错误", "界面错位"]);
+    ).toEqual(["登录失败", "文案错误", "已认可项", "不属实项", "待发布项", "界面错位"]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "title", dir: "asc" }))
-    ).toEqual(["文案错误", "界面错位", "登录失败"]);
+    ).toEqual(["不属实项", "已认可项", "待发布项", "文案错误", "界面错位", "登录失败"]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "reporter", dir: "asc" }))
-    ).toEqual(["界面错位", "文案错误", "登录失败"]);
+    ).toEqual(["界面错位", "文案错误", "不属实项", "登录失败", "已认可项", "待发布项"]);
     expect(
       titles(services.listBugs(adminId, project.id, { sort: "status", dir: "asc" }))
-    ).toEqual(["界面错位", "登录失败", "文案错误"]);
+    ).toEqual(["界面错位", "登录失败", "待发布项", "文案错误", "已认可项", "不属实项"]);
   });
 
   it("aggregates each reporter by project and current outcome", async () => {
