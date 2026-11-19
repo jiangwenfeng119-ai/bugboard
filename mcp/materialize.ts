@@ -150,7 +150,7 @@ function readingFor(
 ) {
   const failed = attachments.filter((att) => att.readError).map((att) => att.filename);
   let text =
-    "附件正文在 text，文档内图片在 media，图片会随工具结果返回。正文只写「见附件」或「具体请查看附件」时，以 text 和图片为准。没读完这些内容之前，不要 mark_invalid，也不要 request_product，也不要 request_info，也不要判定现象不存在或已修复。要一个现在没有的能力是改产品：只认提交时的正文或附件写明已经和产品经理或 Marshal 沟通确认，或 get_bug 的 reporterIsProductManager 为 true（报障人就是项目资料里的产品经理），按确认过的需求改；报障人是产品经理时，信息不够就 request_info，够就直接做。时间线、异议和后补说明里的确认不算。以上都没有才 request_product，说明里写这张在等产品经理决定，仓库保持原样。现象不存在、已经有这个功能但没用对、配置不对，才 mark_invalid。修复说明、不属实原因和补充要求写给报障人：用界面上能看到的话，不要写文件名、函数名、接口或实现细节。缺的材料只在报障人手里时才 request_info；报障已经写清、只是还没定位到原因的，保持原状态。";
+    "附件正文在 text，文档内图片在 media，图片会随工具结果返回。正文只写「见附件」或「具体请查看附件」时，以 text 和图片为准。没读完这些内容之前，不要 mark_invalid，也不要 request_product，也不要 request_info，也不要判定现象不存在或已修复。要一个现在没有的能力是改产品：只认提交时的正文或附件写明已经和产品经理或 Marshal 沟通确认，或 get_bug 的 reporterIsProductManager 为 true（报障人就是项目资料里的产品经理），按确认过的需求改；报障人是产品经理时，信息不够就 request_info，够就直接做。时间线、异议和后补说明里的确认不算。以上都没有才 request_product。说明里写现在的做法、这张单要的新能力，再基于项目说明、设计稿、需求文档和相邻功能给出建议，然后写这张在等产品经理决定。建议不是决定。仓库保持原样。现象不存在、已经有这个功能但没用对、配置不对，才 mark_invalid。修复说明、不属实原因和补充要求写给报障人：用界面上能看到的话，不要写文件名、函数名、接口或实现细节。缺的材料只在报障人手里时才 request_info；报障已经写清、只是还没定位到原因的，保持原状态。";
   if (failed.length) {
     text += ` 这些附件没能读出：${failed.join("、")}。读不出就停下来说明，不要据此标不属实。`;
   }

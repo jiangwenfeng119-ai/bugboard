@@ -60,6 +60,11 @@ describe("agent prompts", () => {
   it("treats a new capability as out of scope and finishes the whole batch", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("改产品");
     expect(ADMIN_AGENT_PROMPT).toContain("这张在等产品经理决定做不做");
+    expect(ADMIN_AGENT_PROMPT).toContain("## 建议");
+    expect(ADMIN_AGENT_PROMPT).toContain("建议不代替产品经理的决定");
+    expect(ADMIN_AGENT_PROMPT).toContain("相邻功能");
+    expect(ADMIN_AGENT_PROMPT).toContain("资料里没有的不要编");
+    expect(ADMIN_AGENT_PROMPT).toContain("说明里没有建议就写明没有");
     expect(ADMIN_AGENT_PROMPT).toContain("之后补的说明，都不算");
     expect(ADMIN_AGENT_PROMPT).toContain("页面上点了「可以做」也算已确认");
     expect(ADMIN_AGENT_PROMPT).toContain("不要再 request_product，也不要 start_fix");
