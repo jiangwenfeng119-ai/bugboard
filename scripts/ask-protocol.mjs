@@ -195,20 +195,34 @@ function featureWindows(text) {
   return found.filter((slice) => !found.some((other) => other.length > slice.length && other.includes(slice)));
 }
 
+function quotedAskTerms(question) {
+  return [...String(question || "").matchAll(/[「“"]([^」”"]{2,16})[」”"]/g)].map((match) => match[1].trim());
+}
+
+export function asksExistence(question) {
+  const text = String(question || "");
+  if (looksLikeDefect(text)) return false;
+  return /有没有|是否有|有无|支不支持|能不能选/.test(text);
+}
+
 export function askSearchTerms(question) {
-  const head = String(question || "").split(ASK_CUT)[0];
+  const text = String(question || "");
+  const head = text.split(ASK_CUT)[0];
   const terms = [];
   const push = (term) => {
     const clean = String(term || "").replace(ASK_EDGE, "");
     if (clean.length < 2 || clean.length > 8 || terms.includes(clean)) return;
     terms.push(clean);
   };
+  for (const name of quotedAskTerms(text)) push(name);
   for (const name of placesIn(question)) push(name);
   for (const name of featureWindows(question)) push(name);
   for (const piece of head.split(ASK_SPLIT)) {
     for (const chunk of piece.match(/[\u4e00-\u9fff]{2,8}/g) || []) push(chunk);
   }
-  for (const word of String(question || "").match(/[A-Za-z][A-Za-z0-9_./-]{1,24}/g) || []) {
+  const afterAsk = text.match(/(?:有没有|是否有|有无)\s*[「“"]?([\u4e00-\u9fffA-Za-z0-9]{2,16})/);
+  if (afterAsk) push(afterAsk[1]);
+  for (const word of text.match(/[A-Za-z][A-Za-z0-9_./-]{1,24}/g) || []) {
     if (!terms.includes(word)) terms.push(word);
   }
   return terms.slice(0, 8);
@@ -232,6 +246,7 @@ export function chooseAskPath({ question, imageCount = 0 }) {
   if (Number(imageCount) > 0) return "deep";
   if (/对照代码|对应代码/.test(text)) return "deep";
   if (looksLikeDefect(text)) return "deep";
+  if (asksExistence(text)) return "deep";
   if (/应该[\s\S]{0,40}(却|但是|但)/.test(text)) return "deep";
   return "table";
 }
@@ -616,6 +631,7 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
     if (names.some((name) => !VAGUE_PLACE.test(name))) return true;
     return names.some((name) => name === "登录" || name === "登陆") && /登录后|登陆后|登陆页|登录页|无法进入/.test(sentence);
   };
+  const focusNames = quotedAskTerms(sentence).filter((name) => !VAGUE_PLACE.test(name) && !GENERIC_LABEL.test(name));
   const finish = (lines) => {
     const concrete = lines.filter(usefulLine);
     const quotes = [...concrete.join("").matchAll(/「([^」]{2,16})」/g)].map((match) => match[1]);
@@ -630,6 +646,21 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
         ? concrete.map((line) => line.replaceAll("「登录」", "「登陆页」").replaceAll("「登陆」", "「登陆页」"))
         : concrete;
     const asksForNew = /增加|新增|加一个|新功能|功能扩展|应做|应该有|希望能|希望增加|希望有|能否|可以吗/.test(question);
+    const existence = asksExistence(question);
+    const focusHit = focusNames.some(
+      (name) =>
+        spokenLines.some((line) => line.includes(`「${name}」`) || line.includes(name)) ||
+        concrete.some((line) => line.includes(`「${name}」`) || line.includes(name)),
+    );
+    if (existence && !looksLikeDefect(question)) {
+      if (focusHit || (spokenLines.length && focusNames.some((name) => quotes.includes(name)))) {
+        return ["现在可以这样做：", ...spokenLines, "判断：已经有了"].join("\n");
+      }
+      if (spokenLines.length || place) {
+        return [newFeatureAnswer(question, place || ""), "判断：建议报障"].join("\n");
+      }
+      return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
+    }
     if (whereAsked && !looksLikeDefect(question) && !asksForNew) {
       if (!spokenLines.length) return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
       return ["现在可以这样做：", ...spokenLines, "判断：已经有了"].join("\n");
@@ -684,6 +715,24 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
     );
     const exact = focused.filter((item) => sentence.includes(item.name) && !VAGUE_PLACE.test(item.name));
     const picked = exact.length ? exact : focused;
+    if (asksExistence(question) && focusNames.length) {
+      const hitFocus = named.filter((item) =>
+        focusNames.some((name) => item.name === name || item.quote === name || featureOverlaps(item.name, name)),
+      );
+      if (hitFocus.length) {
+        const lines = [];
+        const placeItem = named.find(
+          (item) => !hitFocus.includes(item) && sentence.includes(item.name) && SCREENISH.test(item.name),
+        );
+        if (placeItem) lines.push(phrase(placeItem));
+        for (const item of hitFocus) {
+          const line = phrase(item);
+          if (!lines.includes(line)) lines.push(line);
+          if (lines.length >= 2) break;
+        }
+        return finish(lines);
+      }
+    }
     const shown = [];
     const menu = picked.find((item) => item.kind === "menu");
     if (menu) shown.push(phrase(menu));

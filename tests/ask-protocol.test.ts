@@ -523,6 +523,33 @@ describe("ask protocol", () => {
     ).toContain("「汇总」页最下面");
   });
 
+  it("answers whether an option exists instead of asking the reporter to file first", () => {
+    const question = "日常收支中，商品项养护后处理费有没有「不挂成本」的选项？";
+    expect(askSearchTerms(question)).toContain("不挂成本");
+    expect(askSearchTerms(question)).toContain("日常收支");
+    expect(chooseAskPath({ question })).toBe("deep");
+    const found = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [{ path: "apps/web/src/pages/daily.tsx", line: 'label: "不挂成本"' }],
+      excerpts: "界面「日常收支」\n界面「不挂成本」",
+    });
+    expect(found.startsWith("现在可以这样做：")).toBe(true);
+    expect(found).toContain("「不挂成本」");
+    expect(found).toContain("判断：已经有了");
+    expect(found).not.toContain("这需要报障");
+    const missing = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [],
+      excerpts: "界面「日常收支」",
+    });
+    expect(missing).toContain("现在没有");
+    expect(missing).toContain("日常收支");
+    expect(missing).toContain("判断：建议报障");
+    expect(missing).not.toContain("做了什么、实际怎样");
+  });
+
   it("keeps menu questions on the table and sends defects to the mirror", () => {
     expect(chooseAskPath({ question: "考勤打卡在哪里" })).toBe("table");
     expect(chooseAskPath({ question: "按钮没反应" })).toBe("deep");
