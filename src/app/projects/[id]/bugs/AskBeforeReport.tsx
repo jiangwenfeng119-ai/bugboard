@@ -249,7 +249,13 @@ export function AskBeforeReport({
           disabled={sending || streaming}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            // IME 组合中（中文等输入法选词/确认）的 Enter 不能当成发送
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing &&
+              event.keyCode !== 229
+            ) {
               event.preventDefault();
               void ask(question, false);
             }
