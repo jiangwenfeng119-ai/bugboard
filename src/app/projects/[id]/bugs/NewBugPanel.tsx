@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useId, useState } from "react";
+import { ClipboardEvent, FormEvent, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AskBeforeReport } from "./AskBeforeReport";
@@ -67,11 +67,24 @@ export function NewBugPanel({
   }
 
   function addCapturedFile(file: File) {
-    setFiles((prev) => {
-      if (prev.length >= 20 || file.size > 50 * 1024 * 1024) return prev;
-      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
-      return [...prev, { id: `${Date.now()}-${file.name}`, file, previewUrl }];
-    });
+    setFiles((prev) => appendPending(prev, [file]).next);
+  }
+
+  function onSheetPaste(event: ClipboardEvent<HTMLFormElement>) {
+    if (event.defaultPrevented) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest(".bb-ask")) return;
+    const images = imageFilesFromClipboard(event.clipboardData);
+    if (!images.length) return;
+    event.preventDefault();
+    const { next, message } = appendPending(files, images);
+    if (message) setError(message);
+    if (next.length !== files.length) {
+      setFiles(next);
+      requestAnimationFrame(() => {
+        document.getElementById(`${titleId}-materials`)?.scrollIntoView({ block: "nearest" });
+      });
+    }
   }
 
   function applySpoken(text: string) {
@@ -153,11 +166,12 @@ export function NewBugPanel({
         aria-modal="true"
         aria-labelledby={titleId}
         onSubmit={onSubmit}
+        onPaste={onSheetPaste}
       >
         <div className="bb-sheet-head">
           <div>
             <h2 id={titleId}>新建报障</h2>
-            <p className="bb-muted">分两步：可以先问，也可以直接写下面。</p>
+            <p className="bb-muted">现象清楚就直接写。不确定有没有这个功能，可以先问。</p>
           </div>
           <button type="button" className="bb-btn bb-btn-ghost" onClick={closePanel}>
             关闭
@@ -183,14 +197,7 @@ export function NewBugPanel({
             }}
           />
 
-          <section className="bb-report-step" aria-labelledby={`${titleId}-step`}>
-            <div className="bb-ask-head">
-              <h3 id={`${titleId}-step`}>再写这张报障</h3>
-              <p>
-                现象清楚就直接填写，然后提交。也可以等上面问完：判断是建议报障或没有把握时，点「整理并填入报障」。标题、描述和优先级会写进下面，不会直接提交，改完再交。
-              </p>
-            </div>
-
+          <div className="bb-report-fields">
             <div className="bb-field">
               <label className="bb-label" htmlFor={`${titleId}-title`}>
                 标题
@@ -205,6 +212,37 @@ export function NewBugPanel({
                 autoFocus
                 required
               />
+            </div>
+
+            <div className="bb-field bb-materials" id={`${titleId}-materials`}>
+              <div className="bb-label">材料</div>
+              <AttachmentComposer
+                files={files}
+                onChange={setFiles}
+                compact
+                lead="在标题、描述或这里直接粘贴图片，也可以拖进来。"
+                hint="圈图和口述会写进这张单。走查会离开本页，先整理草稿再提交。单个不超过 50MB，最多 20 个。"
+                toolbar={(openFiles) => (
+                  <CaptureTools
+                    projectId={projectId}
+                    essentials
+                    onAddFiles={openFiles}
+                    draftPending={Boolean(
+                      title.trim() || !bugBodyUntouched(body) || files.length || quote.trim()
+                    )}
+                    onSnap={({ file, note, strokes: marks }) => {
+                      addCapturedFile(file);
+                      setStrokes(marks);
+                      applySpoken(note);
+                    }}
+                    onVoice={({ file, text }) => {
+                      addCapturedFile(file);
+                      applySpoken(text);
+                    }}
+                  />
+                )}
+              />
+              {materialNote ? <p className="bb-field-hint">附件建议：{materialNote}</p> : null}
             </div>
 
             <div className="bb-field">
@@ -245,38 +283,15 @@ export function NewBugPanel({
                         {p.toUpperCase()}
                       </span>
                       <strong>{name}</strong>
-                      <span className="bb-muted">{PRIORITY_HINT[p]}</span>
                     </label>
                   );
                 })}
               </div>
-            </div>
-
-            <CaptureTools
-              projectId={projectId}
-              essentials
-              draftPending={Boolean(
-                title.trim() || !bugBodyUntouched(body) || files.length || quote.trim()
-              )}
-              onSnap={({ file, note, strokes: marks }) => {
-                addCapturedFile(file);
-                setStrokes(marks);
-                applySpoken(note);
-              }}
-              onVoice={({ file, text }) => {
-                addCapturedFile(file);
-                applySpoken(text);
-              }}
-            />
-
-            <div className="bb-field bb-attach-field">
-              <div className="bb-label">附件</div>
-              <AttachmentComposer files={files} onChange={setFiles} compact />
-              {materialNote ? <p className="bb-field-hint">附件建议：{materialNote}</p> : null}
+              <p className="bb-field-hint bb-priority-note">{PRIORITY_HINT[priority]}</p>
             </div>
 
             {error ? <p className="bb-error">{error}</p> : null}
-          </section>
+          </div>
         </div>
 
         <div className="bb-sheet-foot">
@@ -303,4 +318,38 @@ export function NewBugPanel({
       {mounted && sheet ? createPortal(sheet, document.body) : null}
     </>
   );
+}
+
+function imageFilesFromClipboard(data: DataTransfer | null) {
+  if (!data) return [];
+  const found: File[] = [];
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) found.push(file);
+    }
+  }
+  if (found.length) return found;
+  return Array.from(data.files ?? []).filter((file) => file.type.startsWith("image/"));
+}
+
+function appendPending(prev: PendingFile[], incoming: File[]) {
+  const next = [...prev];
+  let message = "";
+  for (const file of incoming) {
+    if (file.size > 50 * 1024 * 1024) {
+      message = `「${file.name || "图片"}」超过 50MB`;
+      continue;
+    }
+    if (next.length >= 20) {
+      message = "附件不能超过 20 个";
+      break;
+    }
+    next.push({
+      id: `${Date.now()}-${next.length}-${file.name}`,
+      file,
+      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+    });
+  }
+  return { next, message };
 }

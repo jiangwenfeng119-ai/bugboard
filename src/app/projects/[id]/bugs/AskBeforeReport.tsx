@@ -206,7 +206,7 @@ export function AskBeforeReport({
     <section className="bb-ask" aria-labelledby={labelId}>
       <div className="bb-ask-head">
         <h3 id={labelId}>问问项目助理</h3>
-        <p>先确认这件事现在能不能做。能做就告诉你怎么做；做不到或坏了，再建议报障。只回答，不改代码，也不替你提交。</p>
+        <p>先确认现在能不能做。只回答，不改代码，也不替你提交。</p>
       </div>
 
       {turns.length > 0 ? (
@@ -248,7 +248,7 @@ export function AskBeforeReport({
           className="bb-textarea bb-ask-input"
           value={question}
           maxLength={2000}
-          rows={2}
+          rows={1}
           placeholder="例如：会员积分的入口在哪里？"
           disabled={sending || streaming}
           onChange={(event) => setQuestion(event.target.value)}
@@ -302,10 +302,10 @@ export function AskBeforeReport({
                 setHearing(Boolean(heard));
               }}
             >
-              {hearing ? "正在听…" : "说一句"}
+              {hearing ? "正在听…" : "口述问题"}
             </button>
           ) : null}
-          <p className="bb-field-hint">Enter 发送，Shift+Enter 换行。截图可以直接粘贴到这里，最多 4 张。</p>
+          <p className="bb-field-hint">Enter 发送，Shift+Enter 换行。这个问题里也可以贴截图，最多 4 张。</p>
         </div>
       </div>
       {hint ? <p className="bb-ask-hint">{hint}</p> : null}

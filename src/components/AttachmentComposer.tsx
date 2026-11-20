@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 
 export type PendingFile = {
   id: string;
@@ -13,6 +13,10 @@ type Props = {
   onChange: (files: PendingFile[]) => void;
   disabled?: boolean;
   compact?: boolean;
+  /** Replaces the built-in 选择文件 / 录音 row. Receives the opener for the hidden file input. */
+  toolbar?: (openFiles: () => void) => ReactNode;
+  lead?: string;
+  hint?: string;
 };
 
 function uid() {
@@ -24,6 +28,9 @@ export function AttachmentComposer({
   onChange,
   disabled,
   compact,
+  toolbar,
+  lead,
+  hint,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -58,19 +65,25 @@ export function AttachmentComposer({
 
   const onPaste = useCallback(
     (e: React.ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
       const pasted: File[] = [];
-      for (const item of Array.from(items)) {
-        if (item.type.startsWith("image/")) {
-          const f = item.getAsFile();
-          if (f) pasted.push(f);
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) pasted.push(file);
+          }
         }
       }
-      if (pasted.length) {
-        e.preventDefault();
-        addFiles(pasted);
+      if (!pasted.length && e.clipboardData?.files?.length) {
+        for (const file of Array.from(e.clipboardData.files)) {
+          if (file.type.startsWith("image/")) pasted.push(file);
+        }
       }
+      if (!pasted.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      addFiles(pasted);
     },
     [addFiles]
   );
@@ -118,10 +131,16 @@ export function AttachmentComposer({
     onChange(files.filter((f) => f.id !== id));
   }
 
+  const leadText =
+    lead ??
+    (compact ? "拖到这里，或粘贴图片" : "拖拽文件到此处，或粘贴图片，也可选择文件 / 录音");
+  const hintText =
+    hint ?? (toolbar ? "" : "单文件 ≤ 50MB，最多 20 个；支持图 / 视频 / 文档 / 音频");
+
   return (
-    <div onPaste={onPaste}>
+    <div onPaste={onPaste} data-paste-files="">
       <div
-        className={`bb-dropzone${compact ? " is-compact" : ""}`}
+        className={`bb-dropzone${compact ? " is-compact" : ""}${toolbar ? " has-toolbar" : ""}`}
         data-active={dragActive}
         onDragEnter={(e) => {
           e.preventDefault();
@@ -135,44 +154,41 @@ export function AttachmentComposer({
           if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
         }}
       >
-        <div className="bb-drop-row">
-          <p className="bb-drop-lead">
-            {compact
-              ? "拖到这里，或粘贴图片"
-              : "拖拽文件到此处，或粘贴图片，也可选择文件 / 录音"}
-          </p>
-          <div className="bb-drop-actions">
-          <button
-            type="button"
-            className="bb-btn bb-btn-secondary"
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-          >
-            选择文件
-          </button>
-          {!recording ? (
-            <button
-              type="button"
-              className="bb-btn bb-btn-secondary"
-              disabled={disabled}
-              onClick={startRecording}
-            >
-              录音
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="bb-btn bb-btn-danger"
-              onClick={stopRecording}
-            >
-              停止录音（{recSeconds}s）
-            </button>
-          )}
+        {toolbar ? (
+          <>
+            <p className="bb-drop-lead">{leadText}</p>
+            {toolbar(() => inputRef.current?.click())}
+          </>
+        ) : (
+          <div className="bb-drop-row">
+            <p className="bb-drop-lead">{leadText}</p>
+            <div className="bb-drop-actions">
+              <button
+                type="button"
+                className="bb-btn bb-btn-secondary"
+                disabled={disabled}
+                onClick={() => inputRef.current?.click()}
+              >
+                选择文件
+              </button>
+              {!recording ? (
+                <button
+                  type="button"
+                  className="bb-btn bb-btn-secondary"
+                  disabled={disabled}
+                  onClick={startRecording}
+                >
+                  录音
+                </button>
+              ) : (
+                <button type="button" className="bb-btn bb-btn-danger" onClick={stopRecording}>
+                  停止录音（{recSeconds}s）
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <p className="bb-drop-hint">
-          单文件 ≤ 50MB，最多 20 个；支持图 / 视频 / 文档 / 音频
-        </p>
+        )}
+        {hintText ? <p className="bb-drop-hint">{hintText}</p> : null}
         <input
           ref={inputRef}
           type="file"
@@ -186,43 +202,20 @@ export function AttachmentComposer({
       </div>
       {error ? <p className="bb-error">{error}</p> : null}
       {files.length > 0 ? (
-        <ul style={{ listStyle: "none", padding: 0, margin: "0.75rem 0 0" }}>
+        <ul className="bb-file-list">
           {files.map((f) => (
-            <li
-              key={f.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                padding: "0.4rem 0",
-                borderBottom: "1px solid var(--line)",
-              }}
-            >
+            <li key={f.id} className="bb-file-row">
               {f.previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={f.previewUrl}
-                  alt=""
-                  width={40}
-                  height={40}
-                  style={{ objectFit: "cover", borderRadius: 6 }}
-                />
+                <img src={f.previewUrl} alt="" width={40} height={40} />
               ) : (
-                <span className="bb-muted" style={{ width: 40, textAlign: "center" }}>
-                  文件
-                </span>
+                <span className="bb-file-kind">文件</span>
               )}
-              <span style={{ flex: 1 }}>
+              <span className="bb-file-name">
                 {f.file.name}{" "}
-                <span className="bb-muted">
-                  ({Math.round(f.file.size / 1024)} KB)
-                </span>
+                <span className="bb-muted">({Math.round(f.file.size / 1024)} KB)</span>
               </span>
-              <button
-                type="button"
-                className="bb-btn bb-btn-ghost"
-                onClick={() => removeFile(f.id)}
-              >
+              <button type="button" className="bb-btn bb-btn-ghost" onClick={() => removeFile(f.id)}>
                 移除
               </button>
             </li>

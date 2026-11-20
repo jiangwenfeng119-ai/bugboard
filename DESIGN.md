@@ -249,7 +249,7 @@ Restrained and operational: solid when it is the next step, outlined or ghost wh
 - Exactly one solid primary (first non-destructive); danger variants last
 
 ### Signature: Capture tools
-- New-bug sheet (`essentials`): default row is 选择图片 / 拍照 only; 共享画面 / 说一句 / 录一段走查 live under「更多取证」so media stays equal to text without flooding the sheet
+- New-bug sheet: one「材料」well directly under the title, before the description. Paste lands from the title, the description, or the well. 圈一张图 / 拍照 / 添加文件 / 共享画面 / 说一句 / 录一段走查 stay visible in that well; 走查 is the action that leaves the page. No second 取证 block and no 更多取证 disclosure.
 
 ### Signature: Status filter
 - Select uses optgroups「进行中」and「终态」matching the state machine
