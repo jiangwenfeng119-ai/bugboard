@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // 只在有已公布的安全公告时提示升级。
+    agentUpgrade: "security",
+  },
   output: "standalone",
   poweredByHeader: false,
   serverExternalPackages: ["better-sqlite3"],
