@@ -12,7 +12,7 @@ import type {
   LocalAgentKind,
   ProjectAgentHealth,
 } from "@/lib/dispatch";
-import { AGENT_MONITOR_POLL_MS } from "@/lib/dispatch";
+import { AGENT_MONITOR_POLL_MS } from "@/lib/agent-monitor";
 import { explainDispatchDetail } from "@/lib/dispatch-detail";
 import { formatDateTimeShort } from "@/lib/time";
 import { wakeButtonView } from "@/lib/wake-ui";

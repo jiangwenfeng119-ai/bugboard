@@ -10,7 +10,10 @@ import { getDb, nowIso } from "./db";
 import { glossaryPrompt } from "./glossary";
 import { canAccessProject, requireAdmin } from "./permissions";
 import type { AttachmentRow, BugRow, Identity, ProjectRow } from "./types";
+import { AGENT_MONITOR_POLL_MS } from "./agent-monitor";
 import { absoluteAttachmentPath } from "./uploads";
+
+export { AGENT_MONITOR_POLL_MS };
 
 export type DispatchReason =
   | "created"
@@ -95,9 +98,6 @@ export type DispatchRuntimeStatus = {
   cursorKeyConfigured: boolean;
   dispatchKeyConfigured: boolean;
 };
-
-/** 管理后台「分派给 Agent」状态监控的轮询间隔。30 秒能及时发现叫醒服务挂掉，又不会频繁打本机地址。 */
-export const AGENT_MONITOR_POLL_MS = 30_000;
 
 export type AgentHealthStatus = "ok" | "down" | "idle" | "missing_config";
 
