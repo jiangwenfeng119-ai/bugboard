@@ -1,17 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
+  AgentHealthStatus,
+  AgentMonitorSnapshot,
   DispatchOverview,
   DispatchRecent,
   DispatchRuntimeStatus,
   DispatchSettings,
   LocalAgentKind,
+  ProjectAgentHealth,
 } from "@/lib/dispatch";
+import { AGENT_MONITOR_POLL_MS } from "@/lib/dispatch";
 import { explainDispatchDetail } from "@/lib/dispatch-detail";
 import { formatDateTimeShort } from "@/lib/time";
 import { wakeButtonView } from "@/lib/wake-ui";
+
+const HEALTH_LABEL: Record<AgentHealthStatus, string> = {
+  ok: "可用",
+  down: "不可用",
+  idle: "未启用",
+  missing_config: "未配齐",
+};
+
+function healthClass(status: AgentHealthStatus) {
+  if (status === "ok") return "bb-dispatch-status is-on";
+  if (status === "down" || status === "missing_config") return "bb-dispatch-status is-down";
+  return "bb-dispatch-status";
+}
 
 const REASON_LABEL: Record<string, string> = {
   created: "新建",
@@ -113,19 +130,141 @@ function resultText(item: DispatchRecent) {
   return { head, href: "", extra: "" };
 }
 
-function repairLabel(item: DispatchOverview) {
-  const parts = [
-    item.repairLocalEnabled ? "本机 Agent" : "",
-    item.cursorEnabled ? "云端 Agent" : "",
-  ].filter(Boolean);
-  return parts.length ? parts.join("、") : "未启用";
-}
-
 function localDetail(item: DispatchOverview) {
   if (!item.webhookUrl) return "未配置";
   if (!item.agentsSaved) return "名单未保存在这里，由 wake 配置里的 agent 接手";
   const enabled = item.agents.filter((agent) => agent.enabled).map((agent) => agent.name);
   return enabled.length ? enabled.join("、") : "没有启用的 Agent";
+}
+
+function organizeStatusView(
+  item: DispatchOverview,
+  health: ProjectAgentHealth | undefined,
+  ready: boolean
+) {
+  if (!item.organizeEnabled) {
+    return { text: "未启用", className: healthClass("idle") };
+  }
+  if (!ready || !health) {
+    return { text: "本机 Agent · 检查中", className: "bb-dispatch-status" };
+  }
+  return {
+    text: `本机 Agent · ${HEALTH_LABEL[health.local]}`,
+    className: healthClass(health.local),
+  };
+}
+
+function repairStatusView(
+  item: DispatchOverview,
+  health: ProjectAgentHealth | undefined,
+  ready: boolean
+) {
+  if (!item.repairLocalEnabled && !item.cursorEnabled) {
+    return { text: "未启用", className: healthClass("idle") };
+  }
+  if (!ready || !health) {
+    const names = [
+      item.repairLocalEnabled ? "本机 Agent" : "",
+      item.cursorEnabled ? "云端 Agent" : "",
+    ].filter(Boolean);
+    return { text: `${names.join("、")} · 检查中`, className: "bb-dispatch-status" };
+  }
+  const parts: { text: string; status: AgentHealthStatus }[] = [];
+  if (item.repairLocalEnabled) {
+    parts.push({ text: `本机 Agent · ${HEALTH_LABEL[health.local]}`, status: health.local });
+  }
+  if (item.cursorEnabled) {
+    parts.push({ text: `云端 Agent · ${HEALTH_LABEL[health.cursor]}`, status: health.cursor });
+  }
+  const worst = parts.some((part) => part.status === "down" || part.status === "missing_config")
+    ? parts.find((part) => part.status === "down" || part.status === "missing_config")!.status
+    : "ok";
+  return { text: parts.map((part) => part.text).join("、"), className: healthClass(worst) };
+}
+
+function AgentStatusMonitor({
+  onHealth,
+}: {
+  onHealth: (monitor: AgentMonitorSnapshot | null) => void;
+}) {
+  const [monitor, setMonitor] = useState<AgentMonitorSnapshot | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const onHealthRef = useRef(onHealth);
+  onHealthRef.current = onHealth;
+
+  async function load() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/agent-monitor");
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        monitor?: AgentMonitorSnapshot;
+      };
+      if (!res.ok || !data.monitor) {
+        setError(data.error || "状态检查失败");
+        setMonitor(null);
+        onHealthRef.current(null);
+        return;
+      }
+      setError("");
+      setMonitor(data.monitor);
+      onHealthRef.current(data.monitor);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), AGENT_MONITOR_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="bb-agent-monitor">
+      <div className="bb-agent-monitor-head">
+        <div>
+          <h3 className="bb-agent-monitor-title">Agent 状态</h3>
+          <p className="bb-muted bb-agent-monitor-lead">
+            每 {Math.round(AGENT_MONITOR_POLL_MS / 1000)}{" "}
+            秒自动检查一次。本机看叫醒服务能不能连上；云端看密钥和项目资料里的代码仓是否齐。绿色是可用，红色是不可用或未配齐。
+          </p>
+        </div>
+        <button type="button" className="bb-btn bb-btn-secondary" onClick={() => void load()} disabled={busy}>
+          {busy ? "检查中…" : "立即检查"}
+        </button>
+      </div>
+      {error ? <p className="bb-error">{error}</p> : null}
+      {!monitor && !error ? <p className="bb-muted">正在检查各类 Agent 是否可用…</p> : null}
+      {monitor && monitor.endpoints.length === 0 ? (
+        <p className="bb-muted">还没有启用本机或云端 Agent。新建或编辑分派后，这里会显示可用性。</p>
+      ) : null}
+      {monitor && monitor.endpoints.length > 0 ? (
+        <ul className="bb-agent-monitor-list">
+          {monitor.endpoints.map((item) => (
+            <li key={item.key} className="bb-agent-monitor-item">
+              <span className={healthClass(item.status)}>
+                {item.label} · {HEALTH_LABEL[item.status]}
+              </span>
+              <span className="bb-agent-monitor-detail">
+                {item.url ? `${item.url} · ` : ""}
+                {item.detail}
+                {item.projects.length
+                  ? ` · ${item.projects.map((project) => project.name).join("、")}`
+                  : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {monitor ? (
+        <p className="bb-muted bb-agent-monitor-checked">
+          上次检查：{formatDateTimeShort(monitor.checkedAt)}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function DispatchAdmin({
@@ -162,7 +301,11 @@ export function DispatchAdmin({
     <DispatchList
       overviews={overviews}
       canCreate={available.length > 0}
-      createReason={projects.length === 0 ? "还没有项目。先建一个项目，再来新建分派。" : "每个项目已经有一套配置。要修改，用这一行的编辑。"}
+      createReason={
+        projects.length === 0
+          ? "还没有项目。先建一个项目，再来新建分派。"
+          : "每个项目已经有一套配置。要修改，用这一行的编辑。"
+      }
       onCreate={() => router.push("/admin?tab=wake&compose=new")}
     />
   );
@@ -183,6 +326,11 @@ function DispatchList({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [monitor, setMonitor] = useState<AgentMonitorSnapshot | null>(null);
+  const healthReady = Boolean(monitor);
+  const healthByProject = new Map(
+    (monitor?.projects || []).map((item) => [item.projectId, item] as const)
+  );
 
   async function testRow(item: DispatchOverview) {
     setBusyId(item.projectId);
@@ -231,11 +379,12 @@ function DispatchList({
 
   return (
     <section className="bb-card bb-section-card bb-dispatch">
+      <AgentStatusMonitor onHealth={setMonitor} />
       <div className="bb-dispatch-head">
         <div>
           <h2>分派给 Agent</h2>
           <p className="bb-muted bb-dispatch-lead">
-            每个项目一套。整理走查只发给本机 Agent。修理报障可以发给本机 Agent、Cursor 云端 Agent，或两个都发。绿色字是已经保存的开关。
+            每个项目一套。整理走查只发给本机 Agent。修理报障可以发给本机 Agent、Cursor 云端 Agent，或两个都发。上面和下面的绿色表示当前可用，红色表示已启用但连不上或还没配齐；灰色「未启用」只表示这个项目没打开对应开关。
           </p>
           <p className="bb-muted bb-dispatch-lead">
             「测试地址」只检查本机地址和签名能不能对上，不启动 Agent，也不测云端。结果在项目名下面：写成「本机地址已通」就是通了，写成「没送到」才是没通。会不会拉起 Agent，要等一次真实的整理走查或修理报障，结果写成「已送达」才算拉起。
@@ -273,6 +422,9 @@ function DispatchList({
               {overviews.map((item) => {
                 const latest = item.latest ? resultText(item.latest) : null;
                 const busy = busyId === item.projectId;
+                const projectHealth = healthByProject.get(item.projectId);
+                const organize = organizeStatusView(item, projectHealth, healthReady);
+                const repair = repairStatusView(item, projectHealth, healthReady);
                 return (
                   <tr key={item.projectId}>
                     <td>
@@ -299,22 +451,12 @@ function DispatchList({
                     </td>
                     <td>
                       <span className="bb-dispatch-k">整理走查</span>
-                      <span className={item.organizeEnabled ? "bb-dispatch-status is-on" : "bb-dispatch-status"}>
-                        {item.organizeEnabled ? "本机 Agent" : "未启用"}
-                      </span>
+                      <span className={organize.className}>{organize.text}</span>
                       {item.organizeEnabled ? <span className="bb-dispatch-sub">{localDetail(item)}</span> : null}
                     </td>
                     <td>
                       <span className="bb-dispatch-k">修理报障</span>
-                      <span
-                        className={
-                          item.repairLocalEnabled || item.cursorEnabled
-                            ? "bb-dispatch-status is-on"
-                            : "bb-dispatch-status"
-                        }
-                      >
-                        {repairLabel(item)}
-                      </span>
+                      <span className={repair.className}>{repair.text}</span>
                     </td>
                     <td>
                       <div className="bb-cell-actions">

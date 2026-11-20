@@ -96,6 +96,36 @@ export type DispatchRuntimeStatus = {
   dispatchKeyConfigured: boolean;
 };
 
+/** 管理后台「分派给 Agent」状态监控的轮询间隔。30 秒能及时发现叫醒服务挂掉，又不会频繁打本机地址。 */
+export const AGENT_MONITOR_POLL_MS = 30_000;
+
+export type AgentHealthStatus = "ok" | "down" | "idle" | "missing_config";
+
+export type AgentMonitorEndpoint = {
+  key: string;
+  kind: "local" | "cursor";
+  label: string;
+  status: AgentHealthStatus;
+  detail: string;
+  url: string;
+  projects: { id: number; name: string }[];
+};
+
+export type ProjectAgentHealth = {
+  projectId: number;
+  local: AgentHealthStatus;
+  cursor: AgentHealthStatus;
+};
+
+export type AgentMonitorSnapshot = {
+  pollIntervalMs: number;
+  checkedAt: string;
+  endpoints: AgentMonitorEndpoint[];
+  projects: ProjectAgentHealth[];
+  cursorKeyConfigured: boolean;
+  dispatchKeyConfigured: boolean;
+};
+
 type ConfigRow = {
   project_id: number;
   webhook_url: string;
@@ -1245,6 +1275,181 @@ export function sendDispatchTest(identity: Identity, projectId: number) {
   const id = Number(info.lastInsertRowid);
   enqueue(() => deliverOne(id, "webhook", config, project, null, "test"));
 }
+
+
+async function probeLocalWakeUrl(url: string, secret: string) {
+  const payload = {
+    event: "dispatch.test",
+    reason: "test",
+    sentAt: nowIso(),
+    project: { id: 0, name: "状态监控", code: "MONITOR" },
+  };
+  const body = JSON.stringify(payload);
+  const signature = signDispatchBody(secret, body);
+  try {
+    const res = await postJson(
+      url,
+      {
+        "Content-Type": "application/json",
+        "X-Bugboard-Event": payload.event,
+        "X-Bugboard-Signature": `sha256=${signature}`,
+      },
+      body
+    );
+    if (res.status >= 300 && res.status < 400) {
+      return { ok: false as const, detail: "本机地址返回了重定向" };
+    }
+    if (res.status < 200 || res.status >= 300) {
+      return { ok: false as const, detail: redact(httpFailureDetail(res.status, res.text)) };
+    }
+    return { ok: true as const, detail: "本机叫醒服务可连" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "连不上这个地址";
+    return { ok: false as const, detail: redact(message) };
+  }
+}
+
+export async function getAgentMonitor(identity: Identity): Promise<AgentMonitorSnapshot> {
+  if (!requireAdmin(identity)) throw new Error("需要管理员权限");
+  const runtime = cursorRuntime();
+  const rows = getDb()
+    .prepare(
+      `SELECT p.id AS project_id, p.name AS project_name, IFNULL(p.github_url, '') AS github_url,
+              d.webhook_url, d.webhook_secret, d.cursor_enabled,
+              IFNULL(d.organize_enabled, 1) AS organize_enabled,
+              IFNULL(d.repair_local_enabled, 1) AS repair_local_enabled
+       FROM project_dispatch d
+       JOIN projects p ON p.id = d.project_id
+       ORDER BY p.name, p.id`
+    )
+    .all() as {
+    project_id: number;
+    project_name: string;
+    github_url: string;
+    webhook_url: string;
+    webhook_secret: string;
+    cursor_enabled: number;
+    organize_enabled: number;
+    repair_local_enabled: number;
+  }[];
+
+  const visible = rows.filter((row) => canAccessProject(identity, row.project_id));
+  const localGroups = new Map<
+    string,
+    {
+      url: string;
+      secret: string;
+      projects: { id: number; name: string }[];
+    }
+  >();
+  const projects: ProjectAgentHealth[] = [];
+  let cursorProjects: { id: number; name: string; githubUrl: string }[] = [];
+
+  for (const row of visible) {
+    const localOn =
+      localJobEnabled(row.webhook_url, row.organize_enabled) ||
+      localJobEnabled(row.webhook_url, row.repair_local_enabled);
+    const cursorOn = row.cursor_enabled === 1;
+    let local: AgentHealthStatus = "idle";
+    let cursor: AgentHealthStatus = "idle";
+
+    if (localOn) {
+      if (!row.webhook_url) {
+        local = "missing_config";
+      } else {
+        const key = `${row.webhook_url}\n${row.webhook_secret}`;
+        const group = localGroups.get(key) || {
+          url: row.webhook_url,
+          secret: row.webhook_secret,
+          projects: [],
+        };
+        group.projects.push({ id: row.project_id, name: row.project_name });
+        localGroups.set(key, group);
+        local = "ok";
+      }
+    }
+
+    if (cursorOn) {
+      cursorProjects.push({
+        id: row.project_id,
+        name: row.project_name,
+        githubUrl: row.github_url,
+      });
+      if (!runtime.apiKey) cursor = "missing_config";
+      else if (!row.github_url.trim()) cursor = "missing_config";
+      else cursor = "ok";
+    }
+
+    projects.push({ projectId: row.project_id, local, cursor });
+  }
+
+  const localResults = await Promise.all(
+    [...localGroups.entries()].map(async ([key, group]) => {
+      const probed = await probeLocalWakeUrl(group.url, group.secret);
+      return { key, group, probed };
+    })
+  );
+
+  const localByProject = new Map<number, AgentHealthStatus>();
+  const endpoints: AgentMonitorEndpoint[] = localResults.map(({ key, group, probed }) => {
+    const status: AgentHealthStatus = probed.ok ? "ok" : "down";
+    for (const project of group.projects) localByProject.set(project.id, status);
+    return {
+      key: `local:${key}`,
+      kind: "local" as const,
+      label: "本机 Agent",
+      status,
+      detail: probed.detail,
+      url: group.url,
+      projects: group.projects,
+    };
+  });
+
+  for (const item of projects) {
+    if (item.local !== "idle" && item.local !== "missing_config") {
+      item.local = localByProject.get(item.projectId) || "down";
+    }
+  }
+
+  cursorProjects = cursorProjects.filter(
+    (item, index, list) => list.findIndex((row) => row.id === item.id) === index
+  );
+  if (cursorProjects.length) {
+    const missingKey = !runtime.apiKey;
+    const missingRepo = cursorProjects.filter((item) => !item.githubUrl.trim());
+    const ready = cursorProjects.filter((item) => item.githubUrl.trim());
+    let status: AgentHealthStatus = "ok";
+    let detail = "云端密钥已配置，已启用的项目资料里有代码仓";
+    if (missingKey) {
+      status = "missing_config";
+      detail = "还没设置云端密钥，已启用云端的项目都会跳过";
+    } else if (!ready.length) {
+      status = "missing_config";
+      detail = "已启用云端的项目资料里还没有代码仓";
+    } else if (missingRepo.length) {
+      detail = `部分项目还没代码仓：${missingRepo.map((item) => item.name).join("、")}`;
+    }
+    endpoints.push({
+      key: "cursor",
+      kind: "cursor",
+      label: "Cursor 云端 Agent",
+      status,
+      detail,
+      url: "",
+      projects: cursorProjects.map((item) => ({ id: item.id, name: item.name })),
+    });
+  }
+
+  return {
+    pollIntervalMs: AGENT_MONITOR_POLL_MS,
+    checkedAt: nowIso(),
+    endpoints,
+    projects,
+    cursorKeyConfigured: Boolean(runtime.apiKey),
+    dispatchKeyConfigured: Boolean(runtime.dispatchKey),
+  };
+}
+
 
 /** 待处理，或产品经理刚点过「可以做」、人还没提交修复说明。 */
 export function bugAwaitingAgent(bug: Pick<BugRow, "id" | "status">) {

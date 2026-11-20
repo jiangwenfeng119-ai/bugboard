@@ -556,6 +556,60 @@ describe("agent wake", () => {
     expect(viewed.drafts.length).toBeGreaterThan(0);
   });
 
+  it("probes local wake and reports cloud readiness for the status monitor", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const other = services.createProject(identity, { name: "库房", description: "" });
+    services.updateProject(identity, other.id, { github_url: "https://github.com/acme/store" });
+    process.env.CURSOR_API_KEY = "cursor-test-key";
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+      organizeEnabled: true,
+      repairLocalEnabled: true,
+      localAgents: [{ name: "本机 Cursor", kind: "cursor", enabled: true }],
+    });
+    dispatch.saveDispatchSettings(identity, other.id, {
+      webhookUrl: "",
+      cursorEnabled: true,
+      organizeEnabled: false,
+      repairLocalEnabled: false,
+    });
+
+    const calls: string[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input.url);
+      expect(JSON.parse(input.body).event).toBe("dispatch.test");
+      return { status: 200, text: JSON.stringify({ ok: true, spawned: false }) };
+    });
+
+    const ok = await dispatch.getAgentMonitor(identity);
+    expect(ok.pollIntervalMs).toBe(dispatch.AGENT_MONITOR_POLL_MS);
+    expect(ok.pollIntervalMs).toBe(30_000);
+    expect(calls).toEqual(["http://127.0.0.1:3099/wake"]);
+    expect(ok.endpoints.map((item) => item.kind).sort()).toEqual(["cursor", "local"]);
+    expect(ok.endpoints.find((item) => item.kind === "local")?.status).toBe("ok");
+    expect(ok.endpoints.find((item) => item.kind === "cursor")?.status).toBe("ok");
+    expect(ok.projects.find((item) => item.projectId === project.id)?.local).toBe("ok");
+    expect(ok.projects.find((item) => item.projectId === other.id)?.cursor).toBe("ok");
+    const { getDb } = await import("../src/lib/db");
+    const before = getDb()
+      .prepare("SELECT COUNT(*) AS n FROM agent_dispatches WHERE project_id = ?")
+      .get(project.id) as { n: number };
+    expect(before.n).toBe(0);
+
+    dispatch.setDispatchTransportForTests(async () => {
+      throw new Error("连不上这个地址");
+    });
+    const down = await dispatch.getAgentMonitor(identity);
+    expect(down.endpoints.find((item) => item.kind === "local")?.status).toBe("down");
+    expect(down.projects.find((item) => item.projectId === project.id)?.local).toBe("down");
+
+    delete process.env.CURSOR_API_KEY;
+    const missing = await dispatch.getAgentMonitor(identity);
+    expect(missing.endpoints.find((item) => item.kind === "cursor")?.status).toBe("missing_config");
+    expect(missing.projects.find((item) => item.projectId === other.id)?.cursor).toBe("missing_config");
+  });
+
   it("lists configured dispatch targets and clears one", async () => {
     const { services, dispatch, identity, project } = await setup();
     const other = services.createProject(identity, { name: "库房", description: "" });
