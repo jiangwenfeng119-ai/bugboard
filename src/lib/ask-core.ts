@@ -1,3 +1,5 @@
+import type { Priority } from "./types";
+
 export function askCallbackUrl(input: { configured?: string; requestOrigin: string }) {
   const configured = String(input.configured || "").trim().replace(/\/$/, "");
   const origin = String(input.requestOrigin || "").trim().replace(/\/$/, "");
@@ -151,6 +153,11 @@ export function buildAskPrompt(input: {
     "看不出页面、操作或结果时，判断：没有把握，请对方补这三项。不要编入口。",
     "功能地图或文档已经能回答时，不要再搜索仓库。",
     "还要查代码时，只读相关的几处，然后马上作答。不要把仓库从头读到尾。",
+    "判断是建议报障或没有把握时，在最后那行判断之前写上可直接填进报障的建议。判断是已经有了时不要写这些。",
+    "标题：一句话，写现象。",
+    "描述：下面接四段，顺序固定：## 环境、## 复现步骤、## 期望、## 实际。环境写页面或菜单。步骤用 1. 2. ，只用用户说过的动作，不知道的写成待补，不要编。期望和实际各一段。",
+    "优先级：只能是 P1、P2、P3 之一，括号里写一句理由。核心流程走不通、崩溃、错误结果或数据风险用 P1。能进入功能但结果不对用 P2。不挡使用的界面、文案，或现在没有的新能力用 P3。没有把握时写 P2，并说明信息不够。",
+    "附件：需要就写贴哪一屏、圈出什么。没有对应画面就写「不需要」和原因。不要编用户没提到的页面。",
     "最后单独一行，只能是这三句之一：",
     "判断：已经有了",
     "判断：建议报障",
@@ -207,6 +214,45 @@ export function documentExcerpt(files: { filename: string; text: string }[], max
   return parts.join("\n\n");
 }
 
+const DRAFT_STOP = /^(?:优先级|附件|判断)[:：]/;
+
+export type FilingAdvice = {
+  title: string;
+  description: string;
+  priority: Priority | "";
+  attachment: string;
+};
+
+export function parseFilingAdvice(answer: string): FilingAdvice {
+  const lines = String(answer || "").split(/\r?\n/);
+  let title = "";
+  let priority: Priority | "" = "";
+  let attachment = "";
+  let capturing = false;
+  const body: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!capturing && /^描述[:：]/.test(line)) {
+      capturing = true;
+      const rest = line.replace(/^描述[:：]\s*/, "");
+      if (rest) body.push(rest);
+      continue;
+    }
+    if (capturing && DRAFT_STOP.test(line)) capturing = false;
+    if (capturing) {
+      body.push(raw);
+      continue;
+    }
+    const titled = line.match(/^标题[:：]\s*(.+)$/);
+    if (titled) title = titled[1].trim();
+    const ranked = line.match(/^优先级[:：]\s*P([123])/i);
+    if (ranked) priority = `p${ranked[1]}` as Priority;
+    const attached = line.match(/^附件[:：]\s*(.+)$/);
+    if (attached) attachment = attached[1].trim();
+  }
+  return { title, description: body.join("\n").trim(), priority, attachment };
+}
+
 export function fillBugDraft(input: {
   question: string;
   answer: string;
@@ -214,14 +260,20 @@ export function fillBugDraft(input: {
   body: string;
   bodyUntouched: boolean;
 }) {
+  const advice = parseFilingAdvice(input.answer);
   const label = judgmentLabel(parseJudgment(input.answer));
   const prose = answerWithoutJudgment(input.answer);
-  const section = ["## 项目问答", label ? `判断：${label}` : "", prose, "", `问：${input.question.trim()}`]
-    .filter((line) => line !== "")
-    .join("\n");
-  const title = input.title.trim() ? input.title : questionTitle(input.question);
-  const body = input.bodyUntouched ? section : `${input.body.trim()}\n\n${section}`;
-  return { title, body };
+  const section = advice.description
+    ? advice.description
+    : ["## 项目问答", label ? `判断：${label}` : "", prose, "", `问：${input.question.trim()}`]
+        .filter((line) => line !== "")
+        .join("\n");
+  let body = input.bodyUntouched ? section : `${input.body.trim()}\n\n${section}`;
+  const shot = advice.attachment && !/^不需要/.test(advice.attachment) ? advice.attachment : "";
+  if (shot && !body.includes(shot)) body = `${body.trim()}\n\n材料：${shot}`;
+  const suggested = advice.title || questionTitle(input.question);
+  const title = input.title.trim() ? input.title : Array.from(suggested).slice(0, 200).join("");
+  return { title, body, priority: advice.priority, attachment: advice.attachment };
 }
 
 export function emptyAskView(): AskView {

@@ -33,6 +33,7 @@ export function NewBugPanel({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(BUG_BODY_TEMPLATE);
   const [priority, setPriority] = useState<Priority>("p2");
+  const [materialNote, setMaterialNote] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [quote, setQuote] = useState("");
   const [steps, setSteps] = useState<string[]>([]);
@@ -56,6 +57,7 @@ export function NewBugPanel({
     setTitle("");
     setBody(BUG_BODY_TEMPLATE);
     setPriority("p2");
+    setMaterialNote("");
     setQuote("");
     setSteps([]);
     setStrokes([]);
@@ -173,6 +175,8 @@ export function NewBugPanel({
             onFill={(next) => {
               setTitle(next.title);
               setBody(next.body);
+              if (next.priority) setPriority(next.priority);
+              setMaterialNote(next.attachment || "");
               requestAnimationFrame(() => {
                 document.getElementById(`${titleId}-title`)?.focus();
               });
@@ -183,7 +187,7 @@ export function NewBugPanel({
             <div className="bb-ask-head">
               <h3 id={`${titleId}-step`}>再写这张报障</h3>
               <p>
-                现象清楚就直接填写，然后提交。也可以等上面问完：判断是建议报障或没有把握时，点「整理并填入报障」。问题和回答会整理进标题和描述，不会直接提交，改完再交。
+                现象清楚就直接填写，然后提交。也可以等上面问完：判断是建议报障或没有把握时，点「整理并填入报障」。标题、描述和优先级会写进下面，不会直接提交，改完再交。
               </p>
             </div>
 
@@ -268,6 +272,7 @@ export function NewBugPanel({
             <div className="bb-field bb-attach-field">
               <div className="bb-label">附件</div>
               <AttachmentComposer files={files} onChange={setFiles} compact />
+              {materialNote ? <p className="bb-field-hint">附件建议：{materialNote}</p> : null}
             </div>
 
             {error ? <p className="bb-error">{error}</p> : null}

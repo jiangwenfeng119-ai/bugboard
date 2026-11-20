@@ -178,7 +178,7 @@ describe("ask protocol", () => {
       excerpts: headingLabels('label: "产品经理"'),
     });
     expect(manager).toContain("在产品经理做了什么");
-    expect(manager).not.toContain("经理确认");
+    expect(manager.split("\n标题：")[0]).not.toContain("经理确认");
     const cards = draftAskAnswer({
       question: "项目卡片修改",
       documents: "",
@@ -352,6 +352,11 @@ describe("ask protocol", () => {
     });
     expect(search.startsWith("这需要报障。请写清：在日志检索做了什么")).toBe(true);
     expect(search).not.toContain("在登录做了什么");
+    expect(search).toContain("标题：");
+    expect(search).toContain("## 环境\n日志检索");
+    expect(search).toContain("优先级：P1");
+    expect(search).toContain("附件：建议贴「日志检索」的结果画面");
+    expect(search.trimEnd().endsWith("判断：建议报障")).toBe(true);
     const button = draftAskAnswer({
       question: "建错的会议可以增加删除按钮",
       documents: "",
@@ -375,7 +380,7 @@ describe("ask protocol", () => {
       excerpts: "",
     });
     expect(admin).toContain("「管理后台」");
-    expect(admin).not.toContain("放到管理后台");
+    expect(admin.split("\n标题：")[0]).not.toContain("放到管理后台");
     const home = draftAskAnswer({
       question: "首页常用功能显示不全",
       documents: "",
@@ -403,7 +408,7 @@ describe("ask protocol", () => {
         documents: "",
         hits: [],
         excerpts: phraseLabels('needs_product: "待产品经理确认"'),
-      })
+      }).split("\n标题：")[0]
     ).not.toContain("经理确认");
     expect(
       draftAskAnswer({
@@ -493,7 +498,7 @@ describe("ask protocol", () => {
       excerpts: ["界面「填写信息」", "界面「估价清单」"].join("\n"),
     });
     expect(noise).toContain("估价清单");
-    expect(noise).not.toContain("填写信息");
+    expect(noise.split("\n标题：")[0]).not.toContain("填写信息");
     const stretched = draftAskAnswer({
       question: "估价建议AI不可用",
       documents: "",
@@ -537,6 +542,7 @@ describe("ask protocol", () => {
     expect(found).toContain("「不挂成本」");
     expect(found).toContain("判断：已经有了");
     expect(found).not.toContain("这需要报障");
+    expect(found).not.toContain("优先级：");
     expect(chooseAskPath({ question, tableAnswer: found })).toBe("table");
     const missing = draftAskAnswer({
       question,
@@ -548,6 +554,8 @@ describe("ask protocol", () => {
     expect(missing).toContain("日常收支");
     expect(missing).toContain("判断：建议报障");
     expect(missing).not.toContain("做了什么、实际怎样");
+    expect(missing).toContain("优先级：P3");
+    expect(missing).toContain("附件：");
     expect(chooseAskPath({ question, tableAnswer: missing })).toBe("table");
     const scan = "开单点击扫码匹配，有没有扫码取消的功能？";
     expect(askSearchTerms(scan)).toContain("扫码取消");

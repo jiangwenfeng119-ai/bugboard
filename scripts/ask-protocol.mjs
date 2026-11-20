@@ -324,6 +324,103 @@ export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted
   return lines.join("\n");
 }
 
+const BLOCKED_FLOW = /崩溃|闪退|白屏|无法登录|登不进|进不去|无法进入|数据丢失|丢数据|算错|不可用|无法显示|没有数据|不显示|打不开/;
+const VISUAL_ISSUE = /优化|出格|错位|混乱|很乱|文案|掺杂|混杂|显示不全|样式|颜色|对齐|体验|布局|字号|UI/;
+
+function placeFromAdvice(prose) {
+  const text = String(prose || "");
+  const told = text.match(/在([^，。\n「」]{2,16}?)做了什么/);
+  if (told && told[1] !== "哪个页面") return told[1].trim();
+  const hope = text.match(/在([^，。\n「」]{2,16}?)希望怎样/);
+  if (hope && hope[1] !== "哪个页面") return hope[1].trim();
+  const said = text.match(/你说的是「([^」]{2,16})」/);
+  if (said) return said[1].trim();
+  return "";
+}
+
+function filingPriority({ question, prose, judgment }) {
+  if (judgment === "没有把握") return "P2（信息还不够，先按功能异常，补全后可以改）";
+  if (/现在没有。这是新功能/.test(prose)) return "P3（现在没有的能力，不挡现有使用）";
+  const text = `${question}\n${prose}`;
+  if (BLOCKED_FLOW.test(text)) return "P1（现有功能走不通或结果不对）";
+  if (VISUAL_ISSUE.test(text) && !/无反应|没反应|报错|失败/.test(text)) return "P3（不挡使用，偏界面或文案）";
+  return "P2（功能能进，但结果和现在的做法不一致）";
+}
+
+function filingAttachment({ place, priority, isNew, unsure }) {
+  if (unsure) return "建议补一张出问题那一屏的截图，圈出实际结果。还不知道是哪一页，页面名等你补，不要编。";
+  if (isNew) {
+    return place
+      ? `建议贴「${place}」现在的样子，标出希望加在哪里。没有这张图也可以先提交。`
+      : "不需要。现在没有对应画面，写清希望怎样即可。";
+  }
+  if (!place) return "建议补一张出问题那一屏的截图，圈出报错、空白或和期望不符的地方。";
+  if (priority.startsWith("P3")) return `建议贴「${place}」当前画面，把不对的地方圈出来。`;
+  if (priority.startsWith("P1")) return `建议贴「${place}」的结果画面，圈出报错、空白或错误结果。`;
+  return `建议贴「${place}」里和期望不符的那一屏，把差异圈出来。`;
+}
+
+function filingTitle(question) {
+  const line = String(question || "").trim().split(/[\n。！？!?]/)[0]?.trim() || "待补充现象";
+  return Array.from(line).slice(0, 40).join("");
+}
+
+function filingDescription({ question, place, isNew, unsure }) {
+  const fact = String(question || "").trim().replace(/\s+/g, " ");
+  const env = place || "（提交前补上页面或菜单）";
+  const step = place ? `1. 打开${place}` : "1. （提交前补上：在哪个页面、点了什么）";
+  if (unsure) {
+    return ["## 环境", env, "", "## 复现步骤", step, "", "## 期望", "（提交前补上应该看到什么）", "", "## 实际", fact || "（提交前补上实际看到什么）"].join("\n");
+  }
+  if (isNew) {
+    return ["## 环境", env, "", "## 复现步骤", step, "", "## 期望", fact, "", "## 实际", "现在没有这个能力。"].join("\n");
+  }
+  return [
+    "## 环境",
+    env,
+    "",
+    "## 复现步骤",
+    step,
+    "2. 按你遇到问题时的操作再做一遍",
+    "",
+    "## 期望",
+    "（提交前补上应该看到什么）",
+    "",
+    "## 实际",
+    fact,
+  ].join("\n");
+}
+
+export function withFilingAdvice(question, answer) {
+  const text = String(answer || "").trim();
+  if (!text || /^优先级[:：]/m.test(text)) return text;
+  const lines = text.split(/\r?\n/);
+  let judgment = "";
+  let at = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const match = lines[i].trim().match(/^判断[:：]\s*(已经有了|建议报障|没有把握)\s*$/);
+    if (!match) continue;
+    judgment = match[1];
+    at = i;
+    break;
+  }
+  if (judgment !== "建议报障" && judgment !== "没有把握") return text;
+  const prose = lines.slice(0, at).join("\n").trim();
+  const place = placeFromAdvice(prose);
+  const isNew = /现在没有。这是新功能/.test(prose);
+  const unsure = judgment === "没有把握";
+  const priority = filingPriority({ question, prose, judgment });
+  const advice = [
+    `标题：${filingTitle(question)}`,
+    "描述：",
+    filingDescription({ question, place, isNew, unsure }),
+    `优先级：${priority}`,
+    `附件：${filingAttachment({ place, priority, isNew, unsure })}`,
+  ].join("\n");
+  const tail = lines.slice(at).join("\n").trim();
+  return [prose, advice, tail].filter(Boolean).join("\n\n");
+}
+
 export function fallbackAskAnswer(tableAnswer) {
   const note = "代码对照没有在时限内完成。";
   const base = String(tableAnswer || "").trim();
@@ -552,7 +649,7 @@ function lineAnswersQuestion(line, terms) {
   return aboutManual && /手册|帮助|manual/i.test(line);
 }
 
-export function draftAskAnswer({ question, documents, hits, excerpts, featureMap }) {
+function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap }) {
   const terms = askSearchTerms(question);
   const focusNames = existenceFocusNames(question);
   const asked = String(question || "").trim().slice(0, 80) || "这个问题";
@@ -828,6 +925,10 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
     return "这需要报障。请写清：哪个页面、做了什么、你希望怎样。\n判断：建议报障";
   }
   return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
+}
+
+export function draftAskAnswer(input) {
+  return withFilingAdvice(input?.question, draftAskAnswerRaw(input));
 }
 
 export function buildAskArgv({ cwd, prompt, sessionId }) {

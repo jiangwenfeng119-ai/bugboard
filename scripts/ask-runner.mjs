@@ -15,6 +15,7 @@ import {
   documentsFromPrompt,
   draftAskAnswer,
   fallbackAskAnswer,
+  withFilingAdvice,
   featureMapFromPrompt,
   isFeatureMapPrompt,
   parseAskStreamLine,
@@ -560,7 +561,7 @@ export async function executeAsk(config, payload, deps = {}) {
           git
         );
       }
-      const text = fallbackAskAnswer(tableAnswer);
+      const text = withFilingAdvice(question, fallbackAskAnswer(tableAnswer));
       await send({ kind: "delta", text, mirrorSha: synced.sha });
       await send({ kind: "done", text, sessionId: "", mirrorSha: synced.sha });
       return { sha: synced.sha, fallback: true };
@@ -581,6 +582,7 @@ export async function executeAsk(config, payload, deps = {}) {
       return { reverted: true };
     }
     if (!answer.trim()) throw new Error(finished.stderr.trim().slice(0, 300) || "没有得到回答");
+    answer = withFilingAdvice(question, answer);
     await send({ kind: "done", text: answer, sessionId, mirrorSha: synced.sha });
     return { sha: synced.sha, sessionId };
   } catch (error) {

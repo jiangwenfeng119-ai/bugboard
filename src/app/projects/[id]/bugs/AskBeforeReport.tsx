@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { bugBodyUntouched } from "@/lib/bug-body";
 import { answerPieces, fillBugDraft, judgmentLabel, type AskJudgment, type AskStatus } from "@/lib/ask-core";
+import type { Priority } from "@/lib/types";
 import { filesFromClipboard, pickAskPictures } from "@/lib/ask-paste";
 import { speechSupported, startLiveSpeech } from "@/components/live-speech";
 import type { PendingFile } from "@/components/AttachmentComposer";
@@ -54,7 +55,7 @@ export function AskBeforeReport({
   repoUrl?: string;
   branch?: string;
   seed?: string;
-  onFill?: (next: { title: string; body: string }) => void;
+  onFill?: (next: { title: string; body: string; priority?: Priority; attachment?: string }) => void;
   files?: PendingFile[];
   imageIds?: number[];
 }) {
@@ -186,16 +187,19 @@ export function AskBeforeReport({
 
   function fill(run: AskRun) {
     if (!onFill) return;
-    onFill(
-      fillBugDraft({
-        question: run.question,
-        answer: run.answer,
-        title,
-        body,
-        bodyUntouched: bugBodyUntouched(body),
-      })
-    );
-    setHint("已整理进下方标题和描述，提交前请改一改");
+    const next = fillBugDraft({
+      question: run.question,
+      answer: run.answer,
+      title,
+      body,
+      bodyUntouched: bugBodyUntouched(body),
+    });
+    onFill(next);
+    const rank = next.priority ? next.priority.toUpperCase() : "";
+    const head = rank
+      ? `已写入标题、描述，优先级选了 ${rank}。提交前请改一改。`
+      : "已整理进下方标题和描述，提交前请改一改。";
+    setHint(next.attachment ? `${head}附件：${next.attachment}` : head);
   }
 
   return (
@@ -369,7 +373,7 @@ function AskTurn({
         <p className="bb-ask-status">答完后，建议报障或没有把握时，这里会出现「整理并填入报障」。</p>
       ) : null}
       {turn.status === "done" && onFill && turn.judgment !== "exists" ? (
-        <p className="bb-ask-status">写进下方标题和描述，不直接提交。</p>
+        <p className="bb-ask-status">写进下方标题、描述和优先级，不直接提交。</p>
       ) : null}
     </article>
   );

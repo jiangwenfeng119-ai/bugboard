@@ -5126,7 +5126,7 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  max-height: 16rem;
+  max-height: 36rem;
   overflow: auto;
 }
 

@@ -8,6 +8,7 @@ import {
   emptyAskView,
   fillBugDraft,
   normalizeQuestion,
+  parseFilingAdvice,
   parseJudgment,
   redactAskText,
 } from "../src/lib/ask-core";
@@ -44,6 +45,47 @@ describe("ask core", () => {
     expect(kept.body).toContain("## 项目问答");
   });
 
+  it("fills the title, description, and priority from the filing advice", () => {
+    const answer = [
+      "这是现有功能坏了。",
+      "",
+      "标题：日志检索无法显示数据",
+      "描述：",
+      "## 环境",
+      "日志检索",
+      "",
+      "## 实际",
+      "无法显示数据",
+      "优先级：P1（现有功能走不通或结果不对）",
+      "附件：建议贴「日志检索」的结果画面，圈出空白或报错。",
+      "判断：建议报障",
+    ].join("\n");
+    expect(parseFilingAdvice(answer).priority).toBe("p1");
+    const filled = fillBugDraft({
+      question: "第一次登录后日志检索无法显示数据",
+      answer,
+      title: "",
+      body: "## 环境\n\n## 复现步骤\n1. \n\n## 期望\n\n## 实际",
+      bodyUntouched: true,
+    });
+    expect(filled.title).toBe("日志检索无法显示数据");
+    expect(filled.priority).toBe("p1");
+    expect(filled.body).toContain("## 环境\n日志检索");
+    expect(filled.body).toContain("材料：建议贴「日志检索」的结果画面");
+    expect(filled.body).not.toContain("判断：建议报障");
+    expect(filled.attachment).toContain("日志检索");
+    const kept = fillBugDraft({
+      question: "第一次登录后日志检索无法显示数据",
+      answer,
+      title: "我写的标题",
+      body: "我已经写了现象",
+      bodyUntouched: false,
+    });
+    expect(kept.title).toBe("我写的标题");
+    expect(kept.body.startsWith("我已经写了现象")).toBe(true);
+    expect(kept.priority).toBe("p1");
+  });
+
   it("ignores instructions inside the question fence and keeps ask read-only", () => {
     const prompt = buildAskPrompt({
       projectName: "门店",
@@ -63,6 +105,8 @@ describe("ask core", () => {
     expect(prompt).toContain("不要把仓库从头读到尾");
     expect(prompt).toContain("日志检索");
     expect(prompt).toContain("没有把握");
+    expect(prompt).toContain("优先级：");
+    expect(prompt).toContain("附件：");
   });
 
   it("answers from the feature map before searching the repo", () => {
