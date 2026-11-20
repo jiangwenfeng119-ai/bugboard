@@ -740,6 +740,7 @@ export const BUG_SORT_KEYS = [
   "priority",
   "title",
   "status",
+  "product_review",
   "reporter",
   "handler",
   "created",
@@ -747,6 +748,14 @@ export const BUG_SORT_KEYS = [
 ] as const;
 export type BugSortKey = (typeof BUG_SORT_KEYS)[number];
 export type SortDir = "asc" | "desc";
+
+/** List-column labels for the latest product-manager decision on a bug. */
+export const PRODUCT_REVIEW_LABEL = {
+  pending: "待确认",
+  accepted: "可以做",
+  declined: "不做",
+} as const;
+export type ProductReviewKey = keyof typeof PRODUCT_REVIEW_LABEL;
 
 export type BugFilters = {
   status?: BugStatus;
@@ -760,6 +769,8 @@ export type BugFilters = {
 export type BugListItem = BugRow & {
   reporter_label: string;
   handler_label: string | null;
+  /** Latest product confirmation: 待确认 / 可以做 / 不做; null when never requested. */
+  product_review_label: string | null;
 };
 
 const REPORTER_LABEL_SQL = `CASE
@@ -777,6 +788,24 @@ const HANDLER_LABEL_SQL = `CASE
   ELSE COALESCE('Key:' || hk.name, '已删除 Key #' || h.actor_id)
 END`;
 
+/** Latest leave from needs_product → fixing (可以做) or invalid (不做); pending while still waiting. */
+const PRODUCT_REVIEW_LABEL_SQL = `CASE
+  WHEN b.status = 'needs_product' THEN '${PRODUCT_REVIEW_LABEL.pending}'
+  ELSE (
+    SELECT CASE e.to_status
+      WHEN 'fixing' THEN '${PRODUCT_REVIEW_LABEL.accepted}'
+      WHEN 'invalid' THEN '${PRODUCT_REVIEW_LABEL.declined}'
+      ELSE NULL
+    END
+    FROM bug_status_events e
+    WHERE e.bug_id = b.id
+      AND e.from_status = 'needs_product'
+      AND e.kind = 'transition'
+    ORDER BY e.id DESC
+    LIMIT 1
+  )
+END`;
+
 const BUG_ORDER_SQL: Record<BugSortKey, string> = {
   id: "b.public_id",
   priority: "b.priority",
@@ -792,6 +821,11 @@ const BUG_ORDER_SQL: Record<BugSortKey, string> = {
     WHEN 'acknowledged' THEN 7
     WHEN 'invalid' THEN 8
     ELSE 8 END`,
+  product_review: `CASE (${PRODUCT_REVIEW_LABEL_SQL})
+    WHEN '${PRODUCT_REVIEW_LABEL.pending}' THEN 0
+    WHEN '${PRODUCT_REVIEW_LABEL.accepted}' THEN 1
+    WHEN '${PRODUCT_REVIEW_LABEL.declined}' THEN 2
+    ELSE 3 END`,
   reporter: `(${REPORTER_LABEL_SQL}) COLLATE NOCASE`,
   handler: `COALESCE(${HANDLER_LABEL_SQL}, '') COLLATE NOCASE`,
   created: "b.created_at",
@@ -873,7 +907,8 @@ export function listBugs(
   const orderSql = listBugOrderSql(filters.sort, filters.dir);
   return getDb()
     .prepare(
-      `SELECT b.*, ${REPORTER_LABEL_SQL} AS reporter_label, ${HANDLER_LABEL_SQL} AS handler_label
+      `SELECT b.*, ${REPORTER_LABEL_SQL} AS reporter_label, ${HANDLER_LABEL_SQL} AS handler_label,
+              ${PRODUCT_REVIEW_LABEL_SQL} AS product_review_label
        FROM bugs b
        LEFT JOIN users u ON b.reporter_type = 'user' AND u.id = b.reporter_id
        LEFT JOIN api_keys k ON b.reporter_type = 'api_key' AND k.id = b.reporter_id

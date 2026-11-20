@@ -972,9 +972,15 @@ legend.bb-label + * {
 .bb-col-id { width: 11rem; }
 .bb-col-pri { width: 5.25rem; }
 .bb-col-status { width: 7.25rem; }
+.bb-col-product { width: 5.5rem; }
 .bb-col-reporter { width: 8.5rem; }
 .bb-col-time { width: 8.4rem; }
 .bb-col-remove { width: 2.6rem; }
+
+.bb-product-review {
+  color: var(--ink-2, #4a5568);
+  font-size: 0.75rem;
+}
 
 .bb-bug-table th {
   padding: 0;
@@ -3574,11 +3580,11 @@ a.bb-bug-id:hover {
 .bb-bug-table {
   display: block;
   width: 100%;
-  min-width: 74rem;
+  min-width: 80rem;
 }
 
 .bb-bug-table.has-remove {
-  min-width: 76.5rem;
+  min-width: 82.5rem;
 }
 
 .bb-bug-table colgroup {
@@ -3598,6 +3604,7 @@ a.bb-bug-id:hover {
     5.25rem
     minmax(12rem, 1fr)
     7.4rem
+    5.5rem
     minmax(6.5rem, 9.5rem)
     minmax(6.5rem, 9.5rem)
     8.4rem
@@ -3614,6 +3621,7 @@ a.bb-bug-id:hover {
     5.25rem
     minmax(12rem, 1fr)
     7.4rem
+    5.5rem
     minmax(6.5rem, 9.5rem)
     minmax(6.5rem, 9.5rem)
     8.4rem
@@ -3679,7 +3687,9 @@ a.bb-bug-id:hover {
   .bb-bug-table th:nth-child(8),
   .bb-bug-table td:nth-child(8),
   .bb-bug-table th:nth-child(9),
-  .bb-bug-table td:nth-child(9) {
+  .bb-bug-table td:nth-child(9),
+  .bb-bug-table th:nth-child(10),
+  .bb-bug-table td:nth-child(10) {
     display: none;
   }
 }

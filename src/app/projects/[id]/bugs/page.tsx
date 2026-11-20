@@ -22,6 +22,7 @@ const COLUMNS: { key: BugSortKey | null; label: string }[] = [
   { key: "priority", label: "优先级" },
   { key: "title", label: "标题" },
   { key: "status", label: "状态" },
+  { key: "product_review", label: "产品确认" },
   { key: "reporter", label: "提交人" },
   { key: "handler", label: "处理人" },
   { key: "created", label: "创建" },
@@ -170,6 +171,7 @@ export default async function BugsPage({
               <col className="bb-col-pri" />
               <col />
               <col className="bb-col-status" />
+              <col className="bb-col-product" />
               <col className="bb-col-reporter" />
               <col className="bb-col-reporter" />
               <col className="bb-col-time" />
@@ -250,6 +252,13 @@ export default async function BugsPage({
                     </td>
                     <td>
                       <StatusBadge status={b.status} />
+                    </td>
+                    <td className="bb-nowrap">
+                      {b.product_review_label ? (
+                        <span className="bb-product-review">{b.product_review_label}</span>
+                      ) : (
+                        <span className="bb-muted">—</span>
+                      )}
                     </td>
                     <td>
                       <HoverTip text={b.reporter_label}>{b.reporter_label}</HoverTip>

@@ -1523,6 +1523,61 @@ describe("services integration", () => {
     ).toBe("admin-handler");
   });
 
+  it("lists product confirmation from the latest product-manager decision", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin-product-col", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const qa = await services.createUser(adminId, {
+      username: "qa-product-col",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, { name: "产品列", code: "PRC" });
+    services.addMember(adminId, project.id, qa.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
+    const qaId = {
+      kind: "user" as const,
+      userId: qa.id,
+      role: "user" as const,
+      username: qa.username,
+    };
+
+    const plain = services.createBug(qaId, { projectId: project.id, title: "普通故障" });
+    const waiting = services.createBug(qaId, { projectId: project.id, title: "等产品" });
+    const accepted = services.createBug(qaId, { projectId: project.id, title: "可以做的" });
+    const declined = services.createBug(qaId, { projectId: project.id, title: "不做的" });
+
+    services.transitionBug(adminId, waiting.id, "request_product", "现在没有这个能力");
+    services.transitionBug(adminId, accepted.id, "request_product", "现在没有这个能力");
+    services.transitionBug(adminId, accepted.id, "accept_product");
+    services.transitionBug(adminId, declined.id, "request_product", "现在没有这个能力");
+    services.transitionBug(adminId, declined.id, "decline_product", "这次不做");
+
+    const byId = new Map(
+      services.listBugs(adminId, project.id).map((row) => [row.id, row.product_review_label])
+    );
+    expect(byId.get(plain.id)).toBeNull();
+    expect(byId.get(waiting.id)).toBe("待确认");
+    expect(byId.get(accepted.id)).toBe("可以做");
+    expect(byId.get(declined.id)).toBe("不做");
+
+    const sorted = services.listBugs(adminId, project.id, {
+      sort: "product_review",
+      dir: "asc",
+    });
+    expect(sorted.map((row) => row.product_review_label)).toEqual([
+      "待确认",
+      "可以做",
+      "不做",
+      null,
+    ]);
+  });
+
   it("counts pending work for admins and own confirmations for reporters", async () => {
     const services = await import("../src/lib/services");
     const admin = await services.setupAdmin("admin-counts", "secret1");
