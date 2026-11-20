@@ -150,5 +150,12 @@ describe("agent prompts", () => {
     expect(RELEASE_AGENT_PROMPT).toContain("git status --porcelain");
     expect(RELEASE_AGENT_PROMPT).toContain("git@host:path");
     expect(RELEASE_AGENT_PROMPT).toContain("release_return");
+    expect(RELEASE_AGENT_PROMPT).toContain("请看是否介入");
+    expect(RELEASE_AGENT_PROMPT).toContain("建议介入");
+    expect(RELEASE_AGENT_PROMPT).toContain("不必介入");
+    expect(RELEASE_AGENT_PROMPT).toContain("不连坐");
+    expect(RELEASE_AGENT_PROMPT).toContain("不要猜测它本来是哪个提交");
+    expect(RELEASE_AGENT_PROMPT).toContain("release-worktrees");
+    expect(RELEASE_AGENT_PROMPT).toContain("已发布");
   });
 });

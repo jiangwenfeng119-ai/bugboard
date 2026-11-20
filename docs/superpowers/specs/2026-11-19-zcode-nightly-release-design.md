@@ -1,7 +1,8 @@
 # ZCode 夜间发布 — Design
 
 - **日期**：2026-11-19
-- **状态**：已确认
+- **状态**：已确认。2026-11-21 修订：能发的单照常发布；解析不到的提交号、未提交文件、落在本批之外的测试失败、构建下载失败都写入邮件，并标明建议介入或不必介入。整项目停手只用于拆不开的情况。
+
 - **背景**：问答 Agent 和修复 Agent 用 Cursor。发布交给 ZCode，用来复核 Cursor 已经 push 的待发布改动。现有 `release-runner` 只做 git 同步和部署命令，成功后把该项目全部待发布推进到待确认，中间不审查、不跑测试、不做地址健康检查。
 
 ## Goal
@@ -11,7 +12,7 @@
 成功标准：
 
 1. 没有待发布，或发布方式仍是不自动部署的项目，当晚不部署、不改状态。
-2. 仓库不安全、测试失败但归不到某一张、或一个提交拆不开时，整个项目不动，变更里记一条失败的定时发布。
+2. 仓库对不上、测试失败但归不到某一张、或一个能解析的提交同时属于通过和没过的单时，整个项目不动，变更里记一条失败的定时发布。解析不到的提交号只停那张单。开发目录不干净但发布脚本从干净检出构建时，其余通过的单照常发布。
 3. 能单独撤回的没过单：撤回推送之后回到待处理，叫醒 Cursor，变更里有一条杂务。
 4. 通过审查和测试、发布命令成功、验收地址健康的单，才进入待确认，变更里是一条成功的定时发布，原先的修复记录变为已上线。
 5. 全部项目处理完后发一封邮件。失败和停手写在前面。没有待发布也发一封，说明任务跑过了。
@@ -55,11 +56,13 @@ ZCode 是发布 Agent。Cursor 继续做问答和修复。交叉检查的含义�
 - `wake.config.json` 没有这个项目的目录，或目录不是 git 仓库
 - origin 和 `github_url` 不是同一个仓库。`git@host:path` 和 `https://host/path` 只比较主机名和仓库路径，写法不同不算不一致
 - 当前分支不是 `default_branch`
-- `git status --porcelain` 有输出。被忽略的文件不算不干净
+- 开发目录不干净，且发布脚本只会在这个开发目录里构建（未提交文件会打进镜像）
 - 和远端分叉（两边都有新提交）
 - `releaseFeedback.activeStatus` 是 `queued` 或 `running`
 
-只落后则 `git pull --ff-only`。只超前则 `git push`。只超前不算工作区不干净。已经对齐则继续。同步失败同样整项目停手。
+只落后则 `git pull --ff-only`。只超前则 `git push`。只超前不算工作区不干净。已经对齐则继续。同步失败同样整项目停手。开发目录有未提交改动时不要 stash；快进会改到这些文件，就按同步失败停手。
+
+开发目录不干净、但发布脚本从 `release-worktrees/<项目缩写>` 的干净检出构建时，不停整项目。复核和测试在那个检出里做。未提交路径写入邮件，建议介入：确认这些改动要不要提交。事实写明本次发布没有带上它们。
 
 ### 3. 逐张审查，再跑现有测试
 
@@ -70,7 +73,7 @@ ZCode 是发布 Agent。Cursor 继续做问答和修复。交叉检查的含义�
 - 提交和报障、修复说明对不上，或改动面明显超出这张单
 - diff 里有密钥、token 或私钥
 
-没有能对上的 commit SHA，或者一个 SHA 同时出现在「通过」和「没过」的单上：不猜、不部分撤回，整个项目按第 2 步停手。只出现在没过单上的 SHA 可以撤回。
+先 `git cat-file -e`。解析不到的 SHA 记成异常（变更号、登记的字符串、所属报障），不猜测原提交，不改账。这张单还有能解析的 SHA，就只复核那些。一个能解析的都没有：只停这张，不连坐，也不 `release_return`。一个能解析的 SHA 同时出现在「通过」和「没过」的单上：不猜、不部分撤回，整个项目按第 2 步停手。只出现在没过单上、且能解析的 SHA 可以撤回。
 
 然后跑测试。`agent_notes` 里只认单独成行、以「测试命令：」开头的那一行，整行余下的部分就是要执行的命令。没有这一行、且仓库 `package.json` 有 `test` script，就在该仓库跑 `npm test`。两处都没有：报告写「没有可跑的测试」，不因此停发。不把资料里的其他句子当成命令。
 
@@ -134,41 +137,13 @@ ZCode 是发布 Agent。Cursor 继续做问答和修复。交叉检查的含义�
 
 整晚没有任何待发布：正文只有「今晚没有待发布」。
 
-否则失败和停手在前，每条包含项目、报障编号、标题、停在哪一步、原因。原因写成白天能接着处理的话，不贴大段 diff。后面写成功的：哪些单进了待确认，验收地址的检查结果。没有待发布的项目不逐个列出。
+否则两段。第一段「已发布」：哪些单进了待确认，验收地址和状态码。没有发布成功就写「今晚没有发布成功」。第二段「请看是否介入」：每条异常四行，现象、影响（报障编号和标题）、已核对的事实、建议。建议只写「建议介入」或「不必介入」，并写下要做的那一件事。没有异常就写「不必介入」。不贴大段 diff。没有待发布的项目不逐个列出。
 
 发信失败：同一份报告留在 ZCode 会话里，并写明命令返回了什么。不因为发信失败去改报障状态。
 
 ## 提示词
 
-实现时把下面这份放进 `src/lib/agent-prompts.ts` 的 `RELEASE_AGENT_PROMPT`。管理后台「给 Agent 的提示词」增加第三张卡片「发布 · 夜间复核」，供复制到 ZCode 定时任务。任务指令使用这份全文，不依赖当次会话里的背景。
-
-```text
-你是 Bugboard 的发布 Agent。问答和修复由 Cursor 做。你复核已经 push、状态为待发布的改动，通过后才发布。能改仓库的唯一动作是 git revert 没过的提交。不重写修复，不调用 confirm_fix，也不调用 run_release。也不调用 reject_fix、start_fix、submit_fix、withdraw_fix。
-
-MCP 用已连接的管理员级 Bugboard。id 只用工具返回值。本地目录读 /Users/shzx/Apps/bugboard-wake/wake.config.json 的 projects，键是项目缩写或 slug。不要把这个文件复制或链接进任何项目仓库。
-
-先 list_projects。再对每个项目 list_pending_release。没有待发布的跳过。deployMode 不是 restart 或 ecs_deploy 的跳过，不改状态。
-
-一个项目接一个项目做。每做完一个，把结果写进当夜报告。全部做完再发邮件。你中途停住时，把已完成的结果和停住的原因发出去。
-
-仓库任何一条不满足就整项目停手：目录不存在或不是 git；origin 与 github_url 不是同一个仓库（git@host:path 和 https://host/path 主机名与路径相同就算对齐）；当前分支不是 default_branch；git status --porcelain 有输出（被忽略的文件不算不干净）；与远端分叉；releaseFeedback.activeStatus 为 queued 或 running。只落后则 git pull --ff-only。只超前则 git push，只超前不算不干净。停手时 mark_released，trigger=scheduled，result=failed，detail 写原因。不传已经不在待发布的 bugIds。不撤回，不部署。
-
-对每张待发布 get_bug。用未上线变更里的 commit SHA 看 diff。说明对不上、改动面明显超出这张单、或 diff 里有密钥、token、私钥，这张没过。没有 SHA，或一个 SHA 同时属于通过和没过的单：不猜，整个项目按上一段停手。
-
-测试：agent_notes 里只认单独成行、以「测试命令：」开头的那一行。否则 package.json 有 test script 就在该仓库 npm test。都没有就在报告写「没有可跑的测试」，继续。测试失败且归不到没过的单：整个项目停手。
-
-没过且 SHA 都能单独撤回：从新到旧 git revert --no-edit。冲突则 git revert --abort，不推送，整个项目停手。再跑同一条测试。仍失败则不推送，整个项目停手。通过后才 git push。然后 record_change，kind=chore，title 写撤回了哪张单和为什么，commitShas 为撤回提交，bugIds 为这些单。再 release_return，note 用同一句话。
-
-全部没过：不跑发布命令。
-
-还有通过的单：只运行 list_pending_release 给出的 deployCommand，cwd 为仓库。它必须是绝对路径的可执行文件。失败或不该用 shell 包起来。然后请求验收地址：verify_env 为 dev、test、prod 用对应 URL，否则 test_url，再没有 dev_url。最多跟随一次重定向。连上且最终状态码不是 5xx 算健康。4xx 写入报告，不算失败。没有地址、连不上或 5xx 算不健康。
-
-发布命令失败或不健康：mark_released，trigger=scheduled，result=failed，bugIds 只含仍待发布的单，detail 写停在哪一步。不把已退回的单改回去。
-
-两边成功：mark_released，trigger=scheduled，result=success，headSha 为 HEAD，bugIds 只含通过的单，detail 写地址和状态码。advancesBugs 为 false 时不要再想办法改状态，detail 写明「发布后推进已关闭，报障仍为待发布」。
-
-邮件：全部项目结束后执行 himalaya template send，使用默认账号 zhaoxuntec，不打开编辑器。To 为 marshal.jiang@zhaoxuntec.com。Subject 为「Bugboard 夜间发布」加电脑本地日期。没有任何待发布时，正文只有「今晚没有待发布」。否则先写失败和停手：项目、报障编号、标题、停在哪一步、原因。再写成功：哪些单进入待确认，验收地址结果。不贴大段 diff，不写邮箱密码。发信失败就把同一份报告留在会话里，并写上命令输出。不要因此改报障状态。
-```
+全文以 `src/lib/agent-prompts.ts` 的 `RELEASE_AGENT_PROMPT` 为准。管理后台「给 Agent 的提示词」第三张卡片「发布 · 夜间复核」复制的就是这份。ZCode 定时任务使用这份全文，不依赖当次会话里的背景。改完提示词后要重新贴进定时任务。
 
 ## Bugboard 改动
 
@@ -187,7 +162,7 @@ Bugboard 自己的自动化测试：
 - `release_return` 只能从待发布到待处理。缺说明拒绝。非管理员拒绝。从其他状态调用拒绝。
 - 默认叫醒包含 `release_return`。已保存且含 `reject_fix` 的项目被补上；叫醒列表为空的保持为空。叫醒文案含「发布退回」和「先读」。
 - `mark_released` 成功只推进传入的、当时仍是待发布的单。失败不改状态。`advancesBugs` 为 false 时成功也不改状态。只挂在退回单上的杂务，不会被另一批成功发布标成已上线。
-- 提示词文本含：不调用 `confirm_fix`、不调用 `run_release`、`git revert`、收件人 marshal.jiang@zhaoxuntec.com、`result=failed`、`今晚没有待发布`。
+- 提示词文本含：不调用 `confirm_fix`、不调用 `run_release`、`git revert`、收件人 marshal.jiang@zhaoxuntec.com、`result=failed`、`今晚没有待发布`、`请看是否介入`、`建议介入`、`不必介入`、`不连坐`。
 
 单元测试不发邮件，不执行部署命令。
 
