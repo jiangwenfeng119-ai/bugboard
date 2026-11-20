@@ -205,6 +205,42 @@ export function asksExistence(question) {
   return /有没有|是否有|有无|支不支持|能不能选/.test(text);
 }
 
+export function existenceFocus(question) {
+  const text = String(question || "");
+  const quoted = quotedAskTerms(text);
+  if (quoted.length) return quoted[quoted.length - 1];
+  const withSuffix = text.match(
+    /(?:有没有|是否有|有无)\s*[「“"]?([\u4e00-\u9fffA-Za-z0-9]{2,16}?)的(?:功能|选项|入口|按钮|能力|开关|设置)/,
+  );
+  if (withSuffix?.[1]) return withSuffix[1].replace(/(吗|呢|啊|呀)$/, "").trim();
+  const match = text.match(/(?:有没有|是否有|有无)\s*[「“"]?([\u4e00-\u9fffA-Za-z0-9]{2,16})/);
+  return String(match?.[1] || "")
+    .replace(/(吗|呢|啊|呀|的功能|的选项|的入口|的按钮)$/, "")
+    .trim()
+    .slice(0, 8);
+}
+
+export function existenceFocusNames(question) {
+  const names = [];
+  const push = (name) => {
+    const clean = String(name || "").trim();
+    if (clean.length < 2 || clean.length > 16 || names.includes(clean) || VAGUE_PLACE.test(clean) || GENERIC_LABEL.test(clean)) {
+      return;
+    }
+    names.push(clean);
+  };
+  for (const name of quotedAskTerms(question)) push(name);
+  push(existenceFocus(question));
+  return names;
+}
+
+export function clearExistenceAnswer(answer) {
+  const text = String(answer || "");
+  if (/现在可以这样做：/.test(text) && /判断：已经有了\s*$/m.test(text)) return true;
+  if (/现在没有。这是新功能/.test(text) && /判断：建议报障\s*$/m.test(text)) return true;
+  return false;
+}
+
 export function askSearchTerms(question) {
   const text = String(question || "");
   const head = text.split(ASK_CUT)[0];
@@ -214,14 +250,16 @@ export function askSearchTerms(question) {
     if (clean.length < 2 || clean.length > 8 || terms.includes(clean)) return;
     terms.push(clean);
   };
+  for (const name of existenceFocusNames(text)) push(name);
   for (const name of quotedAskTerms(text)) push(name);
   for (const name of placesIn(question)) push(name);
   for (const name of featureWindows(question)) push(name);
+  for (const match of text.matchAll(/扫码[\u4e00-\u9fff]{1,4}/g)) {
+    push(match[0].replace(/的[\u4e00-\u9fff]*$/, ""));
+  }
   for (const piece of head.split(ASK_SPLIT)) {
     for (const chunk of piece.match(/[\u4e00-\u9fff]{2,8}/g) || []) push(chunk);
   }
-  const afterAsk = text.match(/(?:有没有|是否有|有无)\s*[「“"]?([\u4e00-\u9fffA-Za-z0-9]{2,16})/);
-  if (afterAsk) push(afterAsk[1]);
   for (const word of text.match(/[A-Za-z][A-Za-z0-9_./-]{1,24}/g) || []) {
     if (!terms.includes(word)) terms.push(word);
   }
@@ -241,12 +279,12 @@ export function looksLikeDefect(question) {
   return DEFECT.test(String(question || ""));
 }
 
-export function chooseAskPath({ question, imageCount = 0 }) {
+export function chooseAskPath({ question, imageCount = 0, tableAnswer = "" }) {
   const text = String(question || "");
   if (Number(imageCount) > 0) return "deep";
   if (/对照代码|对应代码/.test(text)) return "deep";
   if (looksLikeDefect(text)) return "deep";
-  if (asksExistence(text)) return "deep";
+  if (asksExistence(text)) return clearExistenceAnswer(tableAnswer) ? "table" : "deep";
   if (/应该[\s\S]{0,40}(却|但是|但)/.test(text)) return "deep";
   return "table";
 }
@@ -261,12 +299,21 @@ export function askReplyGuide() {
 }
 
 export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted }) {
+  const question = questionFromPrompt(prompt);
   const lines = [
     String(prompt || "").trimEnd(),
     "",
     "这次只读当前工作区。它是问答镜像，不是开发目录。不要改文件，不要提交。",
     "先看附上的图片，再看相关页面的代码。按下面的确认规则作答。查表结果只供对照，以代码和图片为准。",
   ];
+  if (asksExistence(question)) {
+    const focus = existenceFocus(question);
+    lines.push(
+      "这是在问某个功能或选项有没有。先正面回答有还是没有。",
+      focus ? `重点核对：${focus}` : "重点核对用户问的那个功能或选项。",
+      "有就写「现在可以这样做：」并说明入口；没有就写「现在没有。这是新功能。」不要改成「这需要报障。请写清做了什么」。",
+    );
+  }
   const guide = askReplyGuide();
   if (guide && !String(prompt || "").includes("# 报障前确认")) lines.push("", guide);
   const table = String(tableAnswer || "").trim();
@@ -507,6 +554,7 @@ function lineAnswersQuestion(line, terms) {
 
 export function draftAskAnswer({ question, documents, hits, excerpts, featureMap }) {
   const terms = askSearchTerms(question);
+  const focusNames = existenceFocusNames(question);
   const asked = String(question || "").trim().slice(0, 80) || "这个问题";
   if (/功能地图/.test(asked) && /哪里|在哪|哪儿|位置|怎么找|怎么看/.test(asked)) {
     return ["功能地图在这个项目的「汇总」页最下面。", "判断：已经有了"].join("\n");
@@ -520,6 +568,11 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
   for (const raw of pool.split("\n")) {
     const item = catalogLine(raw);
     if (item && !catalog.some((have) => have.text === item.text)) catalog.push(item);
+  }
+  for (const name of focusNames) {
+    if (catalog.some((item) => item.name === name)) continue;
+    if (!pool.includes(name)) continue;
+    catalog.push({ kind: "menu", name, route: "", detail: "", text: `应用里能看到「${name}」` });
   }
   const sentence = String(question || "").split("。")[0];
   const inSentence = (term) => term.length >= 2 && sentence.includes(term);
@@ -538,7 +591,13 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
   const named = [];
   const exactNamed = catalog.some((item) => sentence.includes(item.name) && !VAGUE_PLACE.test(item.name) && !GENERIC_LABEL.test(item.name));
   for (const item of catalog) {
-    const bare = !item.route && !item.detail && item.name.length >= 3 && SCREENISH.test(item.name) && sentence.includes(item.name);
+    const focusBare = focusNames.includes(item.name) && sentence.includes(item.name);
+    const bare =
+      !item.route &&
+      !item.detail &&
+      item.name.length >= 3 &&
+      sentence.includes(item.name) &&
+      (SCREENISH.test(item.name) || focusBare);
     const login = !exactNamed && /^([\u4e00-\u9fff]{2,4})登录$/.exec(item.name);
     const loginHead = login && !LOGIN_HEAD.test(login[1]) && sentence.includes(login[1]) ? login[1] : "";
     const nameTerm = loginHead ||
@@ -572,7 +631,12 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
             (span) => span.toLowerCase().replace(/[^a-z0-9]/g, "") === latinTarget,
           ) || ""
         : "";
-    const because = loginPage || shared || language || spelled || (bare ? item.name : sentence.includes(item.name) ? item.name : nameTerm || piece);
+    const because =
+      loginPage ||
+      shared ||
+      language ||
+      spelled ||
+      (focusBare || bare ? item.name : sentence.includes(item.name) ? item.name : nameTerm || piece);
     if (!because || !sentence.includes(because)) continue;
     const shorter = sentence.includes(item.name)
       ? []
@@ -631,7 +695,6 @@ export function draftAskAnswer({ question, documents, hits, excerpts, featureMap
     if (names.some((name) => !VAGUE_PLACE.test(name))) return true;
     return names.some((name) => name === "登录" || name === "登陆") && /登录后|登陆后|登陆页|登录页|无法进入/.test(sentence);
   };
-  const focusNames = quotedAskTerms(sentence).filter((name) => !VAGUE_PLACE.test(name) && !GENERIC_LABEL.test(name));
   const finish = (lines) => {
     const concrete = lines.filter(usefulLine);
     const quotes = [...concrete.join("").matchAll(/「([^」]{2,16})」/g)].map((match) => match[1]);

@@ -527,7 +527,6 @@ describe("ask protocol", () => {
     const question = "日常收支中，商品项养护后处理费有没有「不挂成本」的选项？";
     expect(askSearchTerms(question)).toContain("不挂成本");
     expect(askSearchTerms(question)).toContain("日常收支");
-    expect(chooseAskPath({ question })).toBe("deep");
     const found = draftAskAnswer({
       question,
       documents: "",
@@ -538,6 +537,7 @@ describe("ask protocol", () => {
     expect(found).toContain("「不挂成本」");
     expect(found).toContain("判断：已经有了");
     expect(found).not.toContain("这需要报障");
+    expect(chooseAskPath({ question, tableAnswer: found })).toBe("table");
     const missing = draftAskAnswer({
       question,
       documents: "",
@@ -548,6 +548,31 @@ describe("ask protocol", () => {
     expect(missing).toContain("日常收支");
     expect(missing).toContain("判断：建议报障");
     expect(missing).not.toContain("做了什么、实际怎样");
+    expect(chooseAskPath({ question, tableAnswer: missing })).toBe("table");
+    const scan = "开单点击扫码匹配，有没有扫码取消的功能？";
+    expect(askSearchTerms(scan)).toContain("扫码取消");
+    expect(askSearchTerms(scan)).toContain("扫码匹配");
+    const scanFound = draftAskAnswer({
+      question: scan,
+      documents: "",
+      hits: [],
+      excerpts: "界面「开单」\n界面「扫码匹配」\n界面「扫码取消」",
+    });
+    expect(scanFound.startsWith("现在可以这样做：")).toBe(true);
+    expect(scanFound).toContain("「扫码取消」");
+    expect(scanFound).toContain("判断：已经有了");
+    expect(scanFound).not.toContain("这需要报障");
+    expect(chooseAskPath({ question: scan, tableAnswer: scanFound })).toBe("table");
+    const scanMissing = draftAskAnswer({
+      question: scan,
+      documents: "",
+      hits: [],
+      excerpts: "界面「开单」\n界面「扫码匹配」\n界面「扫码」",
+    });
+    expect(scanMissing).toContain("现在没有");
+    expect(scanMissing).toContain("判断：建议报障");
+    expect(scanMissing).not.toContain("做了什么、实际怎样");
+    expect(chooseAskPath({ question: scan, tableAnswer: scanMissing })).toBe("table");
   });
 
   it("keeps menu questions on the table and sends defects to the mirror", () => {

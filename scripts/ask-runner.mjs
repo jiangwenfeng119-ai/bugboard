@@ -475,7 +475,9 @@ export async function executeAsk(config, payload, deps = {}) {
       excerpts: [interfaceLines(dir), manualExcerpts(dir, hits)].filter(Boolean).join("\n"),
     });
     const images = Array.isArray(payload.images) ? payload.images : [];
-    const mode = isFeatureMapPrompt(prompt) ? "map" : chooseAskPath({ question, imageCount: images.length });
+    const mode = isFeatureMapPrompt(prompt)
+      ? "map"
+      : chooseAskPath({ question, imageCount: images.length, tableAnswer });
     if (mode === "table") {
       console.log(`问答 ${code} #${payload.runId} 快查`);
       await send({ kind: "status", text: "正在查应用里的入口", mirrorSha: synced.sha });
