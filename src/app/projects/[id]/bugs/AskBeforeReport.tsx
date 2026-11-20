@@ -55,7 +55,7 @@ export function AskBeforeReport({
   repoUrl?: string;
   branch?: string;
   seed?: string;
-  onFill?: (next: { title: string; body: string; priority?: Priority; attachment?: string }) => void;
+  onFill?: (next: { title: string; body: string; priority?: Priority | ""; attachment?: string }) => void;
   files?: PendingFile[];
   imageIds?: number[];
 }) {
