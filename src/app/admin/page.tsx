@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DispatchAdmin } from "@/components/AgentDispatch";
 import { IconBell, IconChart, IconKey, IconPencil, IconUsers, IconWrench } from "@/components/Icons";
-import { getBehaviorSettings } from "@/lib/behavior";
+import { getBehaviorSettings, listBehaviorOverviews } from "@/lib/behavior";
 import { dispatchRuntimeStatus, getDispatchSettings, listDispatchOverviews } from "@/lib/dispatch";
 import { requireAdminUser } from "@/lib/session-guard";
 import {
@@ -58,6 +58,7 @@ export default async function AdminPage({
   const wakeProject = projects.find((project) => project.id === requestedProject) ?? null;
   const wakeOverviews = tab === "wake" ? listDispatchOverviews(identity) : [];
   const wakeRuntime = tab === "wake" ? dispatchRuntimeStatus() : null;
+  const behaviorOverviews = tab === "behavior" ? listBehaviorOverviews(identity) : [];
 
   return (
     <AppShell username={identity.username} role={identity.role}>
@@ -128,8 +129,20 @@ export default async function AdminPage({
       {tab === "behavior" ? (
         <BehaviorAdmin
           projects={projects.map((project) => ({ id: project.id, name: project.name }))}
-          projectId={wakeProject?.id ?? null}
-          initial={wakeProject ? getBehaviorSettings(identity, wakeProject.id) : null}
+          overviews={behaviorOverviews.map((item) => ({
+            projectId: item.projectId,
+            projectName: item.projectName,
+            summary: item.summary,
+          }))}
+          editor={
+            wakeProject
+              ? {
+                  mode: "edit",
+                  project: { id: wakeProject.id, name: wakeProject.name },
+                  initial: getBehaviorSettings(identity, wakeProject.id),
+                }
+              : null
+          }
         />
       ) : null}
 

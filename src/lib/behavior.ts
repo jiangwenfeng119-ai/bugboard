@@ -1,5 +1,6 @@
 import {
   behaviorDefaults,
+  describeBehavior,
   WAKE_ACTIONS,
   type BehaviorSettings,
   type WakeAction,
@@ -193,6 +194,37 @@ function requireBehaviorAdmin(identity: Identity, projectId: number) {
     | undefined;
   if (!project) throw new Error("项目不存在");
   if (!canAccessProject(identity, projectId)) throw new Error("无权访问该项目");
+}
+
+export type BehaviorOverview = {
+  projectId: number;
+  projectName: string;
+  settings: BehaviorSettings;
+  summary: string[];
+};
+
+export function listBehaviorOverviews(identity: Identity): BehaviorOverview[] {
+  if (!requireAdmin(identity)) throw new Error("需要管理员权限");
+  const rows = getDb()
+    .prepare(
+      `SELECT p.id AS project_id, p.name AS project_name, d.*
+       FROM project_dispatch d
+       JOIN projects p ON p.id = d.project_id
+       ORDER BY p.name COLLATE NOCASE, p.id`
+    )
+    .all() as (BehaviorRow & { project_id: number; project_name: string })[];
+  return rows.flatMap((row) => {
+    if (!canAccessProject(identity, row.project_id)) return [];
+    const settings = fromRow(row);
+    return [
+      {
+        projectId: row.project_id,
+        projectName: row.project_name,
+        settings,
+        summary: describeBehavior(settings),
+      },
+    ];
+  });
 }
 
 export function getBehaviorSettings(identity: Identity, projectId: number) {

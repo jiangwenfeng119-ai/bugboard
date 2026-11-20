@@ -46,6 +46,23 @@ async function setup() {
 }
 
 describe("project behavior", () => {
+  it("lists only projects that already have a saved row, and adds them after save", async () => {
+    const { services, behavior, identity, project } = await setup();
+    expect(behavior.listBehaviorOverviews(identity)).toEqual([]);
+    const other = services.createProject(identity, { name: "仓库", description: "", code: "WARE" });
+    services.addMember(identity, other.id, identity.userId, "admin");
+    const current = behavior.getBehaviorSettings(identity, project.id);
+    behavior.saveBehaviorSettings(identity, project.id, { ...current, wakeOnApiCreate: true });
+    const listed = behavior.listBehaviorOverviews(identity);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({
+      projectId: project.id,
+      projectName: "柜台",
+    });
+    expect(listed[0].summary.join("\n")).toContain("API Key 建单会叫醒");
+    expect(listed.map((item: { projectId: number }) => item.projectId)).not.toContain(other.id);
+  });
+
   it("keeps today's behavior until an admin saves a change", async () => {
     const { behavior, identity, project } = await setup();
     const settings = behavior.getBehaviorSettings(identity, project.id);
