@@ -2,7 +2,12 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { requireUser } from "@/lib/session-guard";
 import { projectStats, getProject } from "@/lib/services";
-import { STATUS_LABEL, type BugStatus, type DayCountSeries } from "@/lib/types";
+import {
+  STATUS_FILTER_GROUPS,
+  STATUS_LABEL,
+  type BugStatus,
+  type DayCountSeries,
+} from "@/lib/types";
 import { StatIcon } from "@/components/StatIcon";
 import { IconChart, IconUsers } from "@/components/Icons";
 import { TrendChart } from "../TrendChart";
@@ -74,52 +79,74 @@ export default async function ProjectSummaryPage({
   const featureMap = readFeatureMap(identity, Number(id));
   const gaps = listAskGaps(identity, Number(id));
   const project = getProject(identity, Number(id));
-  const entries = showAll
+  const visibleEntries = showAll
     ? allEntries
     : allEntries.filter((e) => e.key === "total" || e.value > 0);
-  const hiddenZeros = allEntries.length - entries.length;
+  const hiddenZeros = allEntries.length - visibleEntries.length;
+  const entryByKey = new Map(visibleEntries.map((entry) => [entry.key, entry]));
+  const totalEntry = entryByKey.get("total");
+  const statusGroups = STATUS_FILTER_GROUPS.map((group) => ({
+    label: group.label,
+    entries: group.statuses
+      .map((key) => entryByKey.get(key))
+      .filter((entry): entry is (typeof visibleEntries)[number] => Boolean(entry)),
+  })).filter((group) => group.entries.length > 0);
+  const createdTotal = stats.created.reduce((sum, row) => sum + row.count, 0);
+  const pendingInflow = stats.inflow.reduce((sum, row) => sum + row.pending, 0);
+  const daysQuery = sp.days ? `days=${days}` : "";
 
   return (
     <div className="bb-summary">
-      <div className="bb-stat-grid">
-        {entries.map((e) => (
-          <Link
-            key={e.key}
-            className={`bb-stat bb-stat-${e.key}`}
-            href={
-              e.key === "total"
-                ? `/projects/${id}/bugs`
-                : `/projects/${id}/bugs?status=${e.key}`
-            }
-          >
-            <span className="bb-stat-icon" aria-hidden>
-              <StatIcon kind={e.key} />
-            </span>
-            <strong>{e.value}</strong>
-            <span>{e.label}</span>
-          </Link>
-        ))}
-      </div>
-      {hiddenZeros > 0 || showAll ? (
-        <p className="bb-muted bb-summary-span" style={{ margin: "0.65rem 0 0" }}>
-          {showAll ? (
-            <Link href={`/projects/${id}/summary${sp.days ? `?days=${sp.days}` : ""}`}>
-              收起为零的状态
-            </Link>
-          ) : (
-            <>
-              已收起 {hiddenZeros} 个为零的状态。{" "}
-              <Link
-                href={`/projects/${id}/summary?showAll=1${sp.days ? `&days=${sp.days}` : ""}`}
-              >
-                查看全部状态
-              </Link>
-            </>
-          )}
-        </p>
-      ) : null}
+      <section className="bb-summary-stock bb-summary-span">
+        <div className="bb-section-head">
+          <h2>当前状态</h2>
+          {hiddenZeros > 0 || showAll ? (
+            <p className="bb-summary-toggle-line">
+              {showAll ? (
+                <Link
+                  className="bb-summary-toggle"
+                  href={summaryHref(id, { daysQuery })}
+                >
+                  收起为零的状态
+                </Link>
+              ) : (
+                <>
+                  已收起 {hiddenZeros} 个为零的状态。{" "}
+                  <Link
+                    className="bb-summary-toggle"
+                    href={summaryHref(id, { daysQuery, showAll: true })}
+                  >
+                    查看全部状态
+                  </Link>
+                </>
+              )}
+            </p>
+          ) : null}
+        </div>
+        <p className="bb-stock-note">这些是现在账上的单数，不随时间窗变化。</p>
+        <div className="bb-stock-board">
+          {totalEntry ? (
+            <div className="bb-stock-group">
+              <h3>全部</h3>
+              <div className="bb-stat-grid">
+                <StatLink projectId={id} entry={totalEntry} />
+              </div>
+            </div>
+          ) : null}
+          {statusGroups.map((group) => (
+            <div key={group.label} className="bb-stock-group">
+              <h3>{group.label}</h3>
+              <div className="bb-stat-grid">
+                {group.entries.map((entry) => (
+                  <StatLink key={entry.key} projectId={id} entry={entry} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="bb-card bb-section-card bb-summary-trend">
+      <div className="bb-card bb-section-card bb-summary-trend bb-summary-span">
         <div className="bb-section-head">
           <h2 className="bb-title-with-icon">
             <span className="bb-title-icon is-sm" aria-hidden>
@@ -127,17 +154,17 @@ export default async function ProjectSummaryPage({
             </span>
             趋势
           </h2>
-          <DaysSwitcher projectId={Number(id)} days={days} />
+          <DaysSwitcher projectId={Number(id)} days={days} showAll={showAll} />
         </div>
-        <div className="bb-chart-wrap">
-          <TrendChart created={stats.created} inflow={stats.inflow} />
-        </div>
-        <div className="bb-chart-legend">
+        <TrendChart created={stats.created} inflow={stats.inflow} />
+        <div className="bb-chart-legend bb-series-legend">
           <span>
             <i className="bb-legend-line" aria-hidden /> 每日新建
+            <b>{createdTotal}</b>
           </span>
           <span>
             <i className="bb-legend-bar" aria-hidden /> 待处理流入
+            <b>{pendingInflow}</b>
           </span>
         </div>
         <p className="bb-chart-note">
@@ -200,6 +227,43 @@ export default async function ProjectSummaryPage({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function summaryHref(
+  projectId: string,
+  opts: { daysQuery?: string; showAll?: boolean }
+) {
+  const parts = [
+    opts.showAll ? "showAll=1" : "",
+    opts.daysQuery || "",
+  ].filter(Boolean);
+  return `/projects/${projectId}/summary${parts.length ? `?${parts.join("&")}` : ""}`;
+}
+
+function StatLink({
+  projectId,
+  entry,
+}: {
+  projectId: string;
+  entry: { key: BugStatus | "total"; label: string; value: number };
+}) {
+  return (
+    <Link
+      className={`bb-stat bb-stat-${entry.key}`}
+      href={
+        entry.key === "total"
+          ? `/projects/${projectId}/bugs`
+          : `/projects/${projectId}/bugs?status=${entry.key}`
+      }
+      aria-label={`${entry.label} ${entry.value}`}
+    >
+      <span className="bb-stat-icon" aria-hidden>
+        <StatIcon kind={entry.key} />
+      </span>
+      <strong>{entry.value}</strong>
+      <span>{entry.label}</span>
+    </Link>
   );
 }
 

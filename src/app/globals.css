@@ -2676,6 +2676,32 @@ a.bb-bug-id:hover {
   background: color-mix(in srgb, var(--status-invalid) 12%, white);
 }
 
+.bb-summary .bb-stat-pending strong {
+  color: var(--status-pending);
+}
+.bb-summary .bb-stat-fixing strong {
+  color: var(--status-fixing);
+}
+.bb-summary .bb-stat-needs_info strong {
+  color: var(--status-needs);
+}
+.bb-summary .bb-stat-needs_product strong {
+  color: var(--status-product);
+}
+.bb-summary .bb-stat-ready_to_release strong {
+  color: var(--status-ready);
+}
+.bb-summary .bb-stat-awaiting_confirm strong {
+  color: var(--status-awaiting);
+}
+
+a.bb-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: inherit;
+}
+
 .bb-chart-wrap {
   position: relative;
   border-radius: 12px;
@@ -2687,6 +2713,10 @@ a.bb-bug-id:hover {
 .bb-chart-plot {
   position: relative;
   min-height: 9.25rem;
+}
+
+.bb-trend-plot {
+  min-height: 10.5rem;
 }
 
 .bb-summary > *,
@@ -2825,7 +2855,12 @@ a.bb-bug-id:hover {
   height: 0.7rem;
   width: 0.55rem;
   border-radius: 3px;
-  background: color-mix(in srgb, #1f6feb 28%, white);
+  background: color-mix(in srgb, var(--accent) 40%, white);
+}
+
+.bb-series-legend .bb-legend-line,
+.bb-series-legend .bb-legend-bar {
+  margin-right: 0;
 }
 
 .bb-analytics-toolbar {
@@ -3238,8 +3273,94 @@ a.bb-bug-id:hover {
 
 .bb-summary {
   display: grid;
-  gap: 1rem;
+  gap: 1.35rem;
   align-items: start;
+}
+
+.bb-summary-stock {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.bb-summary-stock .bb-section-head {
+  margin-bottom: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.bb-summary-stock h2 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+.bb-summary-toggle-line {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+.bb-summary-toggle {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.bb-summary-toggle:hover {
+  color: var(--accent);
+}
+
+.bb-stock-note {
+  margin: 0;
+  max-width: 65ch;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.bb-stock-board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.15rem 2rem;
+}
+
+.bb-stock-group {
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.bb-stock-group h3 {
+  margin: 0 0 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.bb-summary .bb-stat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.bb-summary .bb-stat {
+  flex: 0 0 13.5rem;
+  width: 13.5rem;
+  max-width: 100%;
+}
+
+@media (max-width: 720px) {
+  .bb-summary-stock .bb-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
 }
 
 .bb-summary-span {
@@ -3261,26 +3382,6 @@ a.bb-bug-id:hover {
 }
 
 @media (min-width: 1180px) {
-  .bb-summary {
-    grid-template-columns: minmax(22rem, 36rem) minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .bb-summary > .bb-stat-grid {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .bb-summary-trend {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .bb-summary .bb-chart {
-    min-height: 0;
-    height: auto;
-  }
-
   .bb-summary-charts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
