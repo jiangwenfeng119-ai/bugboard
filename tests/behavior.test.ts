@@ -60,6 +60,8 @@ describe("project behavior", () => {
       projectName: "柜台",
     });
     expect(listed[0].summary.join("\n")).toContain("API Key 建单会叫醒");
+    expect(listed[0].highlights.find((item) => item.label === "建单叫醒")?.value).toContain("API Key");
+    expect(listed[0].highlights.every((item) => item.value.length < 80)).toBe(true);
     expect(listed.map((item: { projectId: number }) => item.projectId)).not.toContain(other.id);
   });
 

@@ -8,6 +8,7 @@ import {
   describeBehavior,
   WAKE_ACTIONS,
   WAKE_ACTION_LABELS,
+  type BehaviorHighlight,
   type BehaviorSettings,
   type WakeAction,
 } from "@/lib/behavior-shared";
@@ -17,7 +18,7 @@ type ProjectOption = { id: number; name: string };
 export type BehaviorOverviewRow = {
   projectId: number;
   projectName: string;
-  summary: string[];
+  highlights: BehaviorHighlight[];
 };
 
 type EditorState =
@@ -89,7 +90,7 @@ function BehaviorList({
             <a href="/admin?tab=wake">分派给 Agent</a>。
           </p>
           <p className="bb-muted bb-dispatch-lead">
-            清单里是已经保存过的项目。新项目点右上角「新增」，从待选项目里选一个再配置保存。
+            清单里是已经保存过的项目，每条用短标签列出关键开关。新项目点右上角「新增」，从待选项目里选一个再配置保存。细节在「编辑」里改。
           </p>
           {!canCreate ? <p className="bb-dispatch-reason">{createReason}</p> : null}
         </div>
@@ -108,47 +109,30 @@ function BehaviorList({
           还没有行为配置。点「新增」，从项目里选一个再保存，就会出现在这份清单里。
         </p>
       ) : (
-        <div className="bb-table-wrap">
-          <table className="bb-table">
-            <thead>
-              <tr>
-                <th scope="col">项目</th>
-                <th scope="col">配置结果</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overviews.map((item) => (
-                <tr key={item.projectId}>
-                  <td>
-                    <span className="bb-dispatch-project">{item.projectName}</span>
-                  </td>
-                  <td>
-                    <span className="bb-dispatch-k">配置结果</span>
-                    <div className="bb-dispatch-guide bb-behavior-summary">
-                      {item.summary.map((line) => (
-                        <p key={line}>{line}</p>
-                      ))}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="bb-cell-actions">
-                      <button
-                        type="button"
-                        className="bb-btn bb-btn-secondary"
-                        onClick={() =>
-                          router.push(`/admin?tab=behavior&project=${item.projectId}`)
-                        }
-                      >
-                        编辑
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="bb-behavior-list">
+          {overviews.map((item) => (
+            <li key={item.projectId} className="bb-behavior-row">
+              <div className="bb-behavior-row-head">
+                <h3 className="bb-behavior-row-title">{item.projectName}</h3>
+                <button
+                  type="button"
+                  className="bb-btn bb-btn-secondary"
+                  onClick={() => router.push(`/admin?tab=behavior&project=${item.projectId}`)}
+                >
+                  编辑
+                </button>
+              </div>
+              <dl className="bb-behavior-facts">
+                {item.highlights.map((fact) => (
+                  <div key={fact.label} className="bb-behavior-fact">
+                    <dt>{fact.label}</dt>
+                    <dd className={fact.on ? "is-on" : undefined}>{fact.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
       )}
       {creating ? (
         <BehaviorCreateModal

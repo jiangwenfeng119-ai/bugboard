@@ -1,7 +1,9 @@
 import {
   behaviorDefaults,
+  behaviorListHighlights,
   describeBehavior,
   WAKE_ACTIONS,
+  type BehaviorHighlight,
   type BehaviorSettings,
   type WakeAction,
   type WakeSource,
@@ -12,9 +14,11 @@ import type { Identity, Priority } from "./types";
 
 export {
   behaviorDefaults,
+  behaviorListHighlights,
   describeBehavior,
   WAKE_ACTION_LABELS,
   WAKE_ACTIONS,
+  type BehaviorHighlight,
   type BehaviorSettings,
   type WakeAction,
   type WakeSource,
@@ -201,6 +205,7 @@ export type BehaviorOverview = {
   projectName: string;
   settings: BehaviorSettings;
   summary: string[];
+  highlights: BehaviorHighlight[];
 };
 
 export function listBehaviorOverviews(identity: Identity): BehaviorOverview[] {
@@ -222,6 +227,7 @@ export function listBehaviorOverviews(identity: Identity): BehaviorOverview[] {
         projectName: row.project_name,
         settings,
         summary: describeBehavior(settings),
+        highlights: behaviorListHighlights(settings),
       },
     ];
   });

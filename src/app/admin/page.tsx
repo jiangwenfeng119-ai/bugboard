@@ -132,7 +132,7 @@ export default async function AdminPage({
           overviews={behaviorOverviews.map((item) => ({
             projectId: item.projectId,
             projectName: item.projectName,
-            summary: item.summary,
+            highlights: item.highlights,
           }))}
           editor={
             wakeProject

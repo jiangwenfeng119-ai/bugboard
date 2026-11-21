@@ -76,6 +76,76 @@ export function behaviorDefaults(): BehaviorSettings {
   };
 }
 
+export type BehaviorHighlight = {
+  label: string;
+  value: string;
+  on?: boolean;
+};
+
+/** 清单用短条目，避免一整段散文。编辑页仍用 describeBehavior。 */
+export function behaviorListHighlights(settings: BehaviorSettings): BehaviorHighlight[] {
+  const wakeOn = [
+    settings.wakeOnWebCreate ? "网页" : "",
+    settings.wakeOnWidgetCreate ? "小组件" : "",
+    settings.wakeOnCaptureCreate ? "走查" : "",
+    settings.wakeOnApiCreate ? "API Key" : "",
+  ].filter(Boolean);
+  const queues = [
+    settings.inboxShowPending ? "待处理" : "",
+    settings.inboxShowNeedsProduct ? "待产品确认" : "",
+    settings.inboxShowReady ? "待发布" : "",
+    settings.inboxShowOwnFixing ? "自己接手的修复中" : "",
+  ].filter(Boolean);
+  const gapSec = settings.captureGapMs / 1000;
+  const gapLabel = Number.isInteger(gapSec) ? `${gapSec}` : gapSec.toFixed(1);
+  return [
+    {
+      label: "建单叫醒",
+      value: wakeOn.length ? wakeOn.join("、") : "都不叫醒",
+      on: wakeOn.length > 0,
+    },
+    {
+      label: "状态再叫",
+      value: settings.wakeActions.length ? `${settings.wakeActions.length} 项动作` : "不叫醒",
+      on: settings.wakeActions.length > 0,
+    },
+    {
+      label: "处理范围",
+      value: settings.wakeDrainQueue ? "继续其余待处理" : "只处理点名的一张",
+      on: settings.wakeDrainQueue,
+    },
+    {
+      label: "默认优先级",
+      value: settings.intakePriority.toUpperCase(),
+      on: true,
+    },
+    {
+      label: "收件箱",
+      value: queues.length
+        ? `${queues.join("、")} · 待处理最多 ${settings.inboxPendingCap}`
+        : "不列处理队列",
+      on: queues.length > 0,
+    },
+    {
+      label: "发布之后",
+      value: settings.releaseAdvancesBugs
+        ? `推进到待确认 · ${settings.releaseTimeoutMin} 分钟超时`
+        : `留在待发布 · ${settings.releaseTimeoutMin} 分钟超时`,
+      on: settings.releaseAdvancesBugs,
+    },
+    {
+      label: "走查草稿",
+      value: `停顿 ${gapLabel} 秒 · 短句 ${settings.captureShortChars} 字 · 整理 ${settings.organizeTimeoutMin} 分钟`,
+      on: true,
+    },
+    {
+      label: "项目问答",
+      value: settings.askEnabled ? `打开 · 每小时 ${settings.askPerHour} 次` : "关闭",
+      on: settings.askEnabled,
+    },
+  ];
+}
+
 export function describeBehavior(settings: BehaviorSettings) {
   const wakes = [
     settings.wakeOnWebCreate ? "网页建单会叫醒" : "网页建单不叫醒",
