@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bugPageActions,
   isDangerBugAction,
+  nextStepButtonClass,
   primaryBugAction,
 } from "../src/app/bugs/[id]/bug-page-actions";
 import { allowedActions } from "../src/lib/state-machine";
@@ -38,5 +39,36 @@ describe("bug page actions", () => {
     expect(primaryBugAction(shown)).toBe("accept_product");
     expect(isDangerBugAction("decline_product")).toBe(true);
     expect(isDangerBugAction("accept_product")).toBe(false);
+  });
+
+  it("keeps one solid primary at rest and marks the open action", () => {
+    const primary = "submit_fix" as const;
+    expect(
+      nextStepButtonClass("submit_fix", { active: null, primary })
+    ).toBe("bb-btn");
+    expect(
+      nextStepButtonClass("mark_invalid", { active: null, primary })
+    ).toBe("bb-btn bb-btn-danger-quiet");
+    expect(
+      nextStepButtonClass("request_product", { active: null, primary })
+    ).toBe("bb-btn bb-btn-secondary");
+    expect(
+      nextStepButtonClass("mark_invalid", {
+        active: "mark_invalid",
+        primary,
+      })
+    ).toBe("bb-btn bb-btn-danger is-selected");
+    expect(
+      nextStepButtonClass("submit_fix", {
+        active: "mark_invalid",
+        primary,
+      })
+    ).toBe("bb-btn bb-btn-secondary");
+    expect(
+      nextStepButtonClass("submit_fix", {
+        active: "submit_fix",
+        primary,
+      })
+    ).toBe("bb-btn is-selected");
   });
 });

@@ -49,6 +49,27 @@ export function primaryBugAction(actions: TransitionAction[]) {
   return actions.find((action) => !DANGER_ACTIONS.has(action)) ?? null;
 }
 
+type NextStepAction = TransitionAction | "add_supplement";
+
+/**
+ * One solid primary at rest; danger stays quiet until selected.
+ * Selected action becomes the only solid fill so humans see what is open.
+ */
+export function nextStepButtonClass(
+  action: NextStepAction,
+  opts: { active: NextStepAction | null; primary: TransitionAction | null }
+) {
+  const selected = opts.active === action;
+  if (action !== "add_supplement" && DANGER_ACTIONS.has(action)) {
+    return selected ? "bb-btn bb-btn-danger is-selected" : "bb-btn bb-btn-danger-quiet";
+  }
+  if (selected) return "bb-btn is-selected";
+  if (action !== "add_supplement" && action === opts.primary && !opts.active) {
+    return "bb-btn";
+  }
+  return "bb-btn bb-btn-secondary";
+}
+
 export function nextStepIdleCopy(status: BugStatus) {
   if (status === "confirmed" || status === "acknowledged") {
     return "这张单已经结束。可以看时间线，没有下一步。";

@@ -13,6 +13,7 @@ import {
 import {
   bugPageActions,
   isDangerBugAction,
+  nextStepButtonClass,
   nextStepIdleCopy,
   primaryBugAction,
 } from "./bug-page-actions";
@@ -186,17 +187,13 @@ export function BugActions({
   const dangerActions = pageActions.filter((action) => isDangerBugAction(action));
 
   function actionButton(action: TransitionAction) {
+    const selected = active === action;
     return (
       <button
         key={action}
         type="button"
-        className={
-          isDangerBugAction(action)
-            ? "bb-btn bb-btn-danger"
-            : action === primary
-              ? "bb-btn"
-              : "bb-btn bb-btn-secondary"
-        }
+        className={nextStepButtonClass(action, { active, primary })}
+        aria-pressed={selected}
         disabled={loading}
         onClick={() => runSimple(action)}
       >
@@ -208,12 +205,16 @@ export function BugActions({
   return (
     <div>
       {pageActions.length > 0 || canSupplement ? (
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        <div
+          className="bb-bug-next-actions"
+          style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+        >
           {progressActions.map(actionButton)}
           {canSupplement ? (
             <button
               type="button"
-              className="bb-btn bb-btn-secondary"
+              className={nextStepButtonClass("add_supplement", { active, primary })}
+              aria-pressed={active === "add_supplement"}
               disabled={loading}
               onClick={() => openNoted("add_supplement")}
             >
