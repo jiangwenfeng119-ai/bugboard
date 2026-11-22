@@ -24,6 +24,13 @@ export function joinAskSpeech(base: string, piece: string) {
   if (!tail) return head;
   if (!head) return tail;
   if (head.endsWith(tail)) return head;
+  if (tail.startsWith(head)) return tail;
+  // Soft-committed interim at the end of head may be a prefix of the final piece
+  for (let n = Math.min(head.length, tail.length); n >= 1; n -= 1) {
+    if (head.endsWith(tail.slice(0, n))) {
+      return `${head.slice(0, head.length - n)}${tail}`;
+    }
+  }
   const needSpace = /[A-Za-z0-9]$/.test(head) && /^[A-Za-z0-9]/.test(tail);
   return needSpace ? `${head} ${tail}` : `${head}${tail}`;
 }

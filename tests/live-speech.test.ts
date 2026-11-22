@@ -12,6 +12,11 @@ describe("joinAskSpeech", () => {
     expect(joinAskSpeech("先问一下：入口在哪", "")).toBe("先问一下：入口在哪");
   });
 
+  it("replaces a soft-committed interim prefix when the final is longer", () => {
+    expect(joinAskSpeech("问：会员", "会员积分")).toBe("问：会员积分");
+    expect(joinAskSpeech("会员", "会员积分在哪里")).toBe("会员积分在哪里");
+  });
+
   it("adds a space only between Latin chunks", () => {
     expect(joinAskSpeech("where is", "the door")).toBe("where is the door");
   });
