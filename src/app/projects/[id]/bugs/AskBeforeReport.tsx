@@ -5,7 +5,7 @@ import { bugBodyUntouched } from "@/lib/bug-body";
 import { answerPieces, fillBugDraft, judgmentLabel, type AskJudgment, type AskStatus } from "@/lib/ask-core";
 import type { Priority } from "@/lib/types";
 import { filesFromClipboard, pickAskPictures } from "@/lib/ask-paste";
-import { speechSupported, startLiveSpeech } from "@/components/live-speech";
+import { joinAskSpeech, speechSupported, startLiveSpeech } from "@/components/live-speech";
 import type { PendingFile } from "@/components/AttachmentComposer";
 
 function askForm(input: {
@@ -71,6 +71,10 @@ export function AskBeforeReport({
   const [pasted, setPasted] = useState<PendingFile[]>([]);
   const pastedRef = useRef(pasted);
   pastedRef.current = pasted;
+  const speechRef = useRef<ReturnType<typeof startLiveSpeech>>(null);
+  const speechBaseRef = useRef("");
+  const speechPartialRef = useRef("");
+  const hearingRef = useRef(false);
   const liveId = [...turns].reverse().find((turn) => turn.status === "streaming")?.id ?? 0;
 
   useEffect(() => {
@@ -78,6 +82,13 @@ export function AskBeforeReport({
       for (const item of pastedRef.current) {
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       }
+      try {
+        speechRef.current?.stop();
+      } catch {
+        // 已停过
+      }
+      speechRef.current = null;
+      hearingRef.current = false;
     };
   }, []);
 
@@ -110,9 +121,79 @@ export function AskBeforeReport({
 
   const streaming = liveId !== 0;
 
+  function showSpeech(base: string, partial: string) {
+    setQuestion(joinAskSpeech(base, partial));
+  }
+
+  function commitSpeechPartial() {
+    const partial = speechPartialRef.current.trim();
+    speechPartialRef.current = "";
+    if (!partial) return;
+    speechBaseRef.current = joinAskSpeech(speechBaseRef.current, partial);
+    showSpeech(speechBaseRef.current, "");
+  }
+
+  function stopHearing() {
+    const handle = speechRef.current;
+    speechRef.current = null;
+    hearingRef.current = false;
+    commitSpeechPartial();
+    setHearing(false);
+    if (!handle) return;
+    try {
+      handle.stop();
+    } catch {
+      // 浏览器已结束识别
+    }
+  }
+
+  function startHearing() {
+    if (hearingRef.current || sending || streaming) return;
+    speechBaseRef.current = question;
+    speechPartialRef.current = "";
+    const handle = startLiveSpeech({
+      onPartial: (text) => {
+        if (!hearingRef.current) return;
+        // 停顿时 interim 会变空；把上一句未定稿的字先留下，避免输入框被清空
+        if (!text) {
+          commitSpeechPartial();
+          return;
+        }
+        speechPartialRef.current = text;
+        showSpeech(speechBaseRef.current, text);
+      },
+      onFinal: (text) => {
+        if (!hearingRef.current) return;
+        speechPartialRef.current = "";
+        if (!text) {
+          showSpeech(speechBaseRef.current, "");
+          return;
+        }
+        speechBaseRef.current = joinAskSpeech(speechBaseRef.current, text);
+        showSpeech(speechBaseRef.current, "");
+      },
+      onEnd: () => {
+        if (!hearingRef.current) return;
+        speechRef.current = null;
+        hearingRef.current = false;
+        commitSpeechPartial();
+        setHearing(false);
+      },
+    });
+    if (!handle) {
+      setFormError("没有启动口述。请允许麦克风后重试，或直接打字。");
+      return;
+    }
+    speechRef.current = handle;
+    hearingRef.current = true;
+    setHearing(true);
+    setFormError("");
+  }
+
   async function ask(text: string, force: boolean) {
     const clean = text.trim();
     if (!clean || sending) return;
+    if (hearingRef.current) stopHearing();
     setSending(true);
     setFormError("");
     setHint("");
@@ -139,7 +220,11 @@ export function AskBeforeReport({
         return;
       }
       setTurns((prev) => [...prev, data.run as AskRun]);
-      if (!force) setQuestion("");
+      if (!force) {
+        setQuestion("");
+        speechBaseRef.current = "";
+        speechPartialRef.current = "";
+      }
     } catch {
       setFormError("网络异常，请重试");
     } finally {
@@ -251,7 +336,15 @@ export function AskBeforeReport({
           rows={1}
           placeholder="例如：会员积分的入口在哪里？"
           disabled={sending || streaming}
-          onChange={(event) => setQuestion(event.target.value)}
+          aria-describedby={hearing ? `${labelId}-hearing` : undefined}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (hearingRef.current) {
+              speechBaseRef.current = next;
+              speechPartialRef.current = "";
+            }
+            setQuestion(next);
+          }}
           onKeyDown={(event) => {
             // IME 组合中（中文等输入法选词/确认）的 Enter 不能当成发送
             if (
@@ -292,20 +385,18 @@ export function AskBeforeReport({
               type="button"
               className="bb-btn bb-btn-ghost"
               disabled={sending || streaming}
+              aria-pressed={hearing}
               onClick={() => {
-                if (hearing) return;
-                const heard = startLiveSpeech({
-                  onPartial: (text) => setQuestion(text),
-                  onFinal: (text) => setQuestion((current) => (current && !current.endsWith(text) ? `${current}${text}` : text || current)),
-                  onEnd: () => setHearing(false),
-                });
-                setHearing(Boolean(heard));
+                if (hearingRef.current) stopHearing();
+                else startHearing();
               }}
             >
-              {hearing ? "正在听…" : "口述问题"}
+              {hearing ? "停止听写" : "口述问题"}
             </button>
           ) : null}
-          <p className="bb-field-hint">Enter 发送，Shift+Enter 换行。这个问题里也可以贴截图，最多 4 张。</p>
+          <p id={hearing ? `${labelId}-hearing` : undefined} className="bb-field-hint">
+            {hearing ? "正在听。说完后点「停止听写」或「提问」。" : "Enter 发送，Shift+Enter 换行。这个问题里也可以贴截图，最多 4 张。"}
+          </p>
         </div>
       </div>
       {hint ? <p className="bb-ask-hint">{hint}</p> : null}

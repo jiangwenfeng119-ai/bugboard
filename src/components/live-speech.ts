@@ -17,6 +17,17 @@ export function speechSupported() {
   return Boolean(speechCtor());
 }
 
+/** Merge committed ask text with a new speech piece; empty piece keeps the base. */
+export function joinAskSpeech(base: string, piece: string) {
+  const head = base.trimEnd();
+  const tail = piece.trim();
+  if (!tail) return head;
+  if (!head) return tail;
+  if (head.endsWith(tail)) return head;
+  const needSpace = /[A-Za-z0-9]$/.test(head) && /^[A-Za-z0-9]/.test(tail);
+  return needSpace ? `${head} ${tail}` : `${head}${tail}`;
+}
+
 export function startLiveSpeech(handlers: {
   onPartial: (text: string) => void;
   onFinal: (text: string) => void;
