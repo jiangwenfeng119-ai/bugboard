@@ -607,7 +607,44 @@ body.bb-modal-open {
   text-decoration: underline;
 }
 
-.bb-doc-list .bb-back-top {
+.bb-doc-list .bb-btn {
+  margin-left: auto;
+  padding: 0.2rem 0.45rem;
+}
+
+@media (max-width: 640px) {
+  .bb-modal {
+    padding: 0.6rem;
+  }
+
+  .bb-profile-fields,
+  .bb-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bb-profile-fields .is-wide {
+    grid-column: auto;
+  }
+
+  .bb-profile-grid dd {
+    margin-bottom: 0.35rem;
+  }
+}
+
+.bb-card {
+  background: color-mix(in srgb, var(--surface) 94%, white);
+  border: 1px solid color-mix(in srgb, var(--line) 88%, white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: box-shadow 200ms var(--ease-out), border-color 200ms ease;
+}
+
+.bb-card-interactive:hover {
+  box-shadow: var(--shadow-hover);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
+.bb-back-top {
   position: fixed;
   right: max(1rem, var(--bb-gutter));
   bottom: 1.25rem;
@@ -669,43 +706,6 @@ body.bb-modal-open {
     padding: 0.7rem;
     border-radius: 12px;
   }
-}
-
-.bb-btn {
-  margin-left: auto;
-  padding: 0.2rem 0.45rem;
-}
-
-@media (max-width: 640px) {
-  .bb-modal {
-    padding: 0.6rem;
-  }
-
-  .bb-profile-fields,
-  .bb-profile-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .bb-profile-fields .is-wide {
-    grid-column: auto;
-  }
-
-  .bb-profile-grid dd {
-    margin-bottom: 0.35rem;
-  }
-}
-
-.bb-card {
-  background: color-mix(in srgb, var(--surface) 94%, white);
-  border: 1px solid color-mix(in srgb, var(--line) 88%, white);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  transition: box-shadow 200ms var(--ease-out), border-color 200ms ease;
-}
-
-.bb-card-interactive:hover {
-  box-shadow: var(--shadow-hover);
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 
 .bb-btn {
