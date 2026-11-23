@@ -363,11 +363,13 @@ export function AskBeforeReport({
           <ul className="bb-ask-shots">
             {pasted.map((item, index) => (
               <li key={item.id} className="bb-ask-shot">
-                <ImageLightbox
-                  src={item.previewUrl}
-                  alt={`已贴上的截图 ${index + 1}`}
-                  className="bb-ask-shot-img"
-                />
+                {item.previewUrl ? (
+                  <ImageLightbox
+                    src={item.previewUrl}
+                    alt={`已贴上的截图 ${index + 1}`}
+                    className="bb-ask-shot-img"
+                  />
+                ) : null}
                 <button type="button" onClick={() => removePasted(item.id)}>
                   去掉
                 </button>
