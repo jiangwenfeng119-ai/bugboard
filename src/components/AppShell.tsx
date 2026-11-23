@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAdminRole, roleLabel } from "@/lib/roles";
+import { BackToTop } from "./BackToTop";
 import { BrandMark } from "./BrandMark";
 import {
   IconChevronDown,
@@ -135,6 +136,7 @@ export function AppShell({
         </nav>
       </header>
       <main className="bb-main">{children}</main>
+      <BackToTop />
     </div>
   );
 }

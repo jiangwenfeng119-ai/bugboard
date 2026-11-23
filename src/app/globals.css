@@ -607,7 +607,71 @@ body.bb-modal-open {
   text-decoration: underline;
 }
 
-.bb-doc-list .bb-btn {
+.bb-doc-list .bb-back-top {
+  position: fixed;
+  right: max(1rem, var(--bb-gutter));
+  bottom: 1.25rem;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, white);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 280ms var(--ease-spring),
+    box-shadow 280ms var(--ease-spring),
+    opacity 200ms ease;
+}
+
+.bb-back-top:hover {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+
+.bb-back-top:active {
+  transform: translateY(0);
+}
+
+.bb-back-top:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .bb-back-top span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .bb-back-top {
+    padding: 0.7rem;
+    border-radius: 12px;
+  }
+}
+
+.bb-btn {
   margin-left: auto;
   padding: 0.2rem 0.45rem;
 }
