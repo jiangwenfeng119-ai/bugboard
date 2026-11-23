@@ -128,6 +128,8 @@ describe("enrichBugDetail", () => {
     expect(detail.reading).toContain("text");
     expect(detail.reading).toContain("不要");
     expect(detail.reading).toContain("reporterIsProductManager");
+    expect(detail.reading).toContain("同样不算");
+    expect(detail.reading).toContain("不要调用 accept_product");
     expect(images.map((img) => img.label)).toContain(
       "附件 soc修复后仍存在的问题.docx / image1.png"
     );

@@ -37,7 +37,9 @@ export function Prose({ text, empty }: { text: string; empty?: string }) {
             <Tag key={index}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  <InlineRun items={item} />
+                  <span>
+                    <InlineRun items={item} />
+                  </span>
                 </li>
               ))}
             </Tag>

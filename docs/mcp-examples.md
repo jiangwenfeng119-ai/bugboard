@@ -88,7 +88,7 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 ## 4. 推荐闭环
 
 1. **bugboard-qa**：`create_bug` → 得到 `bugId`
-2. **bugboard-fixer**：`start_fix` → 改完并 push → `submit_fix`（必填 note，进入待发布）→ `record_change`（`kind=fix`，带上 `bugIds` 和 `commitShas`）。要一个现在没有的能力、而且提交时还没写已经确认，用 `request_product`，不要 `mark_invalid`
+2. **bugboard-fixer**：`start_fix` → 改完并 push → `submit_fix`（必填 note，进入待发布）→ `record_change`（`kind=fix`，带上 `bugIds` 和 `commitShas`）。要一个现在没有的能力就用 `request_product`，不要 `mark_invalid`。正文里写已经确认也不要直接改，等产品经理在系统里点可以做或不做
 3. 看队列：`list_pending_release`。人明确要求紧急发布时才 `run_release`（只入队，不会马上上线）。外部已经发布完成则 `mark_released`。默认会把待发布变为待确认；该项目若关掉「发布后推进」，成功也留在待发布。不要在待发布时 `confirm_fix`
 4. **bugboard-qa**：只对 `awaiting_confirm` 做 `confirm_fix`，或 `reject_fix` 打回
 5. 材料只在报障人手里时，**bugboard-fixer** 用 `request_info` 把单退到待补充；原报障人补上后用 `provide_info` 回到待处理

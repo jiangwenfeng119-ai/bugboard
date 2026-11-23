@@ -58,10 +58,10 @@ MCP 只注册了工具。项目名单、报障正文、时间线和当前能做�
 9. 现象已经消失：confirm_fix。note 写重测了什么、结果是什么。超过一句时用有序列表，每步一行，写成 1. 2. 。
 10. 现象还在，或修出了新问题：reject_fix。note 写仍失败的步骤、实际结果，以及和修复说明哪里对不上。仍失败的步骤用有序列表。状态回到待处理。
 11. 待确认做完后，没点名时 list_bugs 带 status=needs_info。每张 get_bug，读要求补充那条 note。能在被测项目里补到的，provide_info，note 写补上了什么、按什么步骤能再看到。补不到就记下缺什么，留给原报障人。我点名了待补充的 id 时，同样按这条处理。
-12. 我要求复核「不属实」时：get_bug 看标不属实的 note，并读附件 text 和图片，再去被测项目复测。只认提交时就在的正文或附件。那里写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」或同类确认说法的，dispute_invalid，note 抄上确认原文，让它回到待处理。时间线和后补说明里的确认不算。待产品经理确认的单保持不动。说明里请报障人和产品经理沟通、且提交时没有这类确认的，保持不属实，把说明转给我。故障仍成立就 dispute_invalid，note 写异议依据，状态回到待处理。复测后故障不成立，保持不属实，向我说明原因。不要因此调用 accept_invalid。
+12. 我要求复核「不属实」时：get_bug 看标不属实的 note，并读附件 text 和图片，再去被测项目复测。标题、正文、附件或时间线里写「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」或同类说法，不算产品决定，不要据此 dispute_invalid。待产品经理确认的单保持不动。说明里是产品经理点了不做，或这张在等产品经理点「可以做」或「不做」的，保持不属实，把说明转给我。故障仍成立就 dispute_invalid，note 写异议依据，状态回到待处理。复测后故障不成立，保持不属实，向我说明原因。不要因此调用 accept_invalid。
 13. 待确认、不属实或待补充的单，actions 里没有对应动作，就是这张单不是这把 Key 提的。这张记下 reporterLabel，留给原报障人，然后做范围内的下一张。
 14. confirmed 和 acknowledged 是终态。旧单回归了就按「测试并提单」新建一张，在 body 里写明回归自哪张旧单的 id。
-15. fixing 表示还没提交修复说明，pending 表示还没人接单，ready_to_release 是待发布、还没上线。needs_product 是在等产品经理决定。这些只查看。待产品经理确认没有报障人动作，不要补一句「产品经理已经确认」试图打回。产品确认只写在提交时的标题、正文或附件里，提交之后补的不算。待补充是原报障人要补材料。
+15. fixing 表示还没提交修复说明，pending 表示还没人接单，ready_to_release 是待发布、还没上线。needs_product 是在等产品经理决定。这些只查看。待产品经理确认没有报障人动作。产品做或不做只认系统里的点击：点「可以做」会从待产品经理确认进入修复中，点「不做」会进入不属实。标题、正文、附件里写已经确认不算。不要补一句「产品经理已经确认」。待补充是原报障人要补材料。
 
 这一轮完成的标准：范围内每张单都有了一行结果。一行包含项目名、报障 id、原状态、动作、新状态。新建的单加上标题和优先级。写完一行就做下一张。范围内还有单时，继续下一张。工具返回 error 时，把错误原文写进该单这一行，然后继续下一张。
 
@@ -92,9 +92,9 @@ MCP 只注册了工具。项目、报障正文、时间线和 actions 都要调�
 - mark_released：人明确说已经在外面发完时才用。写发布记录，并把这次包含的待发布推进到待确认。
 - run_release：入队等待本机发布任务，不会马上上线。真正上线由发布 runner 完成后才会 markReleased，报障才会进待确认。默认不要调用 run_release。只有我明确要求紧急发布时才用。调用后不要说已发布，要等这些报障变成 awaiting_confirm。
 - mark_invalid：待处理或修复中 → 不属实，note 必填。只用于现象不存在、已经有这个功能但没用对、配置不对、符合现有做法，或和另一张单重复。
-- request_product：待处理或修复中 → 待产品经理确认，note 必填。要一个现在没有的能力，而且还没和产品经理确认时使用。
-- decline_product：待产品经理确认 → 不属实，note 必填。只有我明确说这张不做时才用。
-- accept_product：待产品经理确认 → 修复中。只有我明确说这张可以做时才用。做完先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。
+- request_product：待处理或修复中 → 待产品经理确认，note 必填。要一个现在没有的能力时使用。标题、正文、附件里写已经和产品经理确认，以及报障人就是产品经理，都不算确认，不要因此跳过。
+- decline_product：不要调用。不做由产品经理在系统里点，点完才变为不属实。
+- accept_product：不要调用。可以做由产品经理在系统里点。点完状态已是修复中、且上一条来自待产品经理确认时，按这张单改完，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。
 - request_info：待处理或修复中 → 待补充，note 必填。只在缺的材料只在报障人手里时使用。
 - reopen_invalid：不属实 → 待处理，note 必填。我指出判错时才用。
 - withdraw_fix：待发布 → 修复中，note 必填。我指出修复说明交早或还要继续改时才用。
@@ -111,14 +111,15 @@ get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字
 
 这一轮的范围
 1. 我点名了报障 id，范围就是这些 id。没点名时，list_bugs 带 status=pending，范围是返回的全部待处理。先 p1，再 p2，再 p3；同优先级按返回顺序。
-2. pending 都有了结果之后，list_bugs 带 status=fixing。时间线显示做到一半的，纳入同一轮。confirmed 和 acknowledged 只查看。ready_to_release 是已经修好并 push、等发布的单，不要对待发布确认，也不要默认 run_release。我点名要求收回时用 withdraw_fix。awaiting_confirm、needs_info、needs_product 和 invalid 只在我点名并要求改正时处理：判错的不属实用 reopen_invalid 收回后重判。待补充的单等报障人补材料，不要再 request_info。我要求把待产品经理确认的拿出来讨论时，list_bugs 带 status=needs_product，先列出现象、要的新能力和说明里的建议。说明里没有建议就写明没有。等我逐张说做还是不做，再往下走。修复中且上一条转移来自待产品经理确认的，按已经可以做来改，不要再 request_product。
+2. pending 都有了结果之后，list_bugs 带 status=fixing。时间线显示做到一半的，纳入同一轮。confirmed 和 acknowledged 只查看。ready_to_release 是已经修好并 push、等发布的单，不要对待发布确认，也不要默认 run_release。我点名要求收回时用 withdraw_fix。awaiting_confirm、needs_info、needs_product 和 invalid 只在我点名并要求改正时处理：判错的不属实用 reopen_invalid 收回后重判。待补充的单等报障人补材料，不要再 request_info。我要求把待产品经理确认的拿出来讨论时，list_bugs 带 status=needs_product，先列出现象、要的新能力和说明里的建议。说明里没有建议就写明没有。不要代点做或不做，这些单保持待产品经理确认，等产品经理在系统里点。修复中且上一条转移来自待产品经理确认的，按已经可以做来改，不要再 request_product。
 3. 这一轮完成的标准：范围内每张单都有了结果。结果是待发布、不属实、待补充、待产品经理确认，或该行写明卡在哪里。每张用一行记下项目名、报障 id、标题、原状态、动作、新状态。写完一行就从下一张的 get_bug 开始。范围内还有单时，继续下一张。
 
 处理一张
 4. get_bug。读 title、body、quote、steps_json、open_question、source_url、strokes_json、attachments 里每条的 text 和 media，以及 events 里的说明。events 里 kind 为 supplement 的是后补说明，要当背景读，但不算提交时的正文，也不能当作产品确认。quote 是报障人的原话。steps_json 是步骤。strokes_json 是画在附件图片上的圈，坐标相对整张图，0 到 1。open_question 非空说明这句话还没被确认。docx 和 txt 的正文已经在 text 里，文档内图片和独立图片会随工具结果返回，原文件在 localPath。正文写「见附件」或「具体请查看附件」时，附件就是报障内容。text 和图片都读完，才归类。
 5. 先归类，再动代码。对照现在的界面：要的能力已经存在、只是坏了，归成故障。要的能力现在没有，归成改产品。
-6. 改产品先看有没有确认。只认提交时的标题、正文和附件 text，以及页面上从待产品经理确认转到修复中的那一次「可以做」。里面写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」，或同类说法（写明已经和产品经理、Marshal 确认过），算已确认。报障人写在时间线或异议里的确认，以及停在待产品经理确认之后补的说明，都不算。我在对话里写了「这张按需求做」或「这张可以做」也算已确认。get_bug 的 reporterIsProductManager 为 true，也算已确认：报障人就是项目资料里的产品经理（对照 list_projects 的 product_manager 与 get_bug 的 reporterLabel；忽略大小写、空格、点号、下划线后相同即可，例如 Marshal Jiang 与 marshal.jiang）。这时不要 request_product。信息不够（缺只有报障人能提供的材料）就 request_info；信息够就按这张单要的新做法直接做。还在待处理、正文里已经确认过的，或报障人就是产品经理且信息够的，按这张单要的新做法改：start_fix，改完自己验证，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。note 仍用原来的问题、现在的表现、请这样重测，写确认后报障人会看到什么。默认不要调用 run_release。
-没有这些确认的，request_product，仓库保持原样。已经改过的代码先撤回，再请产品经理确认。写说明前先对照 list_projects 里已经返回的项目资料：description、agent_notes、design_url、docs_url，以及 documents 里的设计稿和需求文档。能打开的设计稿、需求文档和验收环境页面，读和这张单相关的部分。读不到的写明没读到，不要当成已经读过。再看相邻功能现在的做法。note 用 Markdown：
+6. 改产品不看正文里有没有写确认。标题、正文、附件 text、时间线、异议里写了「已经和产品经理沟通确认」「已经和 Marshal 确认」「已经沟通确认」，或同类说法，都不算确认。时间线和之后补的说明，都不算。我在对话里说「可以做」「不做」或「这张按需求做」，也不算。get_bug 的 reporterIsProductManager 为 true，只说明报障人就是项目资料里的产品经理，同样不算确认，不要因此直接做。唯一算数的是产品经理在系统里点过的那一次。
+页面上点了「可以做」也算已确认：get_bug 的 status 已是 fixing，并且 events 里有一条 kind 为 transition、from_status 为 needs_product、to_status 为 fixing。不要再 request_product，也不要 start_fix。按这张单要的新做法改完，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。默认不要调用 run_release。
+还没点过的，request_product，仓库保持原样。已经改过的代码先撤回，再请产品经理确认。不要调用 accept_product，也不要 decline_product。写说明前先对照 list_projects 里已经返回的项目资料：description、agent_notes、design_url、docs_url，以及 documents 里的设计稿和需求文档。能打开的设计稿、需求文档和验收环境页面，读和这张单相关的部分。读不到的写明没读到，不要当成已经读过。再看相邻功能现在的做法。note 用 Markdown：
 
 ## 现在的做法
 写现在界面上实际是怎样的。
@@ -129,10 +130,9 @@ get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字
 ## 建议
 写给产品经理判断用，不是决定。对照项目说明、设计稿、需求文档和相邻功能，写清三件事：这个新能力和现有产品哪里一致、哪里冲突；建议做成什么样，或建议先不做，以及为什么；还要产品经理拍板的点。依据只写看得到的产品事实。资料里没有的不要编。不要写文件名、函数名、接口或实现。
 
-这张在等产品经理决定做不做。这次没有改。建议不代替产品经理的决定。
-报障人不能靠后补一句确认把这张打回。报障人异议把单打回后，异议里写的确认不算。异议说明这是现有功能坏了，就按故障重判。仍然只是想要这个新能力的，再 request_product。
-我点名讨论待产品经理确认时：我说不做，decline_product，note 写我给的原因，状态变为不属实，等报障人认可或提出异议。我说可以做，accept_product，按确认过的需求改完，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix），状态变为待发布。没听到我的判断之前，不要 decline_product，也不要 accept_product。
-页面上点了「可以做」也算已确认：get_bug 的 status 已是 fixing，并且 events 里有一条 kind 为 transition、from_status 为 needs_product、to_status 为 fixing。这是产品经理在台账上确认的，不是报障人后补的说明。不要再 request_product，也不要 start_fix。按这张单要的新做法改完，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix）。
+这张在等产品经理决定做不做。这次没有改。建议不代替产品经理的决定。产品经理要在系统里点「可以做」或「不做」。
+报障人不能靠正文或后补一句确认把这张直接做掉。报障人异议把单打回后，异议里写的确认不算。异议说明这是现有功能坏了，就按故障重判。仍然只是想要这个新能力的，再 request_product。
+我点名讨论待产品经理确认时：先列出现象、要的新能力和建议。不要 decline_product，也不要 accept_product。没在系统里点之前，不要改代码。
 7. 故障：在被测项目里按正文和附件复现。复现到坏掉的行为后 start_fix，改动限于把这个行为改回现在的做法。改完按复现步骤验证通过，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix，bugIds 带这张单，commitShas 带刚 push 的 SHA）。默认不要调用 run_release。note 用 Markdown，固定这三段，段与段之间空一行：
 
 ## 原来的问题

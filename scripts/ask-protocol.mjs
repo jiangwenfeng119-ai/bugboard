@@ -268,11 +268,9 @@ export function askSearchTerms(question) {
 
 function newFeatureAnswer(question, place) {
   const where = place ? `在${place}` : "哪个页面";
-  const confirmed = /已经和产品经理[\s\S]{0,12}确认|已经和\s*Marshal\s*确认|已经沟通确认/.test(question);
-  if (confirmed) {
-    return `现在没有。这是新功能。你已经写了和产品经理确认，报障里保留这句，系统可以按确认过的做法做。请写清：${where}希望怎样。`;
-  }
-  return `现在没有。这是新功能。请先和产品经理讨论。讨论确认后，在报障里写上「已经和产品经理沟通确认」。请写清：${where}希望怎样。`;
+  const wroteConfirmation = /已经和产品经理[\s\S]{0,12}确认|已经和\s*Marshal\s*确认|已经沟通确认/.test(question);
+  const confirmation = wroteConfirmation ? "正文里写已经和产品经理确认，也不会直接做。" : "";
+  return `现在没有。这是新功能。提交后会到待产品经理确认，要产品经理在系统里点「可以做」或「不做」。${confirmation}请写清：${where}希望怎样。`;
 }
 
 export function looksLikeDefect(question) {

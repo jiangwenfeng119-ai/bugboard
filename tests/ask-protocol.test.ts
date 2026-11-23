@@ -462,8 +462,9 @@ describe("ask protocol", () => {
       excerpts: "界面「会议资料」",
     });
     expect(addDelete).toContain("现在没有");
-    expect(addDelete).toContain("请先和产品经理讨论");
-    expect(addDelete).toContain("已经和产品经理沟通确认");
+    expect(addDelete).toContain("待产品经理确认");
+    expect(addDelete).toContain("可以做");
+    expect(addDelete).not.toContain("请先和产品经理讨论");
     expect(addDelete).toContain("判断：建议报障");
     expect(addDelete).not.toContain("已经有了");
     const confirmed = draftAskAnswer({
@@ -488,9 +489,11 @@ describe("ask protocol", () => {
     });
     expect(italian).toContain("在意大利语做了什么");
     expect(italian).toContain("判断：建议报障");
-    expect(confirmed).toContain("保留这句");
+    expect(confirmed).toContain("也不会直接做");
+    expect(confirmed).toContain("可以做");
     expect(confirmed).toContain("判断：建议报障");
-    expect(confirmed).not.toContain("请先和产品经理讨论");
+    expect(confirmed).not.toContain("保留这句");
+    expect(confirmed).not.toContain("系统可以按确认过的做法做");
     const noise = draftAskAnswer({
       question: "新建估价清单客户选择框，提示搜索失败请重试。请在填写信息界面重试",
       documents: "",

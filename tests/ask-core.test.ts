@@ -100,7 +100,9 @@ describe("ask core", () => {
     expect(prompt).toContain("不能修改文件");
     expect(prompt).toContain("判断：建议报障");
     expect(prompt).toContain("现在没有");
-    expect(prompt).toContain("已经和产品经理沟通确认");
+    expect(prompt).toContain("也不会直接做");
+    expect(prompt).toContain("可以做");
+    expect(prompt).not.toContain("系统可以按确认过的做法做");
     expect(prompt).toContain("这是现有功能坏了");
     expect(prompt).toContain("不要把仓库从头读到尾");
     expect(prompt).toContain("日志检索");

@@ -45,7 +45,7 @@ const PROMPTS = [
   {
     id: "admin",
     title: "管理员级 · 查看并修复",
-    summary: "故障就修好。没用对或配置不对标不属实，还没有的新能力交给产品经理确认。",
+    summary: "故障就修好。没用对或配置不对标不属实。还没有的新能力要等产品经理在系统里点可以做或不做。",
     icon: IconWrench,
     text: ADMIN_AGENT_PROMPT,
   },

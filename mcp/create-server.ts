@@ -160,7 +160,7 @@ server.tool(
 
 server.tool(
   "get_bug",
-  "获取报障详情（含时间线与可执行动作）。bug.reporterIsProductManager 表示报障人是否就是项目资料里的产品经理。docx/txt 正文在 attachments[].text，文档内图片在 media，图片随结果返回。正文写「见附件」时以附件为准，没读完不要标不属实，也不要要求补充。",
+  "获取报障详情（含时间线与可执行动作）。bug.reporterIsProductManager 表示报障人是否就是项目资料里的产品经理，这不代表产品已经确认。要一个现在没有的能力时，仍要等页面上点「可以做」或「不做」。docx/txt 正文在 attachments[].text，文档内图片在 media，图片随结果返回。正文写「见附件」时以附件为准，没读完不要标不属实，也不要要求补充。",
   { bugId: z.number().int().positive() },
   async ({ bugId }) => {
     try {
@@ -425,7 +425,7 @@ server.tool(
 
 server.tool(
   "mark_invalid",
-  "标为不属实（管理员级 Key，note 必填）。现象不存在、已经有这个功能但没用对、配置不对、符合现有做法或重复时使用。要一个现在没有的能力时不要调用，改用 request_product。报障里写明已经和产品经理或 Marshal 沟通确认的不要调用，应按确认过的需求改。正文或附件还没读时不要调用。",
+  "标为不属实（管理员级 Key，note 必填）。现象不存在、已经有这个功能但没用对、配置不对、符合现有做法或重复时使用。要一个现在没有的能力时不要调用，改用 request_product。正文写了已经和产品经理确认，也不要改成直接做。正文或附件还没读时不要调用。",
   {
     bugId: z.number().int().positive(),
     note: z
@@ -446,7 +446,7 @@ server.tool(
 
 server.tool(
   "request_product",
-  "请产品经理确认：待处理或修复中 → 待产品经理确认（管理员级 Key，note 必填）。要一个现在没有的能力、而且提交时的标题、正文和附件还没写已经和产品经理确认时使用。后补的确认不算。不要改产品。现象不存在、没用对或配置问题用 mark_invalid。",
+  "请产品经理确认：待处理或修复中 → 待产品经理确认（管理员级 Key，note 必填）。要一个现在没有的能力时使用。标题、正文或附件里写已经确认，以及报障人就是产品经理，都不算已经点过，不要因此跳过。不要改产品，也不要代替产品经理点可以做或不做。现象不存在、没用对或配置问题用 mark_invalid。",
   {
     bugId: z.number().int().positive(),
     note: z
@@ -467,7 +467,7 @@ server.tool(
 
 server.tool(
   "decline_product",
-  "不做：待产品经理确认 → 不属实（管理员级 Key，note 必填）。只有人明确说这张不做时才调用。说明写给报障人，之后由报障人认可或提出异议。",
+  "不做：待产品经理确认 → 不属实（管理员级 Key，note 必填）。这是页面上的按钮。不要代替产品经理调用。产品经理要在系统里自己点「不做」。说明写给报障人，之后由报障人认可或提出异议。",
   {
     bugId: z.number().int().positive(),
     note: z
@@ -486,7 +486,7 @@ server.tool(
 
 server.tool(
   "accept_product",
-  "可以做：待产品经理确认 → 修复中（管理员级 Key）。只有人明确说这张可以做时才调用。做完先 commit 并 push，再 submit_fix，进入待发布。默认不要 run_release。",
+  "可以做：待产品经理确认 → 修复中（管理员级 Key）。这是页面上的按钮。不要代替产品经理调用。产品经理在系统里点了「可以做」、状态已是修复中且上一条来自待产品经理确认时，才按这张单改完并 submit_fix，进入待发布。默认不要 run_release。",
   { bugId: z.number().int().positive(), note: transitionNote },
   async ({ bugId, note }) => {
     try {

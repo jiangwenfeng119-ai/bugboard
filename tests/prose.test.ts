@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { Prose } from "../src/components/Prose";
 import { parseProse } from "../src/lib/prose";
 
 describe("parseProse", () => {
@@ -78,5 +81,16 @@ describe("parseProse", () => {
 
   it("returns nothing for blank text", () => {
     expect(parseProse("  \n")).toEqual([]);
+  });
+
+  it("keeps bold and the following sentence in one list cell", () => {
+    const html = renderToStaticMarkup(
+      createElement(Prose, {
+        text: "1. **财务日常操作**页新增「项目开收票 / 收付款闭环」",
+      })
+    );
+    expect(html).toBe(
+      '<div class="bb-prose"><ol><li><span><strong>财务日常操作</strong><span>页新增「项目开收票 / 收付款闭环」</span></span></li></ol></div>'
+    );
   });
 });
