@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { ImageLightbox } from "@/components/ImageLightbox";
 
 export type PendingFile = {
   id: string;
@@ -206,8 +207,13 @@ export function AttachmentComposer({
           {files.map((f) => (
             <li key={f.id} className="bb-file-row">
               {f.previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={f.previewUrl} alt="" width={40} height={40} />
+                <ImageLightbox
+                  src={f.previewUrl}
+                  alt={f.file.name}
+                  className="bb-file-thumb"
+                  width={40}
+                  height={40}
+                />
               ) : (
                 <span className="bb-file-kind">文件</span>
               )}

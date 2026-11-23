@@ -5106,7 +5106,7 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
 .bb-evidence-video,
 .bb-evidence-audio {
   display: block;
-  max-width: min(100%, 40rem);
+  max-width: min(100%, 52rem);
   margin: 0.4rem 0;
 }
 
@@ -5118,9 +5118,135 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
 
 .bb-evidence-img {
   width: auto;
-  max-height: 36rem;
+  max-height: 48rem;
   object-fit: contain;
   background: var(--surface-2);
+}
+
+.bb-lightbox-thumb {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  vertical-align: middle;
+  border-radius: inherit;
+}
+
+.bb-lightbox-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.bb-lightbox-thumb .bb-evidence-img {
+  margin: 0;
+}
+
+.bb-lightbox-thumb .bb-file-thumb {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.bb-lightbox-thumb .bb-ask-shot-img {
+  display: block;
+  width: 5.5rem;
+  height: 3.6rem;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.bb-lightbox {
+  z-index: 90;
+  padding: 1rem;
+}
+
+.bb-lightbox-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: min(96vw, 72rem);
+  max-height: calc(100dvh - 2rem);
+  padding: 2.5rem 0.75rem 0.75rem;
+  border-radius: 14px;
+  background: color-mix(in srgb, #0f172a 88%, transparent);
+  box-shadow: 0 28px 64px rgba(15, 23, 42, 0.45);
+  animation: bb-modal-in 420ms var(--ease-spring);
+}
+
+.bb-lightbox-img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 5rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.bb-lightbox-close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.25rem 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 16%, transparent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.bb-lightbox-close:hover {
+  background: color-mix(in srgb, #fff 28%, transparent);
+}
+
+.bb-file-list {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.bb-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.bb-file-kind {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+}
+
+.bb-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .bb-cap-sessions {
@@ -5547,14 +5673,8 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   margin: 0;
 }
 
-.bb-ask-shot img {
+.bb-ask-shot .bb-lightbox-thumb {
   display: block;
-  width: 5.5rem;
-  height: 3.6rem;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
 }
 
 .bb-ask-shot button {

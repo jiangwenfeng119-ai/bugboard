@@ -7,6 +7,7 @@ import type { Priority } from "@/lib/types";
 import { filesFromClipboard, pickAskPictures } from "@/lib/ask-paste";
 import { joinAskSpeech, speechSupported, startLiveSpeech } from "@/components/live-speech";
 import type { PendingFile } from "@/components/AttachmentComposer";
+import { ImageLightbox } from "@/components/ImageLightbox";
 
 function askForm(input: {
   question: string;
@@ -362,7 +363,11 @@ export function AskBeforeReport({
           <ul className="bb-ask-shots">
             {pasted.map((item, index) => (
               <li key={item.id} className="bb-ask-shot">
-                <img src={item.previewUrl} alt={`已贴上的截图 ${index + 1}`} />
+                <ImageLightbox
+                  src={item.previewUrl}
+                  alt={`已贴上的截图 ${index + 1}`}
+                  className="bb-ask-shot-img"
+                />
                 <button type="button" onClick={() => removePasted(item.id)}>
                   去掉
                 </button>

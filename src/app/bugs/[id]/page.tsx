@@ -27,6 +27,7 @@ import { BugActions } from "./BugActions";
 import { bugPageActions } from "./bug-page-actions";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
 import { Prose } from "@/components/Prose";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { bugListQueryFromUnknown } from "@/lib/bug-list-query";
 import { absoluteAttachmentPath } from "@/lib/uploads";
 import { extractDocx } from "../../../../mcp/docx";
@@ -111,9 +112,7 @@ function AttachmentItem({
   return (
     <li>
       {kind === "image" ? (
-        // 附件地址由本系统签发。
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <ImageLightbox
           className="bb-evidence-img"
           src={href}
           alt={hashedName(file.filename) ? label : file.filename}
