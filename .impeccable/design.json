@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-16T04:41:25Z",
+  "generatedAt": "2026-11-25T19:19:41Z",
   "title": "Design System: Bugboard",
   "extensions": {
     "colorMeta": {
@@ -336,6 +336,14 @@
       "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; font-family: var(--font); } .ds-chip { font-size: 0.75rem; font-weight: 400; padding: 0.2rem 0.55rem; border-radius: 999px; color: var(--ink-muted); background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; text-decoration: none; } .ds-chip-quiet { cursor: default; opacity: 0.85; } .ds-chip-hot { color: var(--status-pending); background: color-mix(in srgb, var(--status-pending) 12%, white); border-color: color-mix(in srgb, var(--status-pending) 22%, white); } .ds-chip-hot:hover { filter: brightness(0.98); } .ds-chip-hot:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }"
     },
     {
+      "name": "Materials Well",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "One「材料」well under the title. All six capture actions stay visible; 走查 leaves the page.",
+      "html": "<section class=\"ds-materials\"><div class=\"ds-label\">材料</div><div class=\"ds-well\"><p class=\"ds-lead\">在标题、描述或这里直接粘贴图片，也可以拖进来。</p><div class=\"ds-cap-row\"><button type=\"button\" class=\"ds-cap-btn\">圈一张图</button><button type=\"button\" class=\"ds-cap-btn\">拍照</button><button type=\"button\" class=\"ds-cap-btn\">添加文件</button><button type=\"button\" class=\"ds-cap-btn\">共享画面</button><button type=\"button\" class=\"ds-cap-btn\">说一句</button><button type=\"button\" class=\"ds-cap-btn\">录一段走查</button></div><p class=\"ds-hint\">圈图和口述会写进这张单。走查会离开本页，先整理草稿再提交。</p></div></section>",
+      "css": ".ds-materials { font-family: var(--font); } .ds-label { display: block; font-size: 0.875rem; color: var(--ink-muted); margin-bottom: 0.35rem; } .ds-well { border: 1.5px dashed color-mix(in srgb, var(--line) 70%, var(--accent)); border-radius: 12px; padding: 0.7rem 0.85rem; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, white), var(--surface-2)); text-align: left; } .ds-lead { margin: 0; font-size: 0.875rem; line-height: 1.6; color: var(--ink); } .ds-cap-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.55rem; } .ds-cap-btn { display: inline-flex; align-items: center; font-family: inherit; font-size: 0.875rem; border: 1px solid transparent; border-radius: 10px; padding: 0.5rem 0.95rem; background: transparent; color: var(--ink-muted); cursor: pointer; box-shadow: none; } .ds-cap-btn:hover { background: var(--surface-2); color: var(--ink); } .ds-cap-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; } .ds-hint { margin: 0.4rem 0 0; color: var(--ink-muted); font-size: 0.75rem; line-height: 1.6; }"
+    },
+    {
       "name": "Topbar Nav",
       "kind": "nav",
       "refersTo": null,
@@ -362,7 +370,7 @@
       },
       {
         "name": "The Quiet Zero Rule",
-        "body": "Project attention chips render only when count > 0; otherwise a quiet「暂无待办」chip. Summary tiles hide zero counts unless showAll=1.",
+        "body": "Project attention chips render only when `count > 0`; otherwise a quiet「暂无待办」chip. Summary tiles hide zero counts unless `showAll=1`.",
         "section": "colors"
       },
       {
@@ -377,23 +385,30 @@
       },
       {
         "name": "The No-Overshoot Rule",
-        "body": "--ease-spring equals --ease-out (cubic-bezier(0.16, 1, 0.3, 1)). Entrance animations ease out; they do not bounce past the end state. Honor prefers-reduced-motion.",
+        "body": "`--ease-spring` equals `--ease-out` (`cubic-bezier(0.16, 1, 0.3, 1)`). Entrance animations ease out; they do not bounce past the end state. Honor `prefers-reduced-motion`.",
         "section": "elevation"
+      },
+      {
+        "name": "The Dialog Rule",
+        "body": "A clicked list row and an edit form open in a centered dialog. The list stays put. Admin and user-facing pages both follow this. New pages use it. Creating a bug stays in the right sheet.",
+        "section": "components"
       }
     ],
     "dos": [
       "Do keep Chinese status names and one primary next action visible within ~10 seconds of opening a bug or project.",
-      "Do use --status-* / --priority-* tokens for badges, chips, and chart series only.",
-      "Do hide zero summary tiles unless the operator opts into showAll=1.",
+      "Do use `--status-*` / `--priority-*` tokens for badges, chips, and chart series only.",
+      "Do hide zero summary tiles unless the operator opts into `showAll=1`.",
       "Do disable「立即发布」when the release queue is empty; keep「标记已发布」available as the ledger note path.",
-      "Do match motion to --ease-out / --ease-spring (identical curves) and respect reduced motion."
+      "Do match motion to `--ease-out` / `--ease-spring` (identical curves) and respect reduced motion.",
+      "Do open a clicked list row and an edit form in a centered dialog, on admin pages and on the user-facing pages. The list stays put."
     ],
     "donts": [
       "Don't introduce purple SaaS gradients, neon/cyber terminal skins, or a second display typeface.",
       "Don't invent decorative color blocks that do not map to a status, priority, or chart series.",
       "Don't lift cards on hover or add spring overshoot to entrances.",
       "Don't show a stack of equal-weight bug actions — one primary, danger last.",
-      "Don't rely on color alone for status; badge and chip copy stays required."
+      "Don't rely on color alone for status; badge and chip copy stays required.",
+      "Don't append a clicked record or an edit form above or below the list on the same page."
     ]
   }
 }

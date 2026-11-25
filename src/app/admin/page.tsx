@@ -4,7 +4,13 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DispatchAdmin } from "@/components/AgentDispatch";
 import { IconBell, IconChart, IconKey, IconMessage, IconPencil, IconUsers, IconWrench } from "@/components/Icons";
-import { listAskAdminRecords, listAskOptimizations, readAskAdminRecord, readAskOptimization } from "@/lib/ask-optimize";
+import {
+  askOptimizeQueue,
+  listAskAdminRecords,
+  listAskOptimizations,
+  readAskAdminRecord,
+  readAskOptimization,
+} from "@/lib/ask-optimize";
 import { getBehaviorSettings, listBehaviorOverviews } from "@/lib/behavior";
 import { dispatchRuntimeStatus, getDispatchSettings, listDispatchOverviews } from "@/lib/dispatch";
 import { requireAdminUser } from "@/lib/session-guard";
@@ -133,9 +139,10 @@ export default async function AdminPage({
       {tab === "asks" ? (
         <AsksAdmin
           runs={listAskAdminRecords(identity).map((run) => ({ ...run, answer: "", error: "" }))}
-          selected={readAskAdminRecord(identity, Number(sp.run) || 0)}
+          selected={sp.opt ? null : readAskAdminRecord(identity, Number(sp.run) || 0)}
           optimizations={listAskOptimizations(identity)}
-          selectedOptimization={readAskOptimization(identity, Number(sp.opt) || 0)}
+          selectedOptimization={sp.opt ? readAskOptimization(identity, Number(sp.opt) || 0) : null}
+          queue={askOptimizeQueue(identity)}
         />
       ) : null}
 

@@ -102,4 +102,47 @@ describe("ask optimizations", () => {
     expect(acceptOptimizeCallback(back, `sha256=${sign("whsec_test", back)}`)).toMatchObject({ status: "reverted" });
     expect(() => acceptOptimizeCallback(done, "sha256=nope")).toThrow(/签名不对/);
   });
+
+  it("submits every unfinished answer in one pass and skips ones already optimized", async () => {
+    const projectId = await seed();
+    const { getDb } = await import("../src/lib/db");
+    const { setOptimizeFetchForTests, submitAskOptimization, submitOpenAskOptimizations, acceptOptimizeCallback } =
+      await import("../src/lib/ask-optimize");
+    const db = getDb();
+    const now = "2026-11-26T02:00:00.000Z";
+    const first = (db.prepare("SELECT id FROM ask_runs").get() as { id: number }).id;
+    db.prepare(
+      `INSERT INTO ask_runs
+         (project_id, actor_type, actor_id, thread_id, question, question_norm, status, judgment, answer, created_at, updated_at)
+       VALUES (?, 'user', 1, 'threadask02', '乙要不要报障', '乙要不要报障', 'done', 'exists', '现在可以。判断：已经有了', ?, ?)`
+    ).run(projectId, now, now);
+    db.prepare(
+      `INSERT INTO ask_runs
+         (project_id, actor_type, actor_id, thread_id, question, question_norm, status, judgment, answer, created_at, updated_at)
+       VALUES (?, 'user', 1, 'threadask03', '丙还在问', '丙还在问', 'streaming', '', '', ?, ?)`
+    ).run(projectId, now, now);
+    const sent: { prompt?: string }[] = [];
+    setOptimizeFetchForTests(async (_url, init) => {
+      sent.push(JSON.parse(String(init.body)));
+      return new Response("{}", { status: 202 });
+    });
+    const firstOpt = await submitAskOptimization(admin, first, "http://127.0.0.1:3080/api/ask/optimizations/callback");
+    const done = JSON.stringify({
+      optimizationId: firstOpt.id,
+      kind: "done",
+      diff: "",
+      detail: "不用改",
+    });
+    acceptOptimizeCallback(done, `sha256=${sign("whsec_test", done)}`);
+    const batch = await submitOpenAskOptimizations(admin, "http://127.0.0.1:3080/api/ask/optimizations/callback");
+    expect(batch.status).toBe("sent");
+    expect(batch.prompt).toContain("乙要不要报障");
+    expect(batch.prompt).toContain("逐条检查");
+    expect(batch.prompt).not.toContain("看看现在系统能做到吗");
+    expect(batch.prompt).not.toContain("丙还在问");
+    expect(sent.at(-1)?.prompt).toContain("乙要不要报障");
+    await expect(
+      submitOpenAskOptimizations(admin, "http://127.0.0.1:3080/api/ask/optimizations/callback")
+    ).rejects.toThrow(/进行中/);
+  });
 });

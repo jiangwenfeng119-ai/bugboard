@@ -5834,7 +5834,16 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   font-size: 0.8125rem;
 }
 
-.bb-ask-admin .bb-ask-record,
+.bb-ask-dialog {
+  width: min(40rem, 100%);
+  height: auto;
+}
+
+.bb-ask-dialog .bb-sheet-body {
+  flex: 0 1 auto;
+}
+
+.bb-ask-record,
 .bb-ask-diff {
   white-space: pre-wrap;
   margin: 0.4rem 0 1rem;
@@ -5856,9 +5865,18 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   margin-top: 0.8rem;
 }
 
+.bb-ask-dialog h3,
 .bb-ask-admin h3 {
   margin: 0.8rem 0 0.3rem;
   font-size: 0.95rem;
+}
+
+.bb-ask-admin .bb-section-head {
+  flex-wrap: wrap;
+}
+
+.bb-ask-admin .bb-section-head > h2 {
+  margin-bottom: 0;
 }
 
 .bb-ask-admin .bb-table td:last-child {
@@ -5866,6 +5884,27 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bb-ask-pick {
+  cursor: pointer;
+}
+
+.bb-ask-pick.is-current td {
+  background: color-mix(in srgb, var(--accent) 8%, white);
+}
+
+.bb-ask-pick:focus-visible td {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+.bb-modal-card.is-compact {
+  width: min(28rem, 100%);
+}
+
+.bb-modal-card .bb-ask-diff {
+  max-height: none;
+  margin-bottom: 0;
 }
 
 @media (max-width: 640px) {

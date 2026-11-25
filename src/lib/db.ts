@@ -334,6 +334,16 @@ function ensureAsk(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_ask_opt_run ON ask_optimizations(ask_run_id, id);
 
+    CREATE TABLE IF NOT EXISTS ask_optimization_runs (
+      optimization_id INTEGER NOT NULL,
+      ask_run_id INTEGER NOT NULL,
+      PRIMARY KEY (optimization_id, ask_run_id),
+      FOREIGN KEY (optimization_id) REFERENCES ask_optimizations(id) ON DELETE CASCADE,
+      FOREIGN KEY (ask_run_id) REFERENCES ask_runs(id) ON DELETE CASCADE
+    );
+    INSERT OR IGNORE INTO ask_optimization_runs (optimization_id, ask_run_id)
+    SELECT id, ask_run_id FROM ask_optimizations;
+
     CREATE TABLE IF NOT EXISTS ask_maps (
       project_id INTEGER PRIMARY KEY,
       body TEXT NOT NULL DEFAULT '',

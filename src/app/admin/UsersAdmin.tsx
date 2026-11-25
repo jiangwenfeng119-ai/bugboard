@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { IconMinus } from "@/components/Icons";
 import { isSuperAdminRole, roleLabel } from "@/lib/roles";
@@ -27,7 +28,7 @@ export function UsersAdmin({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"user" | "admin" | "superadmin">("user");
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<User | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -35,51 +36,12 @@ export function UsersAdmin({
     setUsername("");
     setPassword("");
     setRole("user");
-    setEditingId(null);
-  }
-
-  function startEdit(u: User) {
-    setEditingId(u.id);
-    setUsername(u.username);
-    setPassword("");
-    setRole(
-      u.role === "superadmin"
-        ? "superadmin"
-        : u.role === "admin"
-          ? "admin"
-          : "user"
-    );
-    setError("");
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
-
-    if (editingId !== null) {
-      const body: { username: string; role: string; password?: string } = {
-        username,
-        role,
-      };
-      if (password) body.password = password;
-
-      const res = await fetch(`/api/users/${editingId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      setLoading(false);
-      if (!res.ok) {
-        setError(data.error || "更新失败");
-        return;
-      }
-      resetForm();
-      router.refresh();
-      return;
-    }
-
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,7 +81,7 @@ export function UsersAdmin({
       setError(data.error || "删除失败");
       return;
     }
-    if (editingId === u.id) resetForm();
+    if (editing?.id === u.id) setEditing(null);
     router.refresh();
   }
 
@@ -136,11 +98,11 @@ export function UsersAdmin({
         <input
           className="bb-input"
           type="password"
-          placeholder={editingId !== null ? "新密码（留空不改）" : "密码"}
+          placeholder="密码"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          minLength={editingId !== null ? undefined : 6}
-          required={editingId === null}
+          minLength={6}
+          required
         />
         <select
           className="bb-select"
@@ -158,18 +120,8 @@ export function UsersAdmin({
           ) : null}
         </select>
         <button className="bb-btn" type="submit" disabled={loading}>
-          {editingId !== null ? "保存" : "创建"}
+          创建
         </button>
-        {editingId !== null ? (
-          <button
-            className="bb-btn bb-btn-secondary"
-            type="button"
-            onClick={resetForm}
-            disabled={loading}
-          >
-            取消
-          </button>
-        ) : null}
       </form>
       {error ? <p className="bb-error">{error}</p> : null}
       <div className="bb-table-wrap">
@@ -196,7 +148,7 @@ export function UsersAdmin({
                 <button
                   type="button"
                   className="bb-btn bb-btn-secondary"
-                  onClick={() => startEdit(u)}
+                  onClick={() => setEditing(u)}
                   disabled={locked}
                   aria-label={`编辑 ${u.username}`}
                   title={locked ? "只有超级管理员可以修改超级管理员" : undefined}
@@ -243,6 +195,146 @@ export function UsersAdmin({
         </tbody>
       </table>
       </div>
+      {editing ? (
+        <UserEditDialog
+          user={editing}
+          canAppointSuperAdmin={canAppointSuperAdmin}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function UserEditDialog({
+  user,
+  canAppointSuperAdmin,
+  onClose,
+  onSaved,
+}: {
+  user: User;
+  canAppointSuperAdmin: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const titleId = useId();
+  const [mounted, setMounted] = useState(false);
+  const [username, setUsername] = useState(user.username);
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"user" | "admin" | "superadmin">(
+    user.role === "superadmin" ? "superadmin" : user.role === "admin" ? "admin" : "user"
+  );
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.body.classList.add("bb-modal-open");
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.classList.remove("bb-modal-open");
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mounted, loading, onClose]);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const body: { username: string; role: string; password?: string } = { username, role };
+    if (password) body.password = password;
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok) {
+      setError(data.error || "更新失败");
+      return;
+    }
+    onSaved();
+  }
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="bb-modal" role="presentation">
+      <button type="button" className="bb-modal-backdrop" aria-label="关闭编辑" onClick={() => (loading ? undefined : onClose())} />
+      <div className="bb-modal-card is-compact" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <div className="bb-sheet-head">
+          <h2 id={titleId}>编辑用户</h2>
+          <button type="button" className="bb-btn bb-btn-ghost" onClick={onClose} disabled={loading}>
+            关闭
+          </button>
+        </div>
+        <form className="bb-sheet-body" onSubmit={onSubmit}>
+          <div className="bb-field">
+            <label className="bb-label" htmlFor="bb-user-edit-name">
+              用户名
+            </label>
+            <input
+              id="bb-user-edit-name"
+              className="bb-input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div className="bb-field">
+            <label className="bb-label" htmlFor="bb-user-edit-password">
+              新密码
+            </label>
+            <input
+              id="bb-user-edit-password"
+              className="bb-input"
+              type="password"
+              placeholder="留空不改"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="bb-field">
+            <label className="bb-label" htmlFor="bb-user-edit-role">
+              角色
+            </label>
+            <select
+              id="bb-user-edit-role"
+              className="bb-select"
+              value={role}
+              onChange={(e) => setRole(e.target.value as "user" | "admin" | "superadmin")}
+            >
+              <option value="user">用户</option>
+              <option value="admin">管理员</option>
+              {canAppointSuperAdmin ? <option value="superadmin">超级管理员</option> : null}
+            </select>
+          </div>
+          {error ? <p className="bb-error">{error}</p> : null}
+          <div className="bb-sheet-foot">
+            <button className="bb-btn bb-btn-ghost" type="button" onClick={onClose} disabled={loading}>
+              取消
+            </button>
+            <button className="bb-btn" type="submit" disabled={loading}>
+              {loading ? "保存中…" : "保存"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
   );
 }
