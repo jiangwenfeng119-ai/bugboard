@@ -605,4 +605,24 @@ describe("ask protocol", () => {
     expect(brief).toContain("还有图片没能带上");
     expect(fallbackAskAnswer("页面「考勤打卡」\n判断：已经有了")).toContain("代码对照没有在时限内完成。");
   });
+
+  it("answers behavior questions instead of only drafting a bug report", () => {
+    const question = "如果0成本商品进行调拨是不是不会成功";
+    expect(chooseAskPath({ question })).toBe("deep");
+    const table = draftAskAnswer({
+      question,
+      hits: [],
+      excerpts: "界面「调拨」",
+    });
+    expect(table).toContain("调拨");
+    expect(table).toContain("判断：没有把握");
+    expect(table).not.toContain("这需要报障");
+    expect(table).not.toMatch(/判断：建议报障\s*$/);
+    const timedOut = fallbackAskAnswer(
+      "这需要报障。请写清：在调拨做了什么、实际怎样。\n应用里能看到「调拨」\n判断：建议报障",
+    );
+    expect(timedOut).toContain("代码对照没有在时限内完成。");
+    expect(timedOut).toContain("判断：没有把握");
+    expect(timedOut).not.toMatch(/判断：建议报障\s*$/);
+  });
 });

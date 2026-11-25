@@ -393,7 +393,65 @@ describe("ask runner", () => {
     expect(result).toMatchObject({ fallback: true });
     const done = events.find((event) => event.kind === "done");
     expect(done?.text).toContain("代码对照没有在时限内完成。");
+    expect(done?.text).toContain("判断：没有把握");
     expect(events.some((event) => event.kind === "reverted")).toBe(false);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("keeps a partial mirror answer when the deep check times out", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ask-root-"));
+    const events: { kind?: string; text?: string }[] = [];
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => child.emit("close", 0);
+    const git = (_cwd: string, cmd: string[]) => {
+      if (cmd[0] === "rev-parse" && cmd[1] === "HEAD") return gitOk("abc1234\n");
+      return gitOk();
+    };
+    const result = await executeAsk(
+      {
+        askRoot: root,
+        bugboardUrl: "http://127.0.0.1:3080",
+        secrets: ["whsec_test"],
+        callbackSecret: "whsec_test",
+      },
+      {
+        runId: 24,
+        callbackUrl: "http://127.0.0.1:3080/api/ask/callback",
+        prompt: "<question>\n如果0成本商品进行调拨是不是不会成功\n</question>",
+        project: { code: "EMH", githubUrl: "https://github.com/acme/emh", defaultBranch: "release/1.0" },
+      },
+      {
+        agentTimeoutMs: 80,
+        git,
+        post: async (_url: string, body: string) => {
+          events.push(JSON.parse(body));
+          return { status: 200, json: { skip: false } };
+        },
+        spawnAgent: () => {
+          setImmediate(() => {
+            child.stdout.emit(
+              "data",
+              `${JSON.stringify({
+                type: "result",
+                result: "现在可以这样做：\n调拨允许 0 成本商品\n判断：已经有了",
+              })}\n`,
+            );
+          });
+          return child;
+        },
+      },
+    );
+    expect(result).toMatchObject({ fallback: true });
+    const done = events.find((event) => event.kind === "done");
+    expect(done?.text).toContain("判断：已经有了");
+    expect(done?.text).toContain("调拨允许 0 成本商品");
+    expect(done?.text).not.toContain("代码对照没有在时限内完成。");
     fs.rmSync(root, { recursive: true, force: true });
   });
 

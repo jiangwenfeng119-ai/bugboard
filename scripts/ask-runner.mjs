@@ -540,7 +540,7 @@ export async function executeAsk(config, payload, deps = {}) {
       if (parsed.sessionId) sessionId = parsed.sessionId;
       if (parsed.kind === "result" && parsed.text) answer = parsed.text;
       return "";
-    }, deps.agentTimeoutMs || (mode === "deep" ? 90_000 : 4 * 60 * 1000));
+    }, deps.agentTimeoutMs || (mode === "deep" ? 3 * 60 * 1000 : 4 * 60 * 1000));
     if (flushTimer) clearTimeout(flushTimer);
     await flush();
     if (wrote) {
@@ -561,9 +561,11 @@ export async function executeAsk(config, payload, deps = {}) {
           git
         );
       }
-      const text = withFilingAdvice(question, fallbackAskAnswer(tableAnswer));
+      const partial = String(answer || "").trim();
+      const usablePartial = /判断[:：]\s*(已经有了|建议报障|没有把握)\s*$/m.test(partial);
+      const text = withFilingAdvice(question, usablePartial ? partial : fallbackAskAnswer(tableAnswer));
       await send({ kind: "delta", text, mirrorSha: synced.sha });
-      await send({ kind: "done", text, sessionId: "", mirrorSha: synced.sha });
+      await send({ kind: "done", text, sessionId: usablePartial ? sessionId : "", mirrorSha: synced.sha });
       return { sha: synced.sha, fallback: true };
     }
     if (finished.aborted) {

@@ -277,11 +277,18 @@ export function looksLikeDefect(question) {
   return DEFECT.test(String(question || ""));
 }
 
+export function asksBehaviorConfirm(question) {
+  const text = String(question || "");
+  if (looksLikeDefect(text)) return false;
+  return /是不是|会不会|是否会|会成功吗|会失败吗|能不能成功|可不可以|行不行/.test(text);
+}
+
 export function chooseAskPath({ question, imageCount = 0, tableAnswer = "" }) {
   const text = String(question || "");
   if (Number(imageCount) > 0) return "deep";
   if (/对照代码|对应代码/.test(text)) return "deep";
   if (looksLikeDefect(text)) return "deep";
+  if (asksBehaviorConfirm(text)) return "deep";
   if (asksExistence(text)) return clearExistenceAnswer(tableAnswer) ? "table" : "deep";
   if (/应该[\s\S]{0,40}(却|但是|但)/.test(text)) return "deep";
   return "table";
@@ -310,6 +317,12 @@ export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted
       "这是在问某个功能或选项有没有。先正面回答有还是没有。",
       focus ? `重点核对：${focus}` : "重点核对用户问的那个功能或选项。",
       "有就写「现在可以这样做：」并说明入口；没有就写「现在没有。这是新功能。」不要改成「这需要报障。请写清做了什么」。",
+    );
+  }
+  if (asksBehaviorConfirm(question)) {
+    lines.push(
+      "这是在问现在系统会怎样，不是在写报障草稿。先正面回答会不会、能不能，或写清现在的做法。",
+      "查到规则就直接告诉他；查不到再判断：没有把握。不要只生成报障标题和描述。",
     );
   }
   const guide = askReplyGuide();
@@ -421,9 +434,14 @@ export function withFilingAdvice(question, answer) {
 
 export function fallbackAskAnswer(tableAnswer) {
   const note = "代码对照没有在时限内完成。";
-  const base = String(tableAnswer || "").trim();
+  let base = String(tableAnswer || "").trim();
   if (!base) return `${note}\n判断：没有把握`;
   if (base.includes(note)) return base;
+  if (/这需要报障/.test(base) && /判断：建议报障\s*$/m.test(base)) {
+    base = base
+      .replace(/^这需要报障[^\n]*/m, "还确认不了。对照代码没有完成，不能下结论。")
+      .replace(/判断：建议报障\s*$/m, "判断：没有把握");
+  }
   const lines = base.split("\n");
   const last = lines[lines.length - 1] || "";
   if (/^判断：/.test(last)) {
@@ -826,6 +844,19 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap }) 
     if (asksForNew) {
       return [newFeatureAnswer(question, place), ...spokenLines, "判断：建议报障"].join("\n");
     }
+    if (asksBehaviorConfirm(question)) {
+      if (place || spokenLines.length) {
+        return [
+          place ? `应用里能看到「${place}」。` : spokenLines[0],
+          ...spokenLines.filter((line) => !place || !line.includes(`「${place}」`)),
+          "还确认不了会不会按你说的那样。请补充实际结果，或再问一次让我对照代码。",
+          "判断：没有把握",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      }
+      return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
+    }
     const hint = place
       ? `这需要报障。请写清：在${place}做了什么、实际怎样。`
       : "这需要报障。请写清：哪个页面、做了什么、实际怎样。";
@@ -916,6 +947,9 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap }) 
   if (said && !(whereAsked && !looksLikeDefect(question))) return finish([`你说的是「${said}」。`]);
   if (!whereAsked && /增加|新增|加一个|新功能|功能扩展|应做|应该有|希望能|希望增加|希望有|能否|可以吗/.test(question)) {
     return `${newFeatureAnswer(question, "")}\n判断：建议报障`;
+  }
+  if (asksBehaviorConfirm(question)) {
+    return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
   }
   if (looksLikeDefect(question)) return "这需要报障。请写清：哪个页面、做了什么、实际怎样。\n判断：建议报障";
   if (sources.length && whereAsked) return `文档里提到这件事，但没有写清在应用的哪个菜单或页面进入。\n判断：没有把握`;
