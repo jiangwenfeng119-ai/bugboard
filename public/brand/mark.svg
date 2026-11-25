@@ -20,7 +20,8 @@
   <rect x="28" y="21.5" width="14" height="2.4" rx="1.2" fill="#1D4ED8" fill-opacity=".85"/>
   <rect x="28" y="29.5" width="11.5" height="2.4" rx="1.2" fill="#1D4ED8" fill-opacity=".55"/>
   <rect x="28" y="37.5" width="9" height="2.4" rx="1.2" fill="#1D4ED8" fill-opacity=".4"/>
-  <!-- action badge -->
-  <circle cx="46.5" cy="45.5" r="9.5" fill="#0B3D91"/>
-  <path d="M42.2 45.5h8.6M46.5 41.2v8.6" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- action badge：加号略加粗，小尺寸标签图仍能看清 -->
+  <circle cx="46.5" cy="45.5" r="10" fill="#0B3D91"/>
+  <circle cx="46.5" cy="45.5" r="10" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="1.2"/>
+  <path d="M41.6 45.5h9.8M46.5 40.6v9.8" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round"/>
 </svg>
