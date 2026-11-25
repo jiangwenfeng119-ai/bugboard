@@ -71,7 +71,7 @@ cp .cursor/mcp.json.example .cursor/mcp.json
 | `list_captures` / `get_capture` / `update_capture_drafts` / `replace_capture_drafts` | ✓ | ✓ |
 | `confirm_fix` | 仅自己提的单 | 自己提的单；API Key 提交且待确认的单也可以 |
 | `reject_fix` / `dispute_invalid` / `accept_invalid` / `provide_info` | 仅自己提的单 | 仅自己提的单 |
-| `add_supplement` | 仅自己提的、且仍是待处理 | 任意时候 |
+| `add_supplement` | 仅自己提的，且是待处理或待产品经理确认 | 任意时候 |
 | `start_fix` / `submit_fix` / `withdraw_fix` | | ✓ |
 | `mark_invalid` / `request_product` / `decline_product` / `accept_product` / `request_info` / `reopen_invalid` | | ✓ |
 | `record_change` / `list_pending_release` / `run_release` / `mark_released` | | ✓ |

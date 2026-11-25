@@ -10,7 +10,7 @@
  * 不带 --force / --yolo。要在项目目录里自动改文件，配置 applyEdits: true。
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import fs from "node:fs";
 import os from "node:os";
@@ -437,6 +437,36 @@ export function createWakeServer(config) {
       });
       return;
     }
+    if (payload.event === "ask.needs_optimize" || payload.event === "ask.optimize_revert") {
+      const callbackUrl = String(payload.callbackUrl || "");
+      if (!callbackAllowed(callbackUrl, config.bugboardUrl || "")) {
+        send(res, 400, { error: "回调地址无效" });
+        return;
+      }
+      let cwd;
+      try {
+        cwd = typeof config.optimizeWorkdir === "function" ? config.optimizeWorkdir() : optimizeWorkdir();
+      } catch (error) {
+        send(res, 500, { error: error instanceof Error ? error.message : "找不到问答规则" });
+        return;
+      }
+      const prompt = String(payload.prompt || "");
+      if (payload.event === "ask.needs_optimize" && !prompt.trim()) {
+        send(res, 400, { error: "缺少 prompt" });
+        return;
+      }
+      if (prompt.length > MAX_PROMPT_CHARS) {
+        send(res, 413, { error: "提示词过长" });
+        return;
+      }
+      const callbackSecret = matchedSecret(config.secrets, raw, req.headers["x-bugboard-signature"]);
+      send(res, 202, { ok: true, spawned: true });
+      const run = config.executeOptimize || executeOptimize;
+      void Promise.resolve(run({ ...config, callbackSecret }, payload, cwd)).catch((error) => {
+        console.error(error instanceof Error ? error.message : error);
+      });
+      return;
+    }
     if (payload.event !== "bug.needs_agent" && payload.event !== "capture.needs_organize") {
       send(res, 400, { error: "不认识的事件" });
       return;
@@ -537,6 +567,159 @@ export function createWakeServer(config) {
     }
     send(res, 500, { error: lastError });
   });
+}
+
+export const OPTIMIZE_PATHS = [
+  ".cursor/skills/ask-before-report/SKILL.md",
+  "src/lib/ask-core.ts",
+  "scripts/ask-protocol.mjs",
+];
+
+export function optimizeWorkdir(moduleUrl = import.meta.url) {
+  const root = path.resolve(path.dirname(fileURLToPath(moduleUrl)), "..");
+  const skill = path.join(root, ".cursor/skills/ask-before-report/SKILL.md");
+  const protocol = path.join(root, "scripts/ask-protocol.mjs");
+  if (!fs.existsSync(skill) || !fs.existsSync(protocol)) {
+    throw new Error("这台代码机上找不到问答规则，不能优化");
+  }
+  return fs.realpathSync(root);
+}
+
+export function interpretOptimizeGit({ id, exitCode, subject, sha, worktreeDiff }) {
+  const wanted = `ask-optimize #${id}`;
+  const committed = String(subject || "").startsWith(wanted) && /^[0-9a-f]{7,40}$/.test(String(sha || ""));
+  const diff = String(worktreeDiff || "").trim().slice(0, 180000);
+  if (exitCode && !diff && !committed) {
+    return { kind: "failed", diff: "", commitSha: "", revertSha: "", detail: `处理 Agent 退出码 ${exitCode}` };
+  }
+  if (!diff) {
+    return {
+      kind: "done",
+      diff: "",
+      commitSha: committed ? sha : "",
+      revertSha: "",
+      detail: "处理结束，问答规则这几处没有改动",
+    };
+  }
+  const note = committed ? `已提交 ${String(sha).slice(0, 7)}` : "改动还在工作区，尚未形成这次优化的提交";
+  const extra = exitCode ? `。进程退出码 ${exitCode}` : "";
+  return { kind: "done", diff, commitSha: committed ? sha : "", revertSha: "", detail: `${note}${extra}` };
+}
+
+export function revertGitArgs(commitSha) {
+  if (!/^[0-9a-f]{7,40}$/.test(String(commitSha || ""))) return null;
+  return ["revert", "--no-edit", String(commitSha)];
+}
+
+function gitText(cwd, args, input) {
+  const result = spawnSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    input,
+    timeout: 20000,
+  });
+  return { code: result.status ?? 1, text: `${result.stdout || ""}${result.stderr || ""}` };
+}
+
+export function readOptimizeOutcome(cwd, id, exitCode) {
+  const log = gitText(cwd, ["log", "-1", "--format=%H%n%s"]);
+  if (log.code !== 0) {
+    return { kind: "failed", diff: "", commitSha: "", revertSha: "", detail: "这台代码机上的问答目录不是 git 仓库" };
+  }
+  const [sha = "", subject = ""] = log.text.split("\n");
+  const wanted = subject.trim().startsWith(`ask-optimize #${id}`);
+  const shown = wanted
+    ? gitText(cwd, ["show", "--format=", "HEAD", "--", ...OPTIMIZE_PATHS])
+    : gitText(cwd, ["diff", "HEAD", "--", ...OPTIMIZE_PATHS]);
+  return interpretOptimizeGit({
+    id,
+    exitCode,
+    subject: subject.trim(),
+    sha: sha.trim(),
+    worktreeDiff: shown.text,
+  });
+}
+
+function runToExit(command, args, cwd) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd, stdio: "ignore" });
+    child.once("error", () => resolve(1));
+    child.once("exit", (code) => resolve(code ?? 1));
+  });
+}
+
+async function postOptimize(url, secret, body) {
+  const raw = JSON.stringify(body);
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Bugboard-Signature": `sha256=${sign(secret, raw)}`,
+    },
+    body: raw,
+  });
+}
+
+export async function executeOptimize(config, payload, cwd) {
+  const id = Number(payload.optimizationId);
+  const secret = config.callbackSecret || "";
+  const callbackUrl = String(payload.callbackUrl || "");
+  let outcome;
+  if (payload.event === "ask.optimize_revert") {
+    const sha = String(payload.commitSha || "");
+    const args = revertGitArgs(sha);
+    if (args) {
+      const reverted = gitText(cwd, args);
+      if (reverted.code !== 0) {
+        outcome = {
+          kind: "failed",
+          diff: String(payload.diff || ""),
+          commitSha: sha,
+          revertSha: "",
+          detail: reverted.text.trim().slice(0, 300) || "回滚提交失败",
+        };
+      } else {
+        const head = gitText(cwd, ["rev-parse", "HEAD"]);
+        outcome = {
+          kind: "reverted",
+          diff: String(payload.diff || ""),
+          commitSha: sha,
+          revertSha: head.text.trim(),
+          detail: "已撤回这次提交",
+        };
+      }
+    } else if (String(payload.diff || "").trim()) {
+      const applied = gitText(cwd, ["apply", "--reverse", "--whitespace=nowarn", "-"], String(payload.diff));
+      outcome = applied.code
+        ? {
+            kind: "failed",
+            diff: String(payload.diff),
+            commitSha: "",
+            revertSha: "",
+            detail: applied.text.trim().slice(0, 300) || "补丁无法反向应用",
+          }
+        : {
+            kind: "reverted",
+            diff: String(payload.diff),
+            commitSha: "",
+            revertSha: "",
+            detail: "已按记下的差异回滚",
+          };
+    } else {
+      outcome = { kind: "failed", diff: "", commitSha: "", revertSha: "", detail: "没有可回滚的改动" };
+    }
+  } else {
+    const prompt = String(payload.prompt || "");
+    const args = buildLaunchArgv({
+      agent: config.agent === "zcode" ? "zcode" : "cursor",
+      argv: null,
+      applyEdits: true,
+      vars: { prompt, cwd, bugId: String(id), publicId: "", projectCode: "ASK", session: "" },
+      sessionId: "",
+    });
+    const exitCode = await runToExit(args[0], args.slice(1), cwd);
+    outcome = readOptimizeOutcome(cwd, id, exitCode);
+  }
+  await postOptimize(callbackUrl, secret, { optimizationId: id, ...outcome });
 }
 
 export function spawnReleaseRunner() {

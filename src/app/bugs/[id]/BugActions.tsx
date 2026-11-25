@@ -6,6 +6,7 @@ import {
   AttachmentComposer,
   type PendingFile,
 } from "@/components/AttachmentComposer";
+import { Prose } from "@/components/Prose";
 import {
   ACTION_LABEL,
   type TransitionAction,
@@ -16,6 +17,7 @@ import {
   nextStepButtonClass,
   nextStepIdleCopy,
   primaryBugAction,
+  supplementNoteHint,
 } from "./bug-page-actions";
 import type { BugStatus, Priority } from "@/lib/types";
 
@@ -59,6 +61,8 @@ export function BugActions({
   canSupplement = false,
   isAdmin,
   currentPriority,
+  waitCopy = "",
+  retestNote = "",
 }: {
   bugId: number;
   status: BugStatus;
@@ -66,6 +70,8 @@ export function BugActions({
   canSupplement?: boolean;
   isAdmin: boolean;
   currentPriority: Priority;
+  waitCopy?: string;
+  retestNote?: string;
 }) {
   const router = useRouter();
   const [active, setActive] = useState<ActiveAction | null>(null);
@@ -174,11 +180,28 @@ export function BugActions({
     }
   }
 
+  const contextNotes = (
+    <>
+      {waitCopy ? <p className="bb-next-note">{waitCopy}</p> : null}
+      {status === "awaiting_confirm" && retestNote ? (
+        <div className="bb-next-note">
+          <p className="bb-label">重测说明</p>
+          <Prose text={retestNote} />
+        </div>
+      ) : null}
+    </>
+  );
+
   if (pageActions.length === 0 && !canSupplement && !isAdmin) {
     return (
-      <p className="bb-muted" style={{ margin: 0 }}>
-        {nextStepIdleCopy(status)}
-      </p>
+      <div>
+        {contextNotes}
+        {waitCopy ? null : (
+          <p className="bb-muted" style={{ margin: 0 }}>
+            {nextStepIdleCopy(status)}
+          </p>
+        )}
+      </div>
     );
   }
 
@@ -204,6 +227,7 @@ export function BugActions({
 
   return (
     <div>
+      {contextNotes}
       {pageActions.length > 0 || canSupplement ? (
         <div
           className="bb-bug-next-actions"
@@ -240,7 +264,7 @@ export function BugActions({
             </label>
             {active === "add_supplement" ? (
               <p className="bb-muted" style={{ margin: "0 0 0.35rem" }}>
-                写给处理人和 Agent：补清背景、期望或遗漏的细节。不改变状态，会出现在时间线里。
+                {supplementNoteHint(status)}
               </p>
             ) : NOTE_HINT[active] ? (
               <p className="bb-muted" style={{ margin: "0 0 0.35rem" }}>

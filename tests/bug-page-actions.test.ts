@@ -4,6 +4,9 @@ import {
   isDangerBugAction,
   nextStepButtonClass,
   primaryBugAction,
+  productWaitCopy,
+  retestNoteFromEvents,
+  supplementNoteHint,
 } from "../src/app/bugs/[id]/bug-page-actions";
 import { allowedActions } from "../src/lib/state-machine";
 import type { Identity } from "../src/lib/types";
@@ -70,5 +73,36 @@ describe("bug page actions", () => {
         primary,
       })
     ).toBe("bb-btn is-selected");
+  });
+
+  it("names who a needs-product bug is waiting on", () => {
+    expect(productWaitCopy("周产品")).toBe("等 周产品 点可以做或不做");
+    expect(productWaitCopy("  ")).toBe("等 产品经理 点可以做或不做");
+  });
+
+  it("prefers a real confirm note, otherwise the fix note", () => {
+    expect(
+      retestNoteFromEvents([
+        { to_status: "ready_to_release", note: "## 请这样重测\n1. 打开日志" },
+        { to_status: "awaiting_confirm", note: "已发到验收环境" },
+      ])
+    ).toBe("已发到验收环境");
+    expect(
+      retestNoteFromEvents([
+        { to_status: "ready_to_release", note: "## 请这样重测\n1. 打开日志" },
+        { to_status: "awaiting_confirm", note: "发布后待确认" },
+      ])
+    ).toBe("## 请这样重测\n1. 打开日志");
+    expect(retestNoteFromEvents([{ to_status: "pending", note: "创建报障" }])).toBe("");
+  });
+
+  it("tells the reporter the product-manager note stays on the same bug", () => {
+    expect(supplementNoteHint("pending")).toContain("写给处理人和 Agent");
+    expect(supplementNoteHint("pending")).toContain("不改变状态");
+    const product = supplementNoteHint("needs_product");
+    expect(product).toContain("写给产品经理");
+    expect(product).toContain("待产品经理确认");
+    expect(product).toContain("可以做");
+    expect(product).toContain("不做");
   });
 });

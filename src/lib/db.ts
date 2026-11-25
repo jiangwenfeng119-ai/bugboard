@@ -237,6 +237,20 @@ function migrateSchema(db: Database.Database) {
   ensureEventKind(db);
   ensureProjectChanges(db);
   ensureAsk(db);
+  ensureSeeAlso(db);
+}
+
+function ensureSeeAlso(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bug_see_also (
+      bug_id INTEGER NOT NULL PRIMARY KEY,
+      see_bug_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (bug_id) REFERENCES bugs(id) ON DELETE CASCADE,
+      FOREIGN KEY (see_bug_id) REFERENCES bugs(id) ON DELETE CASCADE,
+      CHECK (bug_id <> see_bug_id)
+    );
+  `);
 }
 
 function ensureProjectChanges(db: Database.Database) {
@@ -297,6 +311,28 @@ function ensureAsk(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_ask_cache ON ask_runs(project_id, question_norm, mirror_sha, status);
     CREATE INDEX IF NOT EXISTS idx_ask_thread ON ask_runs(project_id, thread_id, id);
+
+    CREATE TABLE IF NOT EXISTS ask_optimizations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ask_run_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      actor_type TEXT NOT NULL CHECK(actor_type IN ('user','api_key')),
+      actor_id INTEGER NOT NULL,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      judgment TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK(status IN ('queued','sent','failed','done','reverting','reverted')),
+      prompt TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      diff_text TEXT NOT NULL DEFAULT '',
+      commit_sha TEXT NOT NULL DEFAULT '',
+      revert_sha TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (ask_run_id) REFERENCES ask_runs(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_ask_opt_run ON ask_optimizations(ask_run_id, id);
 
     CREATE TABLE IF NOT EXISTS ask_maps (
       project_id INTEGER PRIMARY KEY,

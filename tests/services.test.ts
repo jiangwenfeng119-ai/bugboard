@@ -2076,4 +2076,73 @@ describe("services integration", () => {
     const todayInflow = stats.inflow[stats.inflow.length - 1];
     expect(todayInflow.fixing).toBe(1);
   });
+
+  it("lets the reporter supplement while the product manager is deciding", async () => {
+    const services = await import("../src/lib/services");
+    const admin = await services.setupAdmin("admin", "secret1");
+    const adminId = {
+      kind: "user" as const,
+      userId: admin.id,
+      role: "admin" as const,
+      username: admin.username,
+    };
+    const user = await services.createUser(adminId, {
+      username: "qa",
+      password: "secret1",
+      role: "user",
+    });
+    const project = services.createProject(adminId, {
+      name: "Product note",
+      description: "",
+    });
+    services.addMember(adminId, project.id, user.id);
+    services.addMember(adminId, project.id, adminId.userId, "admin");
+    const qaId = {
+      kind: "user" as const,
+      userId: user.id,
+      role: "user" as const,
+      username: user.username,
+    };
+
+    const bug = services.createBug(qaId, {
+      projectId: project.id,
+      title: "导出时带上当前筛选",
+      body: "现在导出是全部行",
+    });
+    services.transitionBug(adminId, bug.id, "request_product", "现在没有按筛选导出");
+    const waiting = services.getBug(qaId, bug.id);
+    expect(waiting.status).toBe("needs_product");
+    expect(services.canAddSupplement(qaId, waiting)).toBe(true);
+
+    const { eventId } = services.addBugSupplement(
+      qaId,
+      bug.id,
+      "希望导出的是当前筛选结果，方便对账"
+    );
+    const updated = services.getBug(qaId, bug.id);
+    expect(updated.status).toBe("needs_product");
+    const supplement = services.getBugEvents(qaId, bug.id).find((e) => e.id === eventId);
+    expect(supplement?.kind).toBe("supplement");
+    expect(supplement?.from_status).toBe("needs_product");
+    expect(supplement?.to_status).toBe("needs_product");
+    expect(supplement?.note).toBe("希望导出的是当前筛选结果，方便对账");
+    expect(services.getBugHandlerLabel(updated)).toBe(admin.username);
+    expect(
+      services.listBugs(adminId, project.id).find((row) => row.id === bug.id)?.handler_label
+    ).toBe(admin.username);
+
+    services.transitionBug(adminId, bug.id, "accept_product");
+    expect(services.canAddSupplement(qaId, services.getBug(qaId, bug.id))).toBe(false);
+
+    const missing = services.createBug(qaId, {
+      projectId: project.id,
+      title: "保存没有记录",
+      body: "点了保存",
+    });
+    services.transitionBug(adminId, missing.id, "request_info", "还缺操作账号");
+    expect(services.canAddSupplement(qaId, services.getBug(qaId, missing.id))).toBe(false);
+    expect(() => services.addBugSupplement(qaId, missing.id, "账号是 qa")).toThrow(
+      /待处理或待产品经理确认/
+    );
+  });
 });

@@ -3,7 +3,8 @@ import path from "node:path";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DispatchAdmin } from "@/components/AgentDispatch";
-import { IconBell, IconChart, IconKey, IconPencil, IconUsers, IconWrench } from "@/components/Icons";
+import { IconBell, IconChart, IconKey, IconMessage, IconPencil, IconUsers, IconWrench } from "@/components/Icons";
+import { listAskAdminRecords, listAskOptimizations, readAskAdminRecord, readAskOptimization } from "@/lib/ask-optimize";
 import { getBehaviorSettings, listBehaviorOverviews } from "@/lib/behavior";
 import { dispatchRuntimeStatus, getDispatchSettings, listDispatchOverviews } from "@/lib/dispatch";
 import { requireAdminUser } from "@/lib/session-guard";
@@ -20,6 +21,7 @@ import { ApiKeysAdmin } from "./ApiKeysAdmin";
 import { AnalyticsAdmin } from "./AnalyticsAdmin";
 import { AgentPromptsAdmin } from "./AgentPromptsAdmin";
 import { BehaviorAdmin } from "./BehaviorAdmin";
+import { AsksAdmin } from "./AsksAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,7 @@ const TABS = [
   { id: "wake", href: "/admin?tab=wake", label: "分派给 Agent", icon: IconBell },
   { id: "behavior", href: "/admin?tab=behavior", label: "行为", icon: IconWrench },
   { id: "prompts", href: "/admin?tab=prompts", label: "提示词", icon: IconPencil },
+  { id: "asks", href: "/admin?tab=asks", label: "问答", icon: IconMessage },
 ] as const;
 
 function localMcpScriptPath() {
@@ -41,7 +44,7 @@ function localMcpScriptPath() {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; range?: string; project?: string; compose?: string }>;
+  searchParams: Promise<{ tab?: string; range?: string; project?: string; compose?: string; run?: string; opt?: string }>;
 }) {
   const identity = await requireAdminUser();
   const sp = await searchParams;
@@ -50,7 +53,8 @@ export default async function AdminPage({
     sp.tab === "keys" ||
     sp.tab === "prompts" ||
     sp.tab === "wake" ||
-    sp.tab === "behavior"
+    sp.tab === "behavior" ||
+    sp.tab === "asks"
       ? sp.tab
       : "analytics";
   const projects = tab === "wake" || tab === "behavior" ? listProjects(identity) : [];
@@ -125,6 +129,15 @@ export default async function AdminPage({
       ) : null}
 
       {tab === "prompts" ? <AgentPromptsAdmin /> : null}
+
+      {tab === "asks" ? (
+        <AsksAdmin
+          runs={listAskAdminRecords(identity).map((run) => ({ ...run, answer: "", error: "" }))}
+          selected={readAskAdminRecord(identity, Number(sp.run) || 0)}
+          optimizations={listAskOptimizations(identity)}
+          selectedOptimization={readAskOptimization(identity, Number(sp.opt) || 0)}
+        />
+      ) : null}
 
       {tab === "behavior" ? (
         <BehaviorAdmin

@@ -277,6 +277,12 @@ export function looksLikeDefect(question) {
   return DEFECT.test(String(question || ""));
 }
 
+export function asksCapability(question) {
+  return /能做到吗|能不能做|做得到吗|实现了吗|有没有实现|现在系统|系统里面|系统里是怎么|怎么使用|代码里现在/.test(
+    String(question || ""),
+  );
+}
+
 export function asksBehaviorConfirm(question) {
   const text = String(question || "");
   if (looksLikeDefect(text)) return false;
@@ -288,6 +294,7 @@ export function chooseAskPath({ question, imageCount = 0, tableAnswer = "" }) {
   if (Number(imageCount) > 0) return "deep";
   if (/对照代码|对应代码/.test(text)) return "deep";
   if (looksLikeDefect(text)) return "deep";
+  if (asksCapability(text)) return "deep";
   if (asksBehaviorConfirm(text)) return "deep";
   if (asksExistence(text)) return clearExistenceAnswer(tableAnswer) ? "table" : "deep";
   if (/应该[\s\S]{0,40}(却|但是|但)/.test(text)) return "deep";
@@ -323,6 +330,14 @@ export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted
     lines.push(
       "这是在问现在系统会怎样，不是在写报障草稿。先正面回答会不会、能不能，或写清现在的做法。",
       "查到规则就直接告诉他；查不到再判断：没有把握。不要只生成报障标题和描述。",
+    );
+  }
+  if (asksCapability(question)) {
+    lines.push(
+      "这是在问现在系统能不能做、实现了没有。先正面回答实现了还是没有。",
+      "实现了就写代码里现在怎么判断、谁能操作、界面上怎么用。判断：已经有了。不要写报障标题和描述。",
+      "没有实现就先写「现在没有。这是新功能。」并写清现在最接近的做法，然后再写报障建议。",
+      "不要用「这需要报障」开头。",
     );
   }
   const guide = askReplyGuide();
@@ -822,6 +837,14 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap }) 
         ? concrete.map((line) => line.replaceAll("「登录」", "「登陆页」").replaceAll("「登陆」", "「登陆页」"))
         : concrete;
     const asksForNew = /增加|新增|加一个|新功能|功能扩展|应做|应该有|希望能|希望增加|希望有|能否|可以吗/.test(question);
+    if (asksCapability(question)) {
+      const wantsNew = asksForNew || /需要让|要让|添加/.test(question);
+      if (wantsNew) return [newFeatureAnswer(question, place), ...spokenLines, "判断：建议报障"].join("\n");
+      const seen = place ? `应用里能看到「${place}」。` : spokenLines[0] || "";
+      return [seen, "这一问是在核对现在能不能做。查表还没对照到代码里的做法。", "判断：没有把握"]
+        .filter(Boolean)
+        .join("\n");
+    }
     const existence = asksExistence(question);
     const focusHit = focusNames.some(
       (name) =>
@@ -1000,7 +1023,7 @@ export function callbackAllowed(callbackUrl, bugboardUrl) {
     return false;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  if (url.pathname !== "/api/ask/callback") return false;
+  if (url.pathname !== "/api/ask/callback" && url.pathname !== "/api/ask/optimizations/callback") return false;
   if (url.username || url.password) return false;
   const base = String(bugboardUrl || "").trim();
   if (!base) {

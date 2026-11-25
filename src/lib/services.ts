@@ -28,6 +28,7 @@ import {
   projectAdminIds,
   requireAdmin,
 } from "./permissions";
+import { matchesProductManager } from "./product-manager-match";
 import { isAdminRole } from "./roles";
 import { claimStagedUploads } from "./staged";
 import {
@@ -916,6 +917,7 @@ export function listBugs(
          SELECT e.id FROM bug_status_events e
          WHERE e.bug_id = b.id
            AND e.to_status IN (${HANDLER_EVENT_STATUSES_SQL})
+           AND IFNULL(e.kind, 'transition') = 'transition'
          ORDER BY e.id DESC
          LIMIT 1
        )
@@ -1102,7 +1104,7 @@ export function transitionBug(
 export function canAddSupplement(identity: Identity, bug: BugRow) {
   if (isProjectAdmin(identity, bug.project_id)) return true;
   return (
-    bug.status === "pending" &&
+    (bug.status === "pending" || bug.status === "needs_product") &&
     isReporter(identity, bug.reporter_type, bug.reporter_id)
   );
 }
@@ -1119,7 +1121,7 @@ export function addBugSupplement(
     throw new Error(
       isProjectAdmin(identity, bug.project_id)
         ? "当前状态不能补充说明"
-        : "只有待处理时，原报障人才能补充说明；接单后请用要求补充流程"
+        : "只有待处理或待产品经理确认时，原报障人才能补充说明；接单后请用要求补充流程"
     );
   }
   const t = nowIso();
@@ -1746,6 +1748,7 @@ export function getBugHandlerLabel(bug: Pick<BugRow, "id" | "status">) {
     .prepare(
       `SELECT actor_type, actor_id FROM bug_status_events
        WHERE bug_id = ? AND to_status IN (${HANDLER_EVENT_STATUSES_SQL})
+         AND IFNULL(kind, 'transition') = 'transition'
        ORDER BY id DESC
        LIMIT 1`
     )
@@ -1939,10 +1942,10 @@ function isInboxKind(status: string): status is InboxKind {
   return (INBOX_KIND_ORDER as readonly string[]).includes(status);
 }
 
-export function listInbox(identity: Identity): Inbox {
-  const projects = listProjects(identity);
-  if (projects.length === 0) return { total: 0, groups: [] };
+const INBOX_SELECT = `id, project_id, public_id, title, priority, status, updated_at`;
 
+function loadInboxRows(identity: Identity, projects: ProjectRow[]): InboxRow[] {
+  if (projects.length === 0) return [];
   const ids = projects.map((project) => project.id);
   const behaviors = readBehaviors(ids);
   const placeholders = ids.map(() => "?").join(",");
@@ -1950,7 +1953,7 @@ export function listInbox(identity: Identity): Inbox {
   const actorId = identity.kind === "user" ? identity.userId : identity.apiKeyId;
   const personal = getDb()
     .prepare(
-      `SELECT id, project_id, public_id, title, priority, status, updated_at
+      `SELECT ${INBOX_SELECT}
        FROM bugs
        WHERE project_id IN (${placeholders})
          AND reporter_type = ?
@@ -1960,26 +1963,27 @@ export function listInbox(identity: Identity): Inbox {
     .all(...ids, actorType, actorId) as InboxRow[];
 
   const rows = personal.filter((row) => isInboxKind(row.status));
+  const seen = new Set(rows.map((row) => row.id));
   const adminIds = [...projectAdminIds(identity, ids)];
   if (adminIds.length > 0) {
     const adminPlaceholders = adminIds.map(() => "?").join(",");
     const pending = getDb()
       .prepare(
-        `SELECT id, project_id, public_id, title, priority, status, updated_at
+        `SELECT ${INBOX_SELECT}
          FROM bugs
          WHERE project_id IN (${adminPlaceholders}) AND status = 'pending'`
       )
       .all(...adminIds) as InboxRow[];
     const product = getDb()
       .prepare(
-        `SELECT id, project_id, public_id, title, priority, status, updated_at
+        `SELECT ${INBOX_SELECT}
          FROM bugs
          WHERE project_id IN (${adminPlaceholders}) AND status = 'needs_product'`
       )
       .all(...adminIds) as InboxRow[];
     const releasing = getDb()
       .prepare(
-        `SELECT id, project_id, public_id, title, priority, status, updated_at
+        `SELECT ${INBOX_SELECT}
          FROM bugs
          WHERE project_id IN (${adminPlaceholders}) AND status = 'ready_to_release'`
       )
@@ -1999,7 +2003,6 @@ export function listInbox(identity: Identity): Inbox {
            )`
       )
       .all(...adminIds, actorType, actorId) as InboxRow[];
-    const seen = new Set(rows.map((row) => row.id));
     for (const row of [...product, ...releasing, ...fixing, ...pending]) {
       if (!isInboxKind(row.status) || seen.has(row.id)) continue;
       const behavior = behaviors.get(row.project_id);
@@ -2008,6 +2011,39 @@ export function listInbox(identity: Identity): Inbox {
       rows.push(row);
     }
   }
+
+  if (identity.kind === "user") {
+    const namedIds = projects
+      .filter((project) => matchesProductManager(identity.username, project.product_manager))
+      .map((project) => project.id);
+    if (namedIds.length > 0) {
+      const namedPlaceholders = namedIds.map(() => "?").join(",");
+      const named = getDb()
+        .prepare(
+          `SELECT ${INBOX_SELECT}
+           FROM bugs
+           WHERE project_id IN (${namedPlaceholders}) AND status = 'needs_product'`
+        )
+        .all(...namedIds) as InboxRow[];
+      for (const row of named) {
+        if (!isInboxKind(row.status) || seen.has(row.id)) continue;
+        seen.add(row.id);
+        rows.push(row);
+      }
+    }
+  }
+
+  return rows;
+}
+
+export function listInbox(identity: Identity): Inbox {
+  const projects = listProjects(identity);
+  if (projects.length === 0) return { total: 0, groups: [] };
+
+  const ids = projects.map((project) => project.id);
+  const behaviors = readBehaviors(ids);
+  const adminIds = new Set(projectAdminIds(identity, ids));
+  const rows = loadInboxRows(identity, projects);
 
   const byProject = new Map<number, InboxRow[]>();
   for (const row of rows) {
@@ -2051,12 +2087,139 @@ export function listInbox(identity: Identity): Inbox {
         title: row.title,
         priority: row.priority,
         status: row.status,
-        hint: INBOX_HINT[row.status],
+        hint:
+          row.status === "needs_product" && !adminIds.has(row.project_id)
+            ? "等你看过"
+            : INBOX_HINT[row.status],
       })),
     });
   }
 
   return { total, groups };
+}
+
+const MY_OPEN_ORDER = ["pending", "fixing", "needs_product", "ready_to_release"] as const;
+
+const MY_OPEN_HINT: Record<(typeof MY_OPEN_ORDER)[number], string> = {
+  pending: "还没人接单",
+  fixing: "正在修",
+  needs_product: "等产品决定",
+  ready_to_release: "还没发布",
+};
+
+export function listMyOpenBugs(identity: Identity): Inbox {
+  const projects = listProjects(identity);
+  if (projects.length === 0) return { total: 0, groups: [] };
+  const ids = projects.map((project) => project.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const actorType = identity.kind === "user" ? "user" : "api_key";
+  const actorId = identity.kind === "user" ? identity.userId : identity.apiKeyId;
+  const waiting = new Set(loadInboxRows(identity, projects).map((row) => row.id));
+  const open = (
+    getDb()
+      .prepare(
+        `SELECT ${INBOX_SELECT}
+         FROM bugs
+         WHERE project_id IN (${placeholders})
+           AND reporter_type = ?
+           AND reporter_id = ?
+           AND status IN ('pending', 'fixing', 'needs_product', 'ready_to_release')`
+      )
+      .all(...ids, actorType, actorId) as InboxRow[]
+  ).filter((row) => isInboxKind(row.status) && !waiting.has(row.id));
+
+  const byProject = new Map<number, InboxRow[]>();
+  for (const row of open) {
+    const list = byProject.get(row.project_id) ?? [];
+    list.push(row);
+    byProject.set(row.project_id, list);
+  }
+
+  let total = 0;
+  const groups: InboxGroup[] = [];
+  for (const project of projects) {
+    const list = byProject.get(project.id);
+    if (!list?.length) continue;
+    list.sort((a, b) => {
+      const kind = MY_OPEN_ORDER.indexOf(a.status as (typeof MY_OPEN_ORDER)[number]) -
+        MY_OPEN_ORDER.indexOf(b.status as (typeof MY_OPEN_ORDER)[number]);
+      if (kind !== 0) return kind;
+      const priority = INBOX_PRIORITY_RANK[a.priority] - INBOX_PRIORITY_RANK[b.priority];
+      if (priority !== 0) return priority;
+      if (a.updated_at !== b.updated_at) return a.updated_at < b.updated_at ? 1 : -1;
+      return b.id - a.id;
+    });
+    const counts = MY_OPEN_ORDER.flatMap((kind) => {
+      const count = list.filter((row) => row.status === kind).length;
+      return count > 0 ? [{ kind, label: INBOX_KIND_LABEL[kind], count }] : [];
+    });
+    total += list.length;
+    groups.push({
+      projectId: project.id,
+      projectName: project.name,
+      counts,
+      pendingOverflow: 0,
+      items: list.map((row) => ({
+        id: row.id,
+        publicId: row.public_id,
+        title: row.title,
+        priority: row.priority,
+        status: row.status,
+        hint: MY_OPEN_HINT[row.status as (typeof MY_OPEN_ORDER)[number]],
+      })),
+    });
+  }
+  return { total, groups };
+}
+
+export type SeeAlsoItem = {
+  id: number;
+  publicId: string;
+  title: string;
+  status: BugStatus;
+};
+
+export function listSeeAlso(identity: Identity, bugId: number): SeeAlsoItem[] {
+  getBug(identity, bugId);
+  return getDb()
+    .prepare(
+      `SELECT DISTINCT b.id, b.public_id AS publicId, b.title, b.status
+       FROM bug_see_also link
+       JOIN bugs b ON b.id = CASE WHEN link.bug_id = ? THEN link.see_bug_id ELSE link.bug_id END
+       WHERE link.bug_id = ? OR link.see_bug_id = ?
+       ORDER BY b.public_id`
+    )
+    .all(bugId, bugId, bugId) as SeeAlsoItem[];
+}
+
+export function setSeeAlso(identity: Identity, bugId: number, publicId: string) {
+  const source = getBug(identity, bugId);
+  const target = getDb()
+    .prepare("SELECT * FROM bugs WHERE public_id = ?")
+    .get(publicId.trim()) as BugRow | undefined;
+  if (!target) throw new Error("报障不存在");
+  if (target.id === source.id) throw new Error("不能先看自己");
+  if (target.project_id !== source.project_id) throw new Error("只能先看这个项目里的报障");
+  getBug(identity, target.id);
+  getDb()
+    .prepare(
+      `INSERT INTO bug_see_also (bug_id, see_bug_id, created_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(bug_id) DO UPDATE SET see_bug_id = excluded.see_bug_id, created_at = excluded.created_at`
+    )
+    .run(source.id, target.id, nowIso());
+}
+
+export function clearSeeAlso(identity: Identity, bugId: number, otherBugId: number) {
+  getBug(identity, bugId);
+  getBug(identity, otherBugId);
+  getDb()
+    .prepare(
+      `DELETE FROM bug_see_also
+       WHERE (bug_id = ? AND see_bug_id = ?)
+          OR (bug_id = ? AND see_bug_id = ?)`
+    )
+    .run(bugId, otherBugId, otherBugId, bugId);
 }
 
 export { hashApiKey, STATUS_LABEL, ACTION_LABEL };

@@ -17,6 +17,7 @@ import {
   getBugHandlerLabel,
   getProject,
   listProjects,
+  listSeeAlso,
   resolveActorLabel,
 } from "@/lib/services";
 import { STATUS_LABEL } from "@/lib/types";
@@ -24,7 +25,8 @@ import { WakeBugButton } from "@/components/AgentDispatch";
 import { bugAwaitingAgent, latestDispatch, projectWakeEnabled } from "@/lib/dispatch";
 import { AskBeforeReport } from "@/app/projects/[id]/bugs/AskBeforeReport";
 import { BugActions } from "./BugActions";
-import { bugPageActions } from "./bug-page-actions";
+import { bugPageActions, productWaitCopy, retestNoteFromEvents } from "./bug-page-actions";
+import { SeeAlso } from "./SeeAlso";
 import { ProjectSwitcher } from "@/app/projects/[id]/ProjectSwitcher";
 import { Prose } from "@/components/Prose";
 import { ImageLightbox } from "@/components/ImageLightbox";
@@ -254,7 +256,17 @@ export default async function BugDetailPage({
               canSupplement={canSupplement}
               isAdmin={canHandleBugs}
               currentPriority={bug.priority}
+              waitCopy={
+                bug.status === "needs_product" ? productWaitCopy(project.product_manager) : ""
+              }
+              retestNote={
+                bug.status === "awaiting_confirm" ? retestNoteFromEvents(events) : ""
+              }
             />
+          </div>
+          <div className="bb-card bb-section-card">
+            <h2>先看这张</h2>
+            <SeeAlso bugId={bug.id} items={listSeeAlso(identity, bug.id)} />
           </div>
           {wakeEnabled || wakeLatest ? (
             <div className="bb-card bb-section-card">

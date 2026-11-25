@@ -7,6 +7,9 @@ import {
   assertWorkdir,
   buildLaunchArgv,
   createWakeServer,
+  interpretOptimizeGit,
+  optimizeWorkdir,
+  revertGitArgs,
   planAgentLaunches,
   readSession,
   resolveAgents,
@@ -292,5 +295,61 @@ describe("wake agent launch", () => {
     fs.rmSync(root, { recursive: true, force: true });
     expect(res.status).toBe(202);
     expect(seen).toEqual(["project.ask:whsec_test"]);
+  });
+
+  it("records an optimize diff and accepts the optimize event", async () => {
+    expect(optimizeWorkdir()).toMatch(/bugboard$/);
+    expect(
+      interpretOptimizeGit({
+        id: 4,
+        exitCode: 0,
+        subject: "ask-optimize #4",
+        sha: "abc1234",
+        worktreeDiff: "diff --git a/src/lib/ask-core.ts",
+      })
+    ).toMatchObject({ kind: "done", commitSha: "abc1234" });
+    expect(revertGitArgs("abc1234")).toEqual(["revert", "--no-edit", "abc1234"]);
+    expect(revertGitArgs("HEAD")).toBeNull();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wake-opt-"));
+    const seen: string[] = [];
+    const server = createWakeServer({
+      listen: "127.0.0.1:0",
+      agent: "cursor",
+      argv: null,
+      allowLan: false,
+      applyEdits: false,
+      secrets: ["whsec_test"],
+      cwd: "",
+      projects: {},
+      bugboardUrl: "http://127.0.0.1:3080",
+      sessionFile: path.join(root, "sessions.json"),
+      runDir: path.join(root, "runs"),
+      executeOptimize: (_cfg: unknown, payload: { event?: string }) => {
+        seen.push(payload.event || "");
+        return Promise.resolve();
+      },
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const body = JSON.stringify({
+      event: "ask.needs_optimize",
+      optimizationId: 4,
+      callbackUrl: "http://127.0.0.1:3080/api/ask/optimizations/callback",
+      prompt: "只改问答规则",
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/wake`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Bugboard-Signature": `sha256=${sign("whsec_test", body)}`,
+      },
+      body,
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(res.status).toBe(202);
+    expect(seen).toEqual(["ask.needs_optimize"]);
   });
 });

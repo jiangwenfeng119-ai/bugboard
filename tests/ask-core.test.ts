@@ -105,6 +105,9 @@ describe("ask core", () => {
     expect(prompt).not.toContain("系统可以按确认过的做法做");
     expect(prompt).toContain("这是现有功能坏了");
     expect(prompt).toContain("不要把仓库从头读到尾");
+    expect(prompt).toContain("第一段必须先回答用户的问题");
+    expect(prompt).toContain("不要用「这需要报障」开头");
+    expect(prompt).toContain("代码里现在怎么判断");
     expect(prompt).toContain("日志检索");
     expect(prompt).toContain("没有把握");
     expect(prompt).toContain("优先级：");

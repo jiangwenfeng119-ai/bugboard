@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/session-guard";
 import {
   bugTotalsByProject,
   listInbox,
+  listMyOpenBugs,
   listProjects,
   openBugCountsByProject,
   type ProjectAttentionCounts,
@@ -80,6 +81,7 @@ export default async function ProjectsPage({
   const sort = resolveProjectSort(sp.sort);
   const projects = sortProjects(listProjects(identity), sort, bugTotalsByProject(identity));
   const inbox = listInbox(identity);
+  const mine = listMyOpenBugs(identity);
   const openCounts = openBugCountsByProject(identity);
   const canManage = isAdminRole(identity.role);
   const canDelete = isSuperAdminRole(identity.role);
@@ -105,6 +107,12 @@ export default async function ProjectsPage({
       </div>
 
       <InboxSection inbox={inbox} />
+      <InboxSection
+        inbox={mine}
+        title="我提交的"
+        headingId="bb-mine-title"
+        hideWhenEmpty
+      />
 
       {projects.length === 0 ? (
         <EmptyState

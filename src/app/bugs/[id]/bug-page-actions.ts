@@ -70,6 +70,39 @@ export function nextStepButtonClass(
   return "bb-btn bb-btn-secondary";
 }
 
+export function supplementNoteHint(status: BugStatus) {
+  if (status === "needs_product") {
+    return "写给产品经理：把这张单想要的能力、背景和遗漏说清楚。状态仍是待产品经理确认。写已经确认也不算点过「可以做」或「不做」。";
+  }
+  return "写给处理人和 Agent：补清背景、期望或遗漏的细节。不改变状态，会出现在时间线里。";
+}
+
+export function productWaitCopy(name: string) {
+  const who = name.trim() || "产品经理";
+  return `等 ${who} 点可以做或不做`;
+}
+
+const STOCK_RETEST_NOTES = new Set(["发布后待确认", "提交修复说明"]);
+
+function meaningfulNote(note?: string | null) {
+  const text = note?.trim() ?? "";
+  if (!text || STOCK_RETEST_NOTES.has(text)) return "";
+  return text;
+}
+
+export function retestNoteFromEvents(
+  events: { to_status: string; note?: string | null }[]
+) {
+  const awaiting = [...events]
+    .reverse()
+    .find((event) => event.to_status === "awaiting_confirm" && meaningfulNote(event.note));
+  if (awaiting) return meaningfulNote(awaiting.note);
+  const submitted = [...events]
+    .reverse()
+    .find((event) => event.to_status === "ready_to_release" && meaningfulNote(event.note));
+  return submitted ? meaningfulNote(submitted.note) : "";
+}
+
 export function nextStepIdleCopy(status: BugStatus) {
   if (status === "confirmed" || status === "acknowledged") {
     return "这张单已经结束。可以看时间线，没有下一步。";

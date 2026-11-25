@@ -2418,6 +2418,61 @@ a.bb-bug-id:hover {
   margin-left: auto;
 }
 
+.bb-next-note {
+  margin: 0 0 0.85rem;
+}
+
+.bb-next-note .bb-label {
+  margin-bottom: 0.35rem;
+}
+
+.bb-see-also {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.bb-see-also-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.bb-see-also-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.bb-see-also-row a {
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+  color: inherit;
+  text-decoration: none;
+}
+
+.bb-see-also-row a span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bb-see-also-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bb-see-also-form .bb-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .bb-project-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -5777,6 +5832,40 @@ body.bb-review-open .bb-main > :not(.bb-cap-review) {
 .bb-agent-monitor-checked {
   margin: 0.65rem 0 0;
   font-size: 0.8125rem;
+}
+
+.bb-ask-admin .bb-ask-record,
+.bb-ask-diff {
+  white-space: pre-wrap;
+  margin: 0.4rem 0 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font: 0.84rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.bb-ask-diff {
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.bb-ask-admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+}
+
+.bb-ask-admin h3 {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 0.95rem;
+}
+
+.bb-ask-admin .bb-table td:last-child {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {

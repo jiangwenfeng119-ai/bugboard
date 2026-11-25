@@ -3,19 +3,32 @@ import { PriorityMark } from "@/components/PriorityMark";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { Inbox } from "@/lib/services";
 
-export function InboxSection({ inbox }: { inbox: Inbox }) {
+export function InboxSection({
+  inbox,
+  title = "待我处理",
+  headingId = "bb-inbox-title",
+  empty = "现在没有需要你处理的报障",
+  hideWhenEmpty = false,
+}: {
+  inbox: Inbox;
+  title?: string;
+  headingId?: string;
+  empty?: string;
+  hideWhenEmpty?: boolean;
+}) {
   if (inbox.total === 0) {
+    if (hideWhenEmpty) return null;
     return (
-      <section className="bb-inbox" aria-label="待我处理">
-        <p className="bb-inbox-empty">现在没有需要你处理的报障</p>
+      <section className="bb-inbox" aria-label={title}>
+        <p className="bb-inbox-empty">{empty}</p>
       </section>
     );
   }
 
   return (
-    <section className="bb-inbox" aria-labelledby="bb-inbox-title">
+    <section className="bb-inbox" aria-labelledby={headingId}>
       <div className="bb-inbox-head">
-        <h2 id="bb-inbox-title">待我处理</h2>
+        <h2 id={headingId}>{title}</h2>
         <span className="bb-inbox-total">{inbox.total}</span>
       </div>
       {inbox.groups.map((group) => (

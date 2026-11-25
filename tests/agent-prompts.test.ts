@@ -29,6 +29,10 @@ describe("agent prompts", () => {
     expect(USER_AGENT_PROMPT).toContain("这张认可不属实");
     expect(USER_AGENT_PROMPT).toContain("acknowledged");
     expect(USER_AGENT_PROMPT).toContain("provide_info");
+    expect(USER_AGENT_PROMPT).toContain("add_supplement");
+    expect(USER_AGENT_PROMPT).toContain("没让它补，就不要写");
+    expect(USER_AGENT_PROMPT).toContain("待产品经理确认");
+    expect(USER_AGENT_PROMPT).not.toContain("待产品经理确认没有报障人动作");
     expect(USER_AGENT_PROMPT).toContain("needs_info");
     expect(USER_AGENT_PROMPT).toContain("awaiting_confirm");
   });
@@ -65,6 +69,8 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("相邻功能");
     expect(ADMIN_AGENT_PROMPT).toContain("资料里没有的不要编");
     expect(ADMIN_AGENT_PROMPT).toContain("说明里没有建议就写明没有");
+    expect(ADMIN_AGENT_PROMPT).toContain("报障人后补的说明");
+    expect(ADMIN_AGENT_PROMPT).toContain("没有后补说明就写明没有");
     expect(ADMIN_AGENT_PROMPT).toContain("之后补的说明，都不算");
     expect(ADMIN_AGENT_PROMPT).toContain("页面上点了「可以做」也算已确认");
     expect(ADMIN_AGENT_PROMPT).toContain("不要再 request_product，也不要 start_fix");

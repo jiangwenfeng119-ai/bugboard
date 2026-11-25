@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendDeepBrief,
+  asksCapability,
   askGitSteps,
   askSearchTerms,
   buildAskArgv,
@@ -624,5 +625,25 @@ describe("ask protocol", () => {
     expect(timedOut).toContain("代码对照没有在时限内完成。");
     expect(timedOut).toContain("判断：没有把握");
     expect(timedOut).not.toMatch(/判断：建议报障\s*$/);
+  });
+
+  it("answers whether the system can do it before suggesting a bug", () => {
+    const question = "标记为待产品经理确认的,需要让报障用户能添加说明。看看现在系统能做到吗";
+    expect(asksCapability(question)).toBe(true);
+    expect(chooseAskPath({ question })).toBe("deep");
+    const answer = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [],
+      excerpts: phraseLabels('needs_product: "待产品经理确认"'),
+    });
+    expect(answer.indexOf("现在没有")).toBeGreaterThanOrEqual(0);
+    expect(answer.indexOf("现在没有")).toBeLessThan(answer.indexOf("标题："));
+    expect(answer.startsWith("这需要报障")).toBe(false);
+    expect(answer).toContain("判断：建议报障");
+    const brief = appendDeepBrief({ prompt: `<question>\n${question}\n</question>`, tableAnswer: answer });
+    expect(brief).toContain("先正面回答实现了还是没有");
+    expect(brief).toContain("不要用「这需要报障」开头");
+    expect(callbackAllowed("http://127.0.0.1:3080/api/ask/optimizations/callback", "http://127.0.0.1:3080")).toBe(true);
   });
 });
