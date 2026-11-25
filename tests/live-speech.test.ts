@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { joinAskSpeech } from "../src/components/live-speech";
+import { joinAskSpeech, tidyAskSpeech } from "../src/components/live-speech";
+
+describe("tidyAskSpeech", () => {
+  it("removes spaces the browser puts between Chinese characters", () => {
+    expect(tidyAskSpeech("听 得 到 吗 你 在 做 什 么")).toBe("听得到吗你在做什么");
+    expect(tidyAskSpeech("这个 文字 它是 中间 都有 空 的 呀")).toBe("这个文字它是中间都有空的呀");
+  });
+
+  it("keeps normal spaces around Latin words", () => {
+    expect(tidyAskSpeech("打开 Dashboard 页面")).toBe("打开 Dashboard 页面");
+    expect(tidyAskSpeech("where is the door")).toBe("where is the door");
+  });
+});
 
 describe("joinAskSpeech", () => {
   it("keeps committed text when the interim transcript goes empty", () => {
@@ -19,5 +31,9 @@ describe("joinAskSpeech", () => {
 
   it("adds a space only between Latin chunks", () => {
     expect(joinAskSpeech("where is", "the door")).toBe("where is the door");
+  });
+
+  it("tidies spaced Chinese pieces before merging", () => {
+    expect(joinAskSpeech("听 得 到 吗", "你 在 做 什 么")).toBe("听得到吗你在做什么");
   });
 });

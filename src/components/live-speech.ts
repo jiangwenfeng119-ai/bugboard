@@ -17,10 +17,17 @@ export function speechSupported() {
   return Boolean(speechCtor());
 }
 
+/** Browser zh-CN speech often inserts spaces between Chinese characters; drop those. */
+export function tidyAskSpeech(text: string) {
+  const cjk = "\\u3400-\\u9FFF\\uF900-\\uFAFF\\u3001-\\u303F\\uFF01-\\uFF60";
+  const between = new RegExp(`([${cjk}])(?:[\\s\\u00A0\\u3000]+)(?=[${cjk}])`, "g");
+  return text.replace(between, "$1").replace(/[^\S\n]+/g, " ").trim();
+}
+
 /** Merge committed ask text with a new speech piece; empty piece keeps the base. */
 export function joinAskSpeech(base: string, piece: string) {
-  const head = base.trimEnd();
-  const tail = piece.trim();
+  const head = tidyAskSpeech(base);
+  const tail = tidyAskSpeech(piece);
   if (!tail) return head;
   if (!head) return tail;
   if (head.endsWith(tail)) return head;
