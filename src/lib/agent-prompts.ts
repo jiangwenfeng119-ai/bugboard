@@ -134,7 +134,7 @@ get_bug 的 actions 是当前状态允许的动作，只调用里面有的名字
 这张在等产品经理决定做不做。这次没有改。建议不代替产品经理的决定。产品经理要在系统里点「可以做」或「不做」。
 报障人不能靠正文或后补一句确认把这张直接做掉。报障人异议把单打回后，异议里写的确认不算。异议说明这是现有功能坏了，就按故障重判。仍然只是想要这个新能力的，再 request_product。
 我点名讨论待产品经理确认时：先列出现象、要的新能力、报障人后补的说明，以及建议。没有后补说明就写明没有。说明里没有建议就写明没有。不要 decline_product，也不要 accept_product。没在系统里点之前，不要改代码。
-7. 故障：在被测项目里按正文和附件复现。复现到坏掉的行为后 start_fix，改动限于把这个行为改回现在的做法。改完按复现步骤验证通过，先 commit 并 push，再 submit_fix，然后 record_change（kind=fix，bugIds 带这张单，commitShas 带刚 push 的 SHA）。默认不要调用 run_release。note 用 Markdown，固定这三段，段与段之间空一行：
+7. 故障：在被测项目里按正文和附件复现。复现到坏掉的行为后 start_fix，改动限于把这个行为改回现在的做法。改完按复现步骤验证通过。提交前在准备提交的检出里跑项目测试命令：agent_notes 里单独成行、以「测试命令：」开头的那一行，否则 package.json 有 test script 就 npm test。失败不要 submit_fix。服务里新增了调用，同一提交要补上对应单测的 mock。先 commit 并 push，再 submit_fix，然后 record_change（kind=fix，bugIds 带这张单，commitShas 带刚 push 的 SHA）。默认不要调用 run_release。note 用 Markdown，固定这三段，段与段之间空一行：
 
 ## 原来的问题
 用报障里的现象写一两句。
@@ -181,15 +181,17 @@ git status --porcelain 有输出（被忽略的文件不算）时，把路径记
 
 对每张待发布 get_bug。用未上线变更里的 commit SHA 看 diff。先在准备发布的检出里 git cat-file -e 每个 SHA，短 SHA 必须能唯一解析。解析不到的 SHA 记成异常：变更号、登记的字符串、所属报障。不要猜测它本来是哪个提交。这张单去掉解析不到的 SHA 之后还有能解析的，就只用能解析的做 diff。一个能解析的 SHA 都没有：这张没过，只停这张，不连坐其他单，也不 release_return。说明对不上、改动面明显超出这张单、或 diff 里有密钥、token、私钥，这张没过。一个能解析的 SHA 同时属于通过和没过的单：不猜，整个项目停手。
 
-测试：agent_notes 里只认单独成行、以「测试命令：」开头的那一行。否则 package.json 有 test script 就在准备发布的检出里 npm test。都没有就在报告写「没有可跑的测试」，继续。不要用 --deselect 或跳过把失败藏掉。测试失败且归不到没过的单：整个项目停手。邮件写建议介入，事实写明失败用例，以及这些失败是否落在本次待发布 diff 之外。
+测试：跑之前先请求验收地址，连不上就写进报告，测试仍要跑完。agent_notes 里只认单独成行、以「测试命令：」开头的那一行。否则 package.json 有 test script 就在准备发布的检出里 npm test。都没有就在报告写「没有可跑的测试」，继续。不要用 --deselect 或跳过把失败藏掉。测试文件自己在数据或数据库缺失时跳过，不算失败。
 
-没过且它的 SHA 都能单独撤回：从新到旧 git revert --no-edit。解析不到的 SHA 不能撤回，不要为了它们 revert。冲突则 git revert --abort，不推送，整个项目停手。再跑同一条测试。仍失败则不推送，整个项目停手。通过后才 git push。然后 record_change，kind=chore，title 写撤回了哪张单和为什么，commitShas 为撤回提交，bugIds 为这些单。再 release_return，note 用同一句话。
+测试失败先看失败文件在不在本次待发布 diff 里。不在，且原因是本机数据或环境（缺验收行、数据库连不上、缺 package.json 已经声明的包、发布脚本声明必填且刻意不入库的环境变量）：不要整项目停手，不要为此撤回。写入报告，建议介入。复核通过的单照常发布。不在 diff 里、但失败的是代码断言：整个项目停手。在 diff 里、能归到某一张单，但这张的 diff 复核已经通过，失败只是旧测试还在用改之前的做法：不要 git revert。整项目停手，建议介入，要修复方改测试后重发。这种提交不要撤回，撤回容易和后面的词典冲突。
+
+复核没过，或测试失败能归到这张单、并且不是旧测试没跟上：它的 SHA 都能单独撤回时，从新到旧 git revert --no-edit。解析不到的 SHA 不能撤回，不要为了它们 revert。冲突则 git revert --abort，不推送，整个项目停手。再跑同一条测试。仍失败则不推送，整个项目停手。通过后才 git push。然后 record_change，kind=chore，title 写撤回了哪张单和为什么，commitShas 为撤回提交，bugIds 为这些单。再 release_return，note 用同一句话。
 
 全部没过：不跑发布命令。还有通过的单照常发布。
 
 还有通过的单：只运行 list_pending_release 给出的 deployCommand。它必须是绝对路径的可执行文件。失败或不该用 shell 包起来。然后请求验收地址：verify_env 为 dev、test、prod 用对应 URL，否则 test_url，再没有 dev_url。最多跟随一次重定向。连上且最终状态码不是 5xx 算健康。4xx 写入报告，不算失败。没有地址、连不上或 5xx 算不健康。
 
-发布命令失败或不健康：mark_released，trigger=scheduled，result=failed，bugIds 只含仍待发布的单，detail 写停在哪一步、已核对的事实、建议介入或不必介入。不把已退回的单改回去。同一条下载地址现在已经能连通，失败看起来是当夜网络中断：建议不必介入，下一班重发。命令、镜像源或脚本本身要改：建议介入，写明要改的那一处。
+发布命令失败或不健康：mark_released，trigger=scheduled，result=failed，bugIds 只含仍待发布的单，detail 写停在哪一步、已核对的事实、建议介入或不必介入。不把已退回的单改回去。同一条下载地址现在已经能连通，失败看起来是当夜网络中断：建议不必介入，下一班重发。命令立刻因为缺环境变量退出：不要改脚本里的默认主机。建议介入，要在包装脚本或私有 env 里补这个变量，再把 deployCommand 指到包装脚本。命令、镜像源或脚本本身要改：建议介入，写明要改的那一处。
 
 两边成功：mark_released，trigger=scheduled，result=success，headSha 为发布时的 HEAD，bugIds 只含通过的单，detail 写地址和状态码。没发的单和异常也写进 detail。advancesBugs 为 false 时不要再想办法改状态，detail 写明「发布后推进已关闭，报障仍为待发布」。
 

@@ -409,4 +409,33 @@ describe("project changes ledger", () => {
     expect(services.getBug(adminId, returned.id).status).toBe("pending");
     expect(services.getBug(adminId, passed.id).status).toBe("awaiting_confirm");
   });
+
+  it("leaves already shipped changes off the pending release list", async () => {
+    const { services, adminId, qaId, project } = await setup();
+    const changes = await import("../src/lib/project-changes");
+    const release = await import("../src/lib/release");
+    const { getDb } = await import("../src/lib/db");
+
+    const live = await readyBug(services, qaId, adminId, project.id, "还没上线");
+    const shipped = await readyBug(services, qaId, adminId, project.id, "早已确认");
+    changes.recordChange(adminId, project.id, {
+      kind: "fix",
+      title: "还没上线的修复",
+      commitShas: ["live111"],
+      bugIds: [live.id],
+    });
+    changes.recordChange(adminId, project.id, {
+      kind: "fix",
+      title: "早已上线的修复",
+      commitShas: ["old222"],
+      bugIds: [shipped.id],
+    });
+    getDb()
+      .prepare("UPDATE bugs SET status = 'confirmed' WHERE id = ?")
+      .run(shipped.id);
+
+    const pending = release.listPendingRelease(adminId, project.id);
+    expect(pending.changes.map((change) => change.title)).toEqual(["还没上线的修复"]);
+    expect(pending.bugs.map((bug) => bug.id)).toEqual([live.id]);
+  });
 });

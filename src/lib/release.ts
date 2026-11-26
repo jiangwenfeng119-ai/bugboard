@@ -86,6 +86,37 @@ export function markReleased(
   return done;
 }
 
+const SHIPPED_BUG_STATUS = new Set([
+  "confirmed",
+  "acknowledged",
+  "invalid",
+  "awaiting_confirm",
+]);
+
+function parseBugIdList(raw: string | null) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is number => Number.isInteger(id) && id > 0);
+  } catch {
+    return [];
+  }
+}
+
+/** 关联报障都已确认、已认可、不属实或待确认时，这条变更不再占待发布。没有关联报障的仍保留。 */
+function changeStillNeedsShip(projectId: number, bugIds: number[]) {
+  if (bugIds.length === 0) return true;
+  const marks = bugIds.map(() => "?").join(",");
+  const rows = getDb()
+    .prepare(
+      `SELECT id, status FROM bugs WHERE project_id = ? AND id IN (${marks})`
+    )
+    .all(projectId, ...bugIds) as { id: number; status: string }[];
+  if (rows.length !== bugIds.length) return true;
+  return rows.some((row) => !SHIPPED_BUG_STATUS.has(row.status));
+}
+
 /** 待发布报障，以及还没挂上某次发布的代码变更。仅管理员。 */
 export function listPendingRelease(identity: Identity, projectId: number) {
   assertProjectChangeAdmin(identity, projectId);
@@ -112,14 +143,16 @@ export function listPendingRelease(identity: Identity, projectId: number) {
     deployMode: deployModeOf(deploy?.deploy_mode),
     deployCommand: deploy?.deploy_command || "",
     bugs,
-    changes: changes.map((change) => ({
-      id: change.id,
-      kind: change.kind,
-      title: change.title,
-      commit_shas: change.commit_shas,
-      bug_ids: change.bug_ids,
-      created_at: change.created_at,
-    })),
+    changes: changes
+      .filter((change) => changeStillNeedsShip(projectId, change.bug_ids))
+      .map((change) => ({
+        id: change.id,
+        kind: change.kind,
+        title: change.title,
+        commit_shas: change.commit_shas,
+        bug_ids: change.bug_ids,
+        created_at: change.created_at,
+      })),
     releaseFeedback: {
       activeStatus: activeReleaseStatus(projectId),
       latestFailureDetail: latestReleaseFailureDetail(projectId),
@@ -322,14 +355,13 @@ function hasPendingRelease(projectId: number) {
     )
     .get(projectId);
   if (bug) return true;
-  const change = getDb()
+  const changes = getDb()
     .prepare(
-      `SELECT id FROM project_changes
-       WHERE project_id = ? AND kind IN ('fix', 'feature', 'chore') AND release_change_id IS NULL
-       LIMIT 1`
+      `SELECT bug_ids FROM project_changes
+       WHERE project_id = ? AND kind IN ('fix', 'feature', 'chore') AND release_change_id IS NULL`
     )
-    .get(projectId);
-  return Boolean(change);
+    .all(projectId) as { bug_ids: string | null }[];
+  return changes.some((row) => changeStillNeedsShip(projectId, parseBugIdList(row.bug_ids)));
 }
 
 function listReadyToReleaseIds(projectId: number) {

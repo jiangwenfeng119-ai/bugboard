@@ -145,6 +145,8 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("发布退回");
     expect(ADMIN_AGENT_PROMPT).toContain("先读");
     expect(ADMIN_AGENT_PROMPT).toContain("已经撤回的提交不是还在的修复");
+    expect(ADMIN_AGENT_PROMPT).toContain("失败不要 submit_fix");
+    expect(ADMIN_AGENT_PROMPT).toContain("对应单测的 mock");
   });
 
   it("keeps the nightly release prompt inside the product", () => {
@@ -164,5 +166,8 @@ describe("agent prompts", () => {
     expect(RELEASE_AGENT_PROMPT).toContain("不要猜测它本来是哪个提交");
     expect(RELEASE_AGENT_PROMPT).toContain("release-worktrees");
     expect(RELEASE_AGENT_PROMPT).toContain("已发布");
+    expect(RELEASE_AGENT_PROMPT).toContain("旧测试还在用改之前的做法");
+    expect(RELEASE_AGENT_PROMPT).toContain("不要为此撤回");
+    expect(RELEASE_AGENT_PROMPT).toContain("不要改脚本里的默认主机");
   });
 });
