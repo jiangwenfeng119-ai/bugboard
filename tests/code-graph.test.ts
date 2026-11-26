@@ -1,6 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { gzipSync } from "zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { draftAskAnswer, featureMapFromPrompt } from "../scripts/ask-protocol.mjs";
 import {
@@ -138,6 +139,15 @@ describe("code graph", () => {
     expect(saved?.hasHtml).toBe(true);
     expect(readCodeGraph(admin, projectId)?.body).toContain("getDb()");
     expect(readCodeGraphHtml(admin, projectId)?.toString()).toContain("graph");
+    const packed = saveCodeGraph(admin, projectId, {
+      sha: "abc1234abc",
+      report: "## Summary\n- 10 nodes · 20 edges · 2 communities\n",
+      nodes: 10,
+      edges: 20,
+      html: gzipSync(Buffer.from("<p>packed</p>")).toString("base64"),
+    });
+    expect(packed?.hasHtml).toBe(true);
+    expect(readCodeGraphHtml(admin, projectId)?.toString()).toContain("packed");
   });
 
   it("retries the report without html when the upload connection drops", async () => {

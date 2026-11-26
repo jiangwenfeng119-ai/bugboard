@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 const KEEP = ["graph.json", "GRAPH_REPORT.md", "graph.html", "manifest.json"];
 const LOCK_MS = 20 * 60 * 1000;
@@ -221,8 +222,10 @@ export async function publishCodeGraph(input, fetchImpl = fetch) {
   };
   const htmlPath = String(input.htmlPath || "");
   if (htmlPath && fs.existsSync(htmlPath)) {
-    const size = fs.statSync(htmlPath).size;
-    if (size > 0 && size <= 4_000_000) body.html = fs.readFileSync(htmlPath).toString("base64");
+    const bytes = fs.readFileSync(htmlPath);
+    if (bytes.length > 0 && bytes.length <= 8_000_000) {
+      body.html = (bytes.length > 1_000_000 ? gzipSync(bytes) : bytes).toString("base64");
+    }
   }
   const send = async (payload) => {
     try {

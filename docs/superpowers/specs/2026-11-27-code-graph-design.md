@@ -8,7 +8,7 @@
 
 - `graph.json`：代码机上 `graphify query` 用
 - `GRAPH_REPORT.md`：写回 Bugboard，汇总页在功能地图下面展示全文
-- `graph.html`：不超过 4MB 时一并写回，汇总页新开页打开。响应带 `sandbox allow-scripts`，脚本不能读 Bugboard 的登录态
+- `graph.html`：解压后不超过 8MB 时一并写回。超过 1MB 的先 gzip 再上传。汇总页新开页打开，响应带 `sandbox allow-scripts`，脚本不能读 Bugboard 的登录态
 - `manifest.json`、`built-sha`：留在代码机，供增量更新和新鲜度比较
 
 代码机钉住 `graphifyy` 0.9.120。只跑代码抽取，不调模型。

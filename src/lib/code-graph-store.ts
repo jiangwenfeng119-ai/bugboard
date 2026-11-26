@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
 import fs from "fs";
 import path from "path";
+import { gunzipSync } from "zlib";
 import { reportExcerpt } from "./code-graph-text";
 import { getDb, nowIso } from "./db";
 import { canAccessProject, requireAdmin } from "./permissions";
@@ -9,7 +10,7 @@ import type { Identity } from "./types";
 import { absoluteAttachmentPath } from "./uploads";
 
 const REPORT_MAX = 200_000;
-const HTML_MAX = 4_000_000;
+const HTML_MAX = 8_000_000;
 
 export type CodeGraphView = {
   body: string;
@@ -20,6 +21,21 @@ export type CodeGraphView = {
   hasHtml: boolean;
   updatedAt: string;
 };
+
+function decodeGraphHtml(base64: string) {
+  const raw = Buffer.from(base64, "base64");
+  const gzip = raw.length >= 2 && raw[0] === 0x1f && raw[1] === 0x8b;
+  let plain = raw;
+  if (gzip) {
+    try {
+      plain = gunzipSync(raw);
+    } catch {
+      throw new Error("交互图谱无法解压");
+    }
+  }
+  if (plain.length > HTML_MAX) throw new Error("交互图谱过大");
+  return plain;
+}
 
 function sign(secret: string, body: string) {
   return createHmac("sha256", secret).update(body).digest("hex");
@@ -99,8 +115,7 @@ export function saveCodeGraph(
   const rel = path.join("code-graphs", String(projectId), "graph.html");
   let htmlPath = "";
   if (typeof input.html === "string" && input.html.trim()) {
-    const buf = Buffer.from(input.html, "base64");
-    if (buf.length > HTML_MAX) throw new Error("交互图谱过大");
+    const buf = decodeGraphHtml(input.html);
     if (buf.length > 0) {
       const abs = absoluteAttachmentPath(rel);
       fs.mkdirSync(path.dirname(abs), { recursive: true });
