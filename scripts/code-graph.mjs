@@ -225,13 +225,18 @@ export async function publishCodeGraph(input, fetchImpl = fetch) {
     if (size > 0 && size <= 4_000_000) body.html = fs.readFileSync(htmlPath).toString("base64");
   }
   const send = async (payload) => {
-    const res = await fetchImpl(`${base}/api/projects/${projectId}/code-graph`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json().catch(() => ({}));
-    return { res, json };
+    try {
+      const res = await fetchImpl(`${base}/api/projects/${projectId}/code-graph`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { res, json };
+    } catch (error) {
+      const message = error?.cause?.code || (error instanceof Error ? error.message : "写回失败");
+      return { res: { ok: false, status: 0 }, json: { error: String(message) } };
+    }
   };
   let { res, json } = await send(body);
   if (!res.ok && body.html) {

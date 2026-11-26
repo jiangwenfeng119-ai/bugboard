@@ -139,4 +139,32 @@ describe("code graph", () => {
     expect(readCodeGraph(admin, projectId)?.body).toContain("getDb()");
     expect(readCodeGraphHtml(admin, projectId)?.toString()).toContain("graph");
   });
+
+  it("retries the report without html when the upload connection drops", async () => {
+    const htmlPath = path.join(tmpRoot, "graph.html");
+    fs.writeFileSync(htmlPath, "<p>graph</p>");
+    const { publishCodeGraph } = await import("../scripts/code-graph.mjs");
+    const calls: { html?: string }[] = [];
+    const result = await publishCodeGraph(
+      {
+        baseUrl: "http://127.0.0.1:3080",
+        token: "bb_test",
+        projectId: 3,
+        sha: "abc1234abc",
+        report: "## Summary\n- 10 nodes · 20 edges · 1 communities\n",
+        nodes: 10,
+        edges: 20,
+        htmlPath,
+      },
+      async (_url: string, init: { body: string }) => {
+        const body = JSON.parse(init.body) as { html?: string };
+        calls.push(body);
+        if (body.html) throw new Error("socket");
+        return new Response(JSON.stringify({ graph: { body: "ok" } }), { status: 200 });
+      }
+    );
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].html).toBeUndefined();
+  });
 });
