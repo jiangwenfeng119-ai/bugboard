@@ -3,6 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   appendDeepBrief,
   askEnv,
@@ -25,6 +26,7 @@ import {
   phraseLabels,
   screenLines,
 } from "./ask-protocol.mjs";
+import { graphOutDir, graphParent, publishCodeGraph, queryCodeGraph, refreshCodeGraph } from "./code-graph.mjs";
 
 const userChains = new Map();
 const mapChains = new Map();
@@ -405,6 +407,22 @@ export function syncConfiguredMirrors(config, projects, git = gitSync) {
   return synced;
 }
 
+function scheduleGraphRefresh(config, project, sha) {
+  const code = String(project?.code || "");
+  if (!config?.projects?.[code] || !config.bugboardUrl || !config.releaseKey || !config.askRoot) return;
+  const parent = graphParent(config.askRoot, code);
+  let built = "";
+  try {
+    built = fs.readFileSync(path.join(parent, "built-sha"), "utf8").trim();
+  } catch {
+    built = "";
+  }
+  if (built === sha && fs.existsSync(path.join(parent, "graphify-out", "graph.json"))) return;
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "refresh-code-graphs.mjs");
+  const child = spawn(process.execPath, [script, process.cwd(), code], { detached: true, stdio: "ignore" });
+  child.unref();
+}
+
 export async function executeAsk(config, payload, deps = {}) {
   const git = deps.git || gitSync;
   const post =
@@ -467,11 +485,20 @@ export async function executeAsk(config, payload, deps = {}) {
     let prompt = String(payload.prompt || "");
     if (!prompt.trim()) throw new Error("缺少问题");
     const question = questionFromPrompt(prompt);
+    const graphPath = path.join(graphOutDir(askRoot, code), "graph.json");
+    let queried = { text: "", files: [] };
+    try {
+      if (fs.existsSync(graphPath)) queried = queryCodeGraph({ graphPath, question });
+    } catch (error) {
+      console.error(`代码图谱查询失败 ${code}：${error instanceof Error ? error.message : error}`);
+    }
+    scheduleGraphRefresh(config, payload.project || { code }, synced.sha);
     const hits = collectAskHits(dir, askSearchTerms(question), git);
     const tableAnswer = draftAskAnswer({
       question,
       documents: documentsFromPrompt(prompt),
       featureMap: featureMapFromPrompt(prompt),
+      graphFiles: queried.files,
       hits,
       excerpts: [interfaceLines(dir), manualExcerpts(dir, hits)].filter(Boolean).join("\n"),
     });
@@ -481,7 +508,11 @@ export async function executeAsk(config, payload, deps = {}) {
       : chooseAskPath({ question, imageCount: images.length, tableAnswer });
     if (mode === "table") {
       console.log(`问答 ${code} #${payload.runId} 快查`);
-      await send({ kind: "status", text: "正在查应用里的入口", mirrorSha: synced.sha });
+      await send({
+        kind: "status",
+        text: tableAnswer.startsWith("相关代码在这些文件") ? "正在查代码图谱" : "正在查应用里的入口",
+        mirrorSha: synced.sha,
+      });
       await send({ kind: "delta", text: tableAnswer, mirrorSha: synced.sha });
       await send({ kind: "done", text: tableAnswer, sessionId: "", mirrorSha: synced.sha });
       return { sha: synced.sha, fast: true };
@@ -495,6 +526,7 @@ export async function executeAsk(config, payload, deps = {}) {
         tableAnswer,
         imagePaths: saved,
         imagesOmitted: Boolean(payload.imagesOmitted) || saved.length < images.length,
+        graphNote: queried.text,
       });
     } else {
       console.log(`问答 ${code} #${payload.runId} 功能地图`);

@@ -351,6 +351,17 @@ function ensureAsk(db: Database.Database) {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS ask_graphs (
+      project_id INTEGER PRIMARY KEY,
+      body TEXT NOT NULL DEFAULT '',
+      mirror_sha TEXT NOT NULL DEFAULT '',
+      html_path TEXT NOT NULL DEFAULT '',
+      node_count INTEGER NOT NULL DEFAULT 0,
+      edge_count INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
   `);
   const cols = new Set(columnNames(db, "ask_runs"));
   if (!cols.has("queued")) db.exec("ALTER TABLE ask_runs ADD COLUMN queued INTEGER NOT NULL DEFAULT 0");

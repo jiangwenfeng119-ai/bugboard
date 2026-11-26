@@ -127,6 +127,18 @@ describe("ask core", () => {
     expect(prompt).toContain("src/app/manual/page.tsx");
     expect(prompt).toContain("「汇总」页最下面");
     expect(prompt).toContain("不要再搜索仓库");
+    expect(prompt).toContain("当前还没有生成");
+    const withGraph = buildAskPrompt({
+      projectName: "门店",
+      code: "BRANDO",
+      branch: "main",
+      techStack: "",
+      notes: "",
+      question: "submit_fix 在哪个文件",
+      codeGraph: "## God Nodes\n1. `getDb()` - 4 edges",
+    });
+    expect(withGraph).toContain("getDb()");
+    expect(withGraph).toContain("只读这些文件");
     const missing = buildAskPrompt({
       projectName: "门店",
       code: "BRANDO",

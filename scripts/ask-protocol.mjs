@@ -153,7 +153,15 @@ export function featureMapFromPrompt(prompt) {
   const label = "地图如下：\n";
   const start = text.indexOf(label);
   if (start < 0) return "";
-  return sectionUntil(text, start + label.length, ["\n用户已经写在报障", "\n用户的问题在"]);
+  return sectionUntil(text, start + label.length, [
+    "\n代码图谱在这个项目",
+    "\n用户已经写在报障",
+    "\n用户的问题在",
+  ]);
+}
+
+export function asksCodePlace(question) {
+  return /哪个文件|哪些文件|什么文件|哪个函数|谁调用|调用关系|实现在哪|代码在哪|定义在哪/.test(String(question || ""));
 }
 
 function placesIn(text) {
@@ -310,7 +318,7 @@ export function askReplyGuide() {
   }
 }
 
-export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted }) {
+export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted, graphNote }) {
   const question = questionFromPrompt(prompt);
   const lines = [
     String(prompt || "").trimEnd(),
@@ -347,6 +355,8 @@ export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted
   const paths = (imagePaths || []).map((item) => String(item || "").trim()).filter(Boolean);
   if (paths.length) lines.push("", "图片在工作区里，请打开这些文件看画面：", ...paths);
   if (imagesOmitted) lines.push("还有图片没能带上。");
+  const graph = String(graphNote || "").trim();
+  if (graph) lines.push("", "代码图谱查到这些，先读这些文件：", graph);
   return lines.join("\n");
 }
 
@@ -680,12 +690,22 @@ function lineAnswersQuestion(line, terms) {
   return aboutManual && /手册|帮助|manual/i.test(line);
 }
 
-function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap }) {
+function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap, graphFiles }) {
   const terms = askSearchTerms(question);
   const focusNames = existenceFocusNames(question);
   const asked = String(question || "").trim().slice(0, 80) || "这个问题";
   if (/功能地图/.test(asked) && /哪里|在哪|哪儿|位置|怎么找|怎么看/.test(asked)) {
     return ["功能地图在这个项目的「汇总」页最下面。", "判断：已经有了"].join("\n");
+  }
+  if (/代码图谱/.test(asked) && /哪里|在哪|哪儿|位置|怎么找|怎么看/.test(asked)) {
+    return ["代码图谱在这个项目的「汇总」页，功能地图下面。", "判断：已经有了"].join("\n");
+  }
+  const files = (Array.isArray(graphFiles) ? graphFiles : [])
+    .map((file) => String(file || "").trim())
+    .filter((file) => file && !file.includes("..") && file.length <= 180)
+    .slice(0, 6);
+  if (files.length && asksCodePlace(asked) && !looksLikeDefect(asked)) {
+    return ["相关代码在这些文件：", ...files.map((file) => `- \`${file}\``), "判断：已经有了"].join("\n");
   }
   const entries = [];
   const catalog = [];

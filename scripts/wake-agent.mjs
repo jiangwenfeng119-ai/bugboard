@@ -18,6 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { callbackAllowed, isFeatureMapPrompt } from "./ask-protocol.mjs";
 import { enqueueAsk, executeAsk, gitSync, syncConfiguredMirrors } from "./ask-runner.mjs";
+import { refreshProjectGraphs } from "./code-graph.mjs";
 
 export const MAX_BODY_BYTES = 1_000_000;
 export const MAX_PROMPT_CHARS = 60_000;
@@ -421,6 +422,14 @@ export function createWakeServer(config) {
       send(res, 202, { ok: true, spawned: true });
       return;
     }
+    if (payload.event === "project.graph") {
+      const code = String(payload.project?.code || "");
+      send(res, 202, { ok: true, spawned: true });
+      void refreshProjectGraphs(config, [payload.project || { code }], gitSync, { publishOnSkip: true }).catch((error) => {
+        console.error(error instanceof Error ? error.message : error);
+      });
+      return;
+    }
     if (payload.event === "project.ask") {
       const callbackUrl = String(payload.callbackUrl || "");
       if (!callbackAllowed(callbackUrl, config.bugboardUrl || "")) {
@@ -758,6 +767,9 @@ function main() {
     console.log(`叫醒服务监听 http://${bindHost}:${port}/wake`);
     console.log(`Agent：${config.agent}。项目目录：${Object.keys(config.projects).join(", ") || config.cwd || "（还没配）"}`);
     console.log(`问答镜像目录：${config.askRoot}`);
+    setInterval(() => {
+      void syncAskProjects(config);
+    }, 24 * 60 * 60 * 1000).unref();
     console.log(
       config.applyEdits
         ? "已允许在项目目录里自动改文件（--force，仍限制在该目录和沙箱里）。"
@@ -791,6 +803,9 @@ async function syncAskProjects(config) {
       else console.log(`问答镜像 ${item.code} ${String(item.sha).slice(0, 7)}`);
     }
     await resumeQueuedAsks(config);
+    void refreshProjectGraphs(config, projects, gitSync).catch((error) => {
+      console.error(error instanceof Error ? error.message : "更新代码图谱失败");
+    });
   } catch (error) {
     console.error(error instanceof Error ? error.message : "同步问答镜像失败");
   }

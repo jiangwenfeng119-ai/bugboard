@@ -24,6 +24,7 @@ import { canAccessProject } from "./permissions";
 import { uploadsRoot } from "./paths";
 import { getProject } from "./services";
 import type { Identity } from "./types";
+import { codeGraphExcerpt } from "./code-graph-store";
 import { absoluteAttachmentPath } from "./uploads";
 
 export type PublicAsk = {
@@ -410,6 +411,7 @@ export async function startAsk(
     openBugs: openBugLines(projectId),
     documents: projectDocumentExcerpt(projectId),
     featureMap: featureMapExcerpt(projectId),
+    codeGraph: codeGraphExcerpt(projectId),
     draft: input.draft,
   });
   const taken = takeAskImages([

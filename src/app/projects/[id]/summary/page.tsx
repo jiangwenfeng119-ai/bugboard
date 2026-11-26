@@ -14,8 +14,10 @@ import { TrendChart } from "../TrendChart";
 import { SeriesChart, SeriesLegend, type ChartSeries } from "../SeriesChart";
 import { DaysSwitcher } from "../DaysSwitcher";
 import { listAskGaps, readFeatureMap } from "@/lib/ask-store";
+import { readCodeGraph } from "@/lib/code-graph-store";
 import { FeatureMapBody } from "./FeatureMapBody";
 import { RefreshFeatureMap } from "./RefreshFeatureMap";
+import { RefreshCodeGraph } from "./RefreshCodeGraph";
 
 const STATUS_COLOR: Record<BugStatus, string> = {
   pending: "var(--status-pending)",
@@ -77,6 +79,7 @@ export default async function ProjectSummaryPage({
   ];
   const showAll = sp.showAll === "1";
   const featureMap = readFeatureMap(identity, Number(id));
+  const codeGraph = readCodeGraph(identity, Number(id));
   const gaps = listAskGaps(identity, Number(id));
   const project = getProject(identity, Number(id));
   const visibleEntries = showAll
@@ -210,6 +213,34 @@ export default async function ProjectSummaryPage({
           />
         ) : (
           <p className="bb-muted">还没有。更新之后，这里按当前默认分支列出模块和入口。</p>
+        )}
+      </section>
+
+      <section className="bb-card bb-section-card bb-summary-span">
+        <div className="bb-section-head">
+          <h2>代码图谱</h2>
+          <RefreshCodeGraph projectId={Number(id)} />
+        </div>
+        {codeGraph ? (
+          <>
+            <p className="bb-muted">
+              基于 {codeGraph.sha.slice(0, 8)}
+              {codeGraph.nodes > 0 ? ` · ${codeGraph.nodes} 个节点 · ${codeGraph.edges} 条边` : ""}
+              {codeGraph.mirrorSha && codeGraph.mirrorSha !== codeGraph.sha
+                ? ` · 问答镜像已经是 ${codeGraph.mirrorSha.slice(0, 8)}，图谱还在上一次提交`
+                : ""}
+            </p>
+            {codeGraph.hasHtml ? (
+              <p>
+                <a className="bb-ask-link" href={`/api/projects/${id}/code-graph/html`} target="_blank" rel="noreferrer">
+                  打开交互图谱
+                </a>
+              </p>
+            ) : null}
+            <FeatureMapBody body={codeGraph.body} githubUrl={project.github_url} branch={project.default_branch} />
+          </>
+        ) : (
+          <p className="bb-muted">还没有。更新之后，这里按问答镜像的默认分支列出代码怎么连。</p>
         )}
       </section>
 
