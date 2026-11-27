@@ -343,9 +343,12 @@ export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted
   if (asksCapability(question)) {
     lines.push(
       "这是在问现在系统能不能做、实现了没有。先正面回答实现了还是没有。",
+      "第一段必须先说明这个能力现在实现了还是没有。「可以…吗」「自己编辑吗」也算能力问法。",
+      "只看到菜单或页面，不等于对方问的操作已经能做。",
       "实现了就写代码里现在怎么判断、谁能操作、界面上怎么用。判断：已经有了。不要写报障标题和描述。",
       "没有实现就先写「现在没有。这是新功能。」并写清现在最接近的做法，然后再写报障建议。",
-      "不要用「这需要报障」开头。",
+      "现有功能坏了就先写现在的做法，再写报障建议。还没对照到操作本身时，判断：没有把握。",
+      "不要用「这需要报障」开头。说明现状之前不要写填单建议，也不要先判断建议报障。",
     );
   }
   const guide = askReplyGuide();
@@ -427,8 +430,35 @@ function filingDescription({ question, place, isNew, unsure }) {
   ].join("\n");
 }
 
-export function withFilingAdvice(question, answer) {
+function hasStatusFirst(prose) {
+  const text = String(prose || "").trim();
+  if (!text) return false;
+  if (/^现在没有。这是新功能/.test(text)) return true;
+  if (/^现在可以这样做：/.test(text)) return true;
+  if (/^这是现有功能坏了/.test(text)) return true;
+  if (/代码里现在|谁能操作|界面上怎么用|现在的做法/.test(text)) return true;
+  return false;
+}
+
+function rewritePrematureCapabilityFiling(question, answer) {
   const text = String(answer || "").trim();
+  if (!text || !asksCapability(question) || !/^这需要报障/.test(text)) return text;
+  if (hasStatusFirst(text.replace(/^这需要报障[^\n]*\n?/, ""))) {
+    return text.replace(/^这需要报障[^\n]*\n?/, "").trim();
+  }
+  const place = placeFromAdvice(text);
+  const seen = text.match(/应用里能看到「[^」]+」[。.]?/);
+  return [
+    seen?.[0] || (place ? `应用里能看到「${place}」。` : ""),
+    "这一问是在核对现在能不能做。还没对照到代码里的做法，不能直接报障。",
+    "判断：没有把握",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function withFilingAdvice(question, answer) {
+  const text = rewritePrematureCapabilityFiling(question, String(answer || "").trim());
   if (!text || /^优先级[:：]/m.test(text)) return text;
   const lines = text.split(/\r?\n/);
   let judgment = "";
@@ -442,6 +472,18 @@ export function withFilingAdvice(question, answer) {
   }
   if (judgment !== "建议报障" && judgment !== "没有把握") return text;
   const prose = lines.slice(0, at).join("\n").trim();
+  if (judgment === "建议报障" && asksCapability(question) && !hasStatusFirst(prose)) {
+    const place = placeFromAdvice(prose);
+    const seen = prose.match(/应用里能看到「[^」]+」[。.]?/);
+    const rewritten = [
+      seen?.[0] || (place ? `应用里能看到「${place}」。` : prose.split("\n")[0] || ""),
+      "这一问是在核对现在能不能做。还没对照到代码里的做法，不能直接报障。",
+      "判断：没有把握",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return withFilingAdvice(question, rewritten);
+  }
   const place = placeFromAdvice(prose);
   const isNew = /现在没有。这是新功能/.test(prose);
   const unsure = judgment === "没有把握";
