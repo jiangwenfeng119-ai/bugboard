@@ -34,6 +34,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/mcp ./mcp
+COPY --from=builder /app/CHANGELOG.md ./CHANGELOG.md
+COPY --from=builder /app/docs/user-manual.md ./docs/user-manual.md
 USER bugboard
 EXPOSE 3000
 VOLUME ["/data"]

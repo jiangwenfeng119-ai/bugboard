@@ -6,6 +6,12 @@ import {
   USER_AGENT_PROMPT,
   applyProjectName,
 } from "../src/lib/agent-prompts";
+import {
+  AGENT_PROMPT_REVISIONS,
+  PROMPT_HISTORY_LIMIT,
+  type AgentPromptId,
+  type AgentPromptRevision,
+} from "../src/lib/agent-prompt-history";
 
 describe("agent prompts", () => {
   it("keeps a blank project line until a name is supplied", () => {
@@ -117,8 +123,15 @@ describe("agent prompts", () => {
     expect(USER_AGENT_PROMPT).toContain("## 期望");
     expect(USER_AGENT_PROMPT).toContain("## 实际");
     expect(ADMIN_AGENT_PROMPT).toContain("## 原来的问题");
+    expect(ADMIN_AGENT_PROMPT).toContain("## 为什么会这样");
+    expect(ADMIN_AGENT_PROMPT).toContain("## 改了什么");
     expect(ADMIN_AGENT_PROMPT).toContain("## 现在的表现");
     expect(ADMIN_AGENT_PROMPT).toContain("## 请这样重测");
+    expect(ADMIN_AGENT_PROMPT).toContain("固定这五段，顺序不变");
+    expect(ADMIN_AGENT_PROMPT).not.toContain("固定这三段");
+    expect(ADMIN_AGENT_PROMPT).toMatch(
+      /## 原来的问题[\s\S]*## 为什么会这样[\s\S]*## 改了什么[\s\S]*## 现在的表现[\s\S]*## 请这样重测/
+    );
     expect(ADMIN_AGENT_PROMPT).toContain("Markdown");
   });
 
@@ -178,5 +191,57 @@ describe("agent prompts", () => {
     expect(RELEASE_AGENT_PROMPT).toContain("开发目录的当前分支");
     expect(RELEASE_AGENT_PROMPT).toContain("不要删掉断言");
     expect(RELEASE_AGENT_PROMPT).toContain("已拦住并已叫醒");
+  });
+});
+
+const LIVE_PROMPTS: Record<AgentPromptId, string> = {
+  user: USER_AGENT_PROMPT,
+  admin: ADMIN_AGENT_PROMPT,
+  release: RELEASE_AGENT_PROMPT,
+};
+
+describe("agent prompt revisions", () => {
+  it("keeps five revisions and the live text as the newest", () => {
+    for (const id of Object.keys(LIVE_PROMPTS) as AgentPromptId[]) {
+      const revisions = AGENT_PROMPT_REVISIONS[id];
+      expect(revisions).toHaveLength(PROMPT_HISTORY_LIMIT);
+      expect(revisions[0].text).toBe(LIVE_PROMPTS[id]);
+      expect(new Set(revisions.map((rev) => rev.text)).size).toBe(PROMPT_HISTORY_LIMIT);
+      expect(new Set(revisions.map((rev) => rev.version)).size).toBe(PROMPT_HISTORY_LIMIT);
+      for (let i = 0; i < revisions.length; i++) {
+        const rev = revisions[i];
+        expect(rev.changes.trim().length).toBeGreaterThan(0);
+        expect(Number.isNaN(Date.parse(rev.updatedAt))).toBe(false);
+        const older = revisions[i + 1];
+        if (!older) continue;
+        expect(rev.version).toBe(older.version + 1);
+        expect(Date.parse(rev.updatedAt)).toBeGreaterThanOrEqual(Date.parse(older.updatedAt));
+      }
+    }
+  });
+
+  it("records what the newest revision changed", () => {
+    expect(AGENT_PROMPT_REVISIONS.user[0]).toMatchObject({
+      version: 12,
+      changes: expect.stringContaining("release_hold"),
+    });
+    expect(AGENT_PROMPT_REVISIONS.admin[0]).toMatchObject({
+      version: 21,
+      changes: expect.stringContaining("为什么会这样"),
+    });
+    expect(AGENT_PROMPT_REVISIONS.admin[0].changes).toContain("改了什么");
+    expect(AGENT_PROMPT_REVISIONS.release[0]).toMatchObject({
+      version: 5,
+      changes: expect.stringContaining("release_hold"),
+    });
+  });
+
+  it("still names the project on older user and admin prompts", () => {
+    for (const rev of [
+      ...AGENT_PROMPT_REVISIONS.user,
+      ...AGENT_PROMPT_REVISIONS.admin,
+    ] satisfies AgentPromptRevision[]) {
+      expect(applyProjectName(rev.text, "官网")).toContain("目标项目：官网");
+    }
   });
 });

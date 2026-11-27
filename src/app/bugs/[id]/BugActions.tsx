@@ -38,7 +38,7 @@ const NOTE_ACTIONS = new Set<TransitionAction>([
 
 const NOTE_HINT: Partial<Record<TransitionAction, string>> = {
   submit_fix:
-    "写给报障人，用 Markdown 分成三段：## 原来的问题、## 现在的表现、## 请这样重测。重测步骤用 1. 2. 。用界面上的说法，不要写文件名或实现细节。",
+    "写给报障人，用 Markdown 分成五段，顺序不变：## 原来的问题、## 为什么会这样、## 改了什么、## 现在的表现、## 请这样重测。先写清原因和改动，再写现在的表现。重测步骤用 1. 2. 。用界面上的说法，不要写文件名或实现细节。",
   mark_invalid:
     "写给报障人：实际做了什么、看到了什么、为什么和报障对不上。已经有这个功能、只是没用对或配置不对时用这个。",
   request_product:

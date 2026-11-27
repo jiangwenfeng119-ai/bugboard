@@ -11,6 +11,8 @@ export type ProseBlock =
 
 const LABELS = [
   "原来的问题",
+  "为什么会这样",
+  "改了什么",
   "现在的表现",
   "请这样重测",
   "现在的做法",

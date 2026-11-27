@@ -16,6 +16,7 @@ import {
   documentsFromPrompt,
   draftAskAnswer,
   fallbackAskAnswer,
+  rejectPromptEcho,
   withFilingAdvice,
   featureMapFromPrompt,
   isFeatureMapPrompt,
@@ -593,7 +594,7 @@ export async function executeAsk(config, payload, deps = {}) {
           git
         );
       }
-      const partial = String(answer || "").trim();
+      const partial = rejectPromptEcho(answer).trim();
       const usablePartial = /判断[:：]\s*(已经有了|建议报障|没有把握)\s*$/m.test(partial);
       const text = withFilingAdvice(question, usablePartial ? partial : fallbackAskAnswer(tableAnswer));
       await send({ kind: "delta", text, mirrorSha: synced.sha });
@@ -615,6 +616,7 @@ export async function executeAsk(config, payload, deps = {}) {
       await send({ kind: "reverted", text: "这次没有回答。代码没有被改动。", mirrorSha: synced.sha });
       return { reverted: true };
     }
+    answer = rejectPromptEcho(answer).trim() || fallbackAskAnswer(tableAnswer);
     if (!answer.trim()) throw new Error(finished.stderr.trim().slice(0, 300) || "没有得到回答");
     answer = withFilingAdvice(question, answer);
     await send({ kind: "done", text: answer, sessionId, mirrorSha: synced.sha });

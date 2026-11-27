@@ -10,6 +10,8 @@ import {
   callbackAllowed,
   draftAskAnswer,
   featureMapFromPrompt,
+  looksLikeDefect,
+  rejectPromptEcho,
   isFeatureMapPrompt,
   parseAskStreamLine,
   planAskMirror,
@@ -351,7 +353,8 @@ describe("ask protocol", () => {
       hits: [],
       excerpts: ["界面「登录」", "界面「日志检索」"].join("\n"),
     });
-    expect(search.startsWith("这需要报障。请写清：在日志检索做了什么")).toBe(true);
+    expect(search.startsWith("这是现有功能坏了。请写清：在日志检索做了什么")).toBe(true);
+    expect(search).not.toContain("这需要报障");
     expect(search).not.toContain("在登录做了什么");
     expect(search).toContain("标题：");
     expect(search).toContain("## 环境\n日志检索");
@@ -665,5 +668,68 @@ describe("ask protocol", () => {
     const brief = appendDeepBrief({ prompt: `<question>\n${question}\n</question>`, tableAnswer: answer });
     expect(brief).toContain("先正面回答实现了还是没有");
     expect(brief).toContain("不要用「这需要报障」开头");
+  });
+
+  it("treats menus that will not open as a broken feature and looks at the code", () => {
+    const question = "这两个都打不开";
+    expect(looksLikeDefect(question)).toBe(true);
+    expect(chooseAskPath({ question })).toBe("deep");
+    const answer = draftAskAnswer({ question, documents: "", hits: [], excerpts: "界面「产品手册」" });
+    expect(answer.startsWith("这是现有功能坏了")).toBe(true);
+    expect(answer).not.toContain("这需要报障");
+    expect(answer).toContain("判断：建议报障");
+    expect(answer).not.toMatch(/判断：已经有了\s*$/);
+    const brief = appendDeepBrief({ prompt: `<question>\n${question}\n</question>`, tableAnswer: answer });
+    expect(brief).toContain("旁边有菜单");
+    expect(brief).toContain("这是现有功能坏了");
+  });
+
+  it("does not call a named page found when the menu path is still missing", () => {
+    const question = "会员钱包页在哪?";
+    const thin = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [],
+      excerpts: "界面「会员钱包」",
+    });
+    expect(thin).toContain("会员钱包");
+    expect(thin).toContain("判断：没有把握");
+    expect(thin).not.toContain("判断：已经有了");
+    expect(chooseAskPath({ question, tableAnswer: thin })).toBe("table");
+    expect(
+      chooseAskPath({
+        question,
+        tableAnswer: "现在可以这样做：\n应用里能看到「会员钱包」\n判断：已经有了",
+      }),
+    ).toBe("deep");
+    const found = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [],
+      excerpts: "- **会员钱包**（`/members/wallet`）：会员余额",
+    });
+    expect(found).toContain("/members/wallet");
+    expect(found).toContain("判断：已经有了");
+    expect(chooseAskPath({ question, tableAnswer: found })).toBe("table");
+  });
+
+  it("does not file a bug when the question only asks whether a setting exists", () => {
+    const question = "采购中,有补贴计算规则配置的地方吗?";
+    const answer = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [],
+      excerpts: "界面「采购」",
+    });
+    expect(answer).toContain("判断：没有把握");
+    expect(answer).not.toContain("这需要报障");
+    expect(answer).not.toContain("现在没有。这是新功能");
+    expect(chooseAskPath({ question, tableAnswer: answer })).toBe("deep");
+  });
+
+  it("drops an answer that only repeats the ask prompt", () => {
+    const echoed = "你是这个项目的只读助手。不能修改文件，不能提交。\n判断：没有把握";
+    expect(rejectPromptEcho(echoed)).toBe("");
+    expect(rejectPromptEcho("现在可以这样做：\n侧边栏「会员钱包」（/wallet）\n判断：已经有了")).toContain("会员钱包");
   });
 });

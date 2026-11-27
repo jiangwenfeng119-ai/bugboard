@@ -113,7 +113,7 @@ export function askGitSteps(plan, dir, askRoot) {
 const ASK_CUT = /在哪里|在哪|是什么|怎么|如何|有没有|是否|请问|能不能|可以吗|为什么|什么原因/;
 const ASK_SPLIT = /[啊呢吧吗呀？?！!。，,、\s的里并后和与或把被让给从到]+/;
 const ASK_EDGE = /^(请|帮我|希望|目前|现在|这个|那个|一个|我们|你们|他们)+|(生成|之后|之前|里面|当中|相关|问题|优化|修改|显示|无法|不能|没有|一下)+$/g;
-const DEFECT = /停了|中止|没有反应|没反应|无反应|闪退|白屏|丢失|不可用|无效|报错|无法|不能|不对|出错|失败|不显示|显示不全|错误|异常|冲突|卡顿|空白|空壳|算错|混乱|点了.{0,8}没/;
+const DEFECT = /停了|中止|没有反应|没反应|无反应|闪退|白屏|丢失|不可用|无效|报错|无法|不能|不对|出错|失败|不显示|显示不全|错误|异常|冲突|卡顿|空白|空壳|算错|混乱|打不开|点了.{0,8}没/;
 const VAGUE_PLACE = /^(页面|菜单|按钮|界面|功能|系统|登录|登陆|设置|问题|状态|动作|搜索|项目|密码|报告|中心|管理|字段)$/;
 const GENERIC_LABEL = /^(中文|选择|创建|描述|内容|报障|标题|财务|商品|物流|客户|语言|确定|取消|保存|删除|编辑|返回|关闭|提交|新增|添加|修改|查看|详情|全部|更多|其他|提示|成功|失败|加载|暂无|当前|已经|可以|没有|确认|实际|系统)$/;
 const LOGIN_HEAD = /^(退出|显示|选择|点击|直接|确认|修改|处理|修复|查询|移除|升级|进入|使用|打开|返回|关闭|取消|删除|新增|添加|所有|全部|其他|没有|一个|这个|那个)$/;
@@ -209,8 +209,14 @@ function quotedAskTerms(question) {
 
 export function asksExistence(question) {
   const text = String(question || "");
-  if (looksLikeDefect(text)) return false;
-  return /有没有|是否有|有无|支不支持|能不能选/.test(text);
+  if (looksLikeDefect(text) || asksCapability(text)) return false;
+  return /有没有|是否有|有无|支不支持|能不能选|有[\u4e00-\u9fffA-Za-z0-9]{2,24}吗/.test(text);
+}
+
+export function asksLooseExistence(question) {
+  const text = String(question || "");
+  if (!asksExistence(text)) return false;
+  return !/有没有|是否有|有无|支不支持|能不能选/.test(text);
 }
 
 export function existenceFocus(question) {
@@ -297,6 +303,14 @@ export function asksBehaviorConfirm(question) {
   return /是不是|会不会|是否会|会成功吗|会失败吗|能不能成功|可不可以|行不行/.test(text);
 }
 
+function whereAnswerIsConcrete(answer) {
+  const text = String(answer || "");
+  if (/\/[a-z][\w./-]*/i.test(text)) return true;
+  if (/→/.test(text)) return true;
+  if (/页最下面|页下面|「[^」]{1,12}」页/.test(text)) return true;
+  return false;
+}
+
 export function chooseAskPath({ question, imageCount = 0, tableAnswer = "" }) {
   const text = String(question || "");
   if (Number(imageCount) > 0) return "deep";
@@ -306,7 +320,20 @@ export function chooseAskPath({ question, imageCount = 0, tableAnswer = "" }) {
   if (asksBehaviorConfirm(text)) return "deep";
   if (asksExistence(text)) return clearExistenceAnswer(tableAnswer) ? "table" : "deep";
   if (/应该[\s\S]{0,40}(却|但是|但)/.test(text)) return "deep";
+  if (
+    /在哪里|在哪|怎么找|怎么看|怎么进|哪儿/.test(text) &&
+    /判断：已经有了/.test(tableAnswer) &&
+    !whereAnswerIsConcrete(tableAnswer)
+  ) {
+    return "deep";
+  }
   return "table";
+}
+
+export function rejectPromptEcho(answer) {
+  const text = String(answer || "");
+  if (/你是这个项目的只读助手/.test(text) && /不能修改文件/.test(text)) return "";
+  return text;
 }
 
 export function askReplyGuide() {
@@ -338,6 +365,13 @@ export function appendDeepBrief({ prompt, tableAnswer, imagePaths, imagesOmitted
     lines.push(
       "这是在问现在系统会怎样，不是在写报障草稿。先正面回答会不会、能不能，或写清现在的做法。",
       "查到规则就直接告诉他；查不到再判断：没有把握。不要只生成报障标题和描述。",
+    );
+  }
+  if (looksLikeDefect(question)) {
+    lines.push(
+      "这是在说现有功能坏了：打不开、报错，或结果和现在的做法不一致。",
+      "先写「这是现有功能坏了。」写清现在的菜单或页面、应该怎样，再写这次实际怎样。",
+      "旁边有菜单，不能把故障说成已经有了。不要用「这需要报障」开头。",
     );
   }
   if (asksCapability(question)) {
@@ -457,8 +491,13 @@ function rewritePrematureCapabilityFiling(question, answer) {
     .join("\n");
 }
 
+function rewriteDefectOpening(question, answer) {
+  if (!looksLikeDefect(question)) return answer;
+  return String(answer || "").replace(/^这需要报障/, "这是现有功能坏了");
+}
+
 export function withFilingAdvice(question, answer) {
-  const text = rewritePrematureCapabilityFiling(question, String(answer || "").trim());
+  const text = rewriteDefectOpening(question, rewritePrematureCapabilityFiling(question, String(answer || "").trim()));
   if (!text || /^优先级[:：]/m.test(text)) return text;
   const lines = text.split(/\r?\n/);
   let judgment = "";
@@ -907,6 +946,10 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap, gr
         .filter(Boolean)
         .join("\n");
     }
+    if (asksLooseExistence(question)) {
+      const seen = place ? `应用里能看到「${place}」。` : spokenLines[0] || "";
+      return [seen, "还确认不了你问的那一项现在有没有。", "判断：没有把握"].filter(Boolean).join("\n");
+    }
     const existence = asksExistence(question);
     const focusHit = focusNames.some(
       (name) =>
@@ -924,6 +967,9 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap, gr
     }
     if (whereAsked && !looksLikeDefect(question) && !asksForNew) {
       if (!spokenLines.length) return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
+      if (!spokenLines.some((line) => whereAnswerIsConcrete(line))) {
+        return [spokenLines[0], "查到名字，还没对上菜单或地址。", "判断：没有把握"].join("\n");
+      }
       return ["现在可以这样做：", ...spokenLines, "判断：已经有了"].join("\n");
     }
     if (asksForNew) {
@@ -943,8 +989,8 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap, gr
       return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
     }
     const hint = place
-      ? `这需要报障。请写清：在${place}做了什么、实际怎样。`
-      : "这需要报障。请写清：哪个页面、做了什么、实际怎样。";
+      ? `这是现有功能坏了。请写清：在${place}做了什么、实际怎样。`
+      : "这是现有功能坏了。请写清：哪个页面、做了什么、实际怎样。";
     return [hint, ...spokenLines, "判断：建议报障"].join("\n");
   };
   const phrase = (item) => {
@@ -1036,7 +1082,7 @@ function draftAskAnswerRaw({ question, documents, hits, excerpts, featureMap, gr
   if (asksBehaviorConfirm(question)) {
     return "还确认不了。请补充：哪个页面、做了什么、实际怎样。\n判断：没有把握";
   }
-  if (looksLikeDefect(question)) return "这需要报障。请写清：哪个页面、做了什么、实际怎样。\n判断：建议报障";
+  if (looksLikeDefect(question)) return "这是现有功能坏了。请写清：哪个页面、做了什么、实际怎样。\n判断：建议报障";
   if (sources.length && whereAsked) return `文档里提到这件事，但没有写清在应用的哪个菜单或页面进入。\n判断：没有把握`;
   if (!whereAsked && (sources.length || /优化|希望|应该/.test(question))) {
     return "这需要报障。请写清：哪个页面、做了什么、你希望怎样。\n判断：建议报障";

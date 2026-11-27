@@ -393,7 +393,8 @@ describe("ask runner", () => {
     expect(result).toMatchObject({ fallback: true });
     const done = events.find((event) => event.kind === "done");
     expect(done?.text).toContain("代码对照没有在时限内完成。");
-    expect(done?.text).toContain("判断：没有把握");
+    expect(done?.text).toContain("这是现有功能坏了");
+    expect(done?.text).toContain("判断：建议报障");
     expect(events.some((event) => event.kind === "reverted")).toBe(false);
     fs.rmSync(root, { recursive: true, force: true });
   });
