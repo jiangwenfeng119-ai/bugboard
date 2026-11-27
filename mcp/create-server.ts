@@ -559,6 +559,25 @@ server.tool(
 );
 
 server.tool(
+  "release_hold",
+  "发布拦住：待发布 → 修复中（管理员级 Key，note 必填）。测试或断言还能补上时使用。不撤回提交。note 写清哪条测试没过、要补的那一件事。修复 Agent 会按这句补上并回到待发布。",
+  {
+    bugId: z.number().int().positive(),
+    note: z
+      .string()
+      .min(1)
+      .describe("拦住原因（必填）。写清失败的测试和要补的那一件事。不要写删掉断言。"),
+  },
+  async ({ bugId, note }) => {
+    try {
+      return textResult(await transition("release_hold", bugId, note));
+    } catch (e) {
+      return errResult(e);
+    }
+  }
+);
+
+server.tool(
   "release_return",
   "发布退回：待发布 → 待处理（管理员级 Key，note 必填）。撤回已经 push 的提交之后才调用。note 要写清为什么退回，修复 Agent 会按这句重做。",
   {

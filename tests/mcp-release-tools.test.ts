@@ -31,6 +31,7 @@ describe("release MCP tools", () => {
         "run_release",
         "mark_released",
         "release_return",
+        "release_hold",
       ]) {
         expect(byName.has(name), name).toBe(true);
       }

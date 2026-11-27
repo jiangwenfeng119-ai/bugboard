@@ -749,4 +749,31 @@ describe("agent wake", () => {
     expect(calls).toHaveLength(afterQuiet);
     expect(services.getBug(identity, quiet.id).status).toBe("pending");
   });
+
+  it("wakes on release_hold without treating the commit as reverted", async () => {
+    const { services, dispatch, identity, project } = await setup();
+    const calls: string[] = [];
+    dispatch.setDispatchTransportForTests(async (input) => {
+      calls.push(input.body);
+      return { status: 204, text: "" };
+    });
+    dispatch.saveDispatchSettings(identity, project.id, {
+      webhookUrl: "http://127.0.0.1:3099/wake",
+      cursorEnabled: false,
+    });
+    const bug = services.createBug(identity, { projectId: project.id, title: "旧断言没跟上" });
+    services.transitionBug(identity, bug.id, "start_fix");
+    services.transitionBug(identity, bug.id, "submit_fix", "已改");
+    await dispatch.flushDispatches();
+    const before = calls.length;
+    services.transitionBug(identity, bug.id, "release_hold", "旧测试还在用改之前的做法");
+    await dispatch.flushDispatches();
+    expect(services.getBug(identity, bug.id).status).toBe("fixing");
+    expect(calls).toHaveLength(before + 1);
+    const payload = JSON.parse(calls.at(-1) || "{}") as { reason: string; prompt: string };
+    expect(payload.reason).toBe("release_hold");
+    expect(payload.prompt).toContain("发布拦住");
+    expect(payload.prompt).toContain("提交还在");
+    expect(payload.prompt).toContain("不要删掉断言");
+  });
 });

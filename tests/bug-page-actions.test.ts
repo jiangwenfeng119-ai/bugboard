@@ -27,6 +27,7 @@ describe("bug page actions", () => {
     expect(shown).not.toContain("release_fixes");
     expect(shown).toContain("withdraw_fix");
     expect(shown).toContain("release_return");
+    expect(shown).toContain("release_hold");
     expect(bugPageActions(shown)).toEqual(shown);
   });
 

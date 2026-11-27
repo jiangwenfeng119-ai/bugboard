@@ -88,6 +88,7 @@ describe("project behavior", () => {
       "provide_info",
       "reject_fix",
       "release_return",
+      "release_hold",
       "dispute_invalid",
       "reopen_invalid",
       "supplement",
@@ -309,11 +310,18 @@ describe("project behavior", () => {
 
   it("adds release_return only to saved wake lists that still include reject_fix", async () => {
     const { behavior, dispatch, identity, project } = await setup();
-    const { storedWakeActionsWithReleaseReturn } = await import("../src/lib/behavior-shared");
+    const { storedWakeActionsWithReleaseHold, storedWakeActionsWithReleaseReturn } = await import(
+      "../src/lib/behavior-shared"
+    );
     expect(storedWakeActionsWithReleaseReturn("")).toBe("");
     expect(storedWakeActionsWithReleaseReturn("supplement")).toBe("supplement");
     expect(storedWakeActionsWithReleaseReturn("reject_fix,supplement")).toBe(
       "reject_fix,supplement,release_return"
+    );
+    expect(storedWakeActionsWithReleaseHold("")).toBe("");
+    expect(storedWakeActionsWithReleaseHold("reject_fix,supplement")).toBe("reject_fix,supplement");
+    expect(storedWakeActionsWithReleaseHold("reject_fix,supplement,release_return")).toBe(
+      "reject_fix,supplement,release_return,release_hold"
     );
 
     dispatch.saveDispatchSettings(identity, project.id, {
@@ -329,6 +337,7 @@ describe("project behavior", () => {
     const migrated = reopened.getBehaviorSettings(identity, project.id).wakeActions;
     expect(migrated).toContain("reject_fix");
     expect(migrated).toContain("release_return");
+    expect(migrated).toContain("release_hold");
 
     getDb()
       .prepare("UPDATE project_dispatch SET wake_actions = '' WHERE project_id = ?")

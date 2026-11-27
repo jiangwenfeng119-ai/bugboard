@@ -20,6 +20,7 @@ export type DispatchReason =
   | "provide_info"
   | "reject_fix"
   | "release_return"
+  | "release_hold"
   | "dispute_invalid"
   | "reopen_invalid"
   | "supplement"
@@ -187,6 +188,7 @@ const AUTO_WAKE = new Set<DispatchReason>([
   "provide_info",
   "reject_fix",
   "release_return",
+  "release_hold",
   "dispute_invalid",
   "reopen_invalid",
   "supplement",
@@ -232,6 +234,8 @@ export function shouldWakeOnAction(
   if (!set.has(action)) return false;
   // Agent 在同一次对话里自己点「可以做」时，它会接着改，不再另开一个。
   if (action === "accept_product") return status === "fixing" && actor === "user";
+  // 发布拦住回到修复中。发布 Agent 用管理员 Key 调用，也要叫醒修复。
+  if (action === "release_hold") return status === "fixing";
   return status === "pending";
 }
 
@@ -771,6 +775,11 @@ export function buildWakePrompt(project: ProjectRow, bug: BugRow, reason?: Dispa
     ...(reason === "release_return"
       ? [
           "这张是发布退回。先读进入待处理的那条说明，按说明重做。已经撤回的提交不是还在的修复。",
+        ]
+      : []),
+    ...(reason === "release_hold"
+      ? [
+          "这张是发布拦住。提交还在，不要当成已撤回。先读进入修复中的那条说明，把测试或改动补上，再提交回到待发布。失败的断言要变绿，不要删掉断言来换通过。修完不要自己发布。",
         ]
       : []),
     readBehavior(project.id).wakeDrainQueue

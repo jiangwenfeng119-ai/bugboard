@@ -447,4 +447,49 @@ describe("state machine", () => {
     });
     expect(wrong.ok).toBe(false);
   });
+
+  it("release_hold goes from ready_to_release to fixing and requires an admin note", () => {
+    const held = validateTransition({
+      action: "release_hold",
+      from: "ready_to_release",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "旧测试还在用改之前的做法，断言要变绿",
+      asAdmin: admin.role !== "user",
+    });
+    expect(held.ok && held.to).toBe("fixing");
+
+    const missing = validateTransition({
+      action: "release_hold",
+      from: "ready_to_release",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      asAdmin: true,
+    });
+    expect(missing.ok).toBe(false);
+
+    const member = validateTransition({
+      action: "release_hold",
+      from: "ready_to_release",
+      identity: reporter,
+      reporterType: "user",
+      reporterId: 2,
+      note: "我想拦住",
+      asAdmin: false,
+    });
+    expect(member.ok).toBe(false);
+
+    const wrong = validateTransition({
+      action: "release_hold",
+      from: "pending",
+      identity: admin,
+      reporterType: "user",
+      reporterId: 2,
+      note: "还不该拦",
+      asAdmin: true,
+    });
+    expect(wrong.ok).toBe(false);
+  });
 });

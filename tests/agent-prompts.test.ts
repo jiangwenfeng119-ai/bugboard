@@ -145,6 +145,10 @@ describe("agent prompts", () => {
     expect(ADMIN_AGENT_PROMPT).toContain("发布退回");
     expect(ADMIN_AGENT_PROMPT).toContain("先读");
     expect(ADMIN_AGENT_PROMPT).toContain("已经撤回的提交不是还在的修复");
+    expect(ADMIN_AGENT_PROMPT).toContain("release_hold");
+    expect(ADMIN_AGENT_PROMPT).toContain("发布拦住");
+    expect(ADMIN_AGENT_PROMPT).toContain("提交还在");
+    expect(ADMIN_AGENT_PROMPT).toContain("不要删掉断言");
     expect(ADMIN_AGENT_PROMPT).toContain("失败不要 submit_fix");
     expect(ADMIN_AGENT_PROMPT).toContain("对应单测的 mock");
   });
@@ -169,5 +173,10 @@ describe("agent prompts", () => {
     expect(RELEASE_AGENT_PROMPT).toContain("旧测试还在用改之前的做法");
     expect(RELEASE_AGENT_PROMPT).toContain("不要为此撤回");
     expect(RELEASE_AGENT_PROMPT).toContain("不要改脚本里的默认主机");
+    expect(RELEASE_AGENT_PROMPT).toContain("release_hold");
+    expect(RELEASE_AGENT_PROMPT).toContain("content/training");
+    expect(RELEASE_AGENT_PROMPT).toContain("开发目录的当前分支");
+    expect(RELEASE_AGENT_PROMPT).toContain("不要删掉断言");
+    expect(RELEASE_AGENT_PROMPT).toContain("已拦住并已叫醒");
   });
 });

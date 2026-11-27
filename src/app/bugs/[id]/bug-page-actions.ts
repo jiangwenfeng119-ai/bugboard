@@ -13,6 +13,7 @@ const ACTION_ORDER: TransitionAction[] = [
   "request_product",
   "request_info",
   "withdraw_fix",
+  "release_hold",
   "release_return",
   "accept_invalid",
   "mark_invalid",

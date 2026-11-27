@@ -4,6 +4,7 @@ export const WAKE_ACTIONS = [
   "provide_info",
   "reject_fix",
   "release_return",
+  "release_hold",
   "dispute_invalid",
   "reopen_invalid",
   "supplement",
@@ -17,6 +18,7 @@ export const WAKE_ACTION_LABELS: Record<WakeAction, string> = {
   provide_info: "补充说明后仍是待处理",
   reject_fix: "打回修复，回到待处理",
   release_return: "发布退回，回到待处理",
+  release_hold: "发布拦住，回到修复中",
   dispute_invalid: "对不属实提出异议，回到待处理",
   reopen_invalid: "重新打开不属实，回到待处理",
   supplement: "待处理时补充说明",
@@ -50,6 +52,13 @@ export function storedWakeActionsWithReleaseReturn(raw: string) {
   const items = raw.split(",").map((item) => item.trim()).filter(Boolean);
   if (!items.includes("reject_fix") || items.includes("release_return")) return raw;
   return `${items.join(",")},release_return`;
+}
+
+/** 已经会因发布退回叫醒的列表，补上发布拦住。没有发布退回的保持原样，空列表保持为空。 */
+export function storedWakeActionsWithReleaseHold(raw: string) {
+  const items = raw.split(",").map((item) => item.trim()).filter(Boolean);
+  if (!items.includes("release_return") || items.includes("release_hold")) return raw;
+  return `${items.join(",")},release_hold`;
 }
 
 export function behaviorDefaults(): BehaviorSettings {
