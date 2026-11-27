@@ -286,7 +286,7 @@ export function looksLikeDefect(question) {
 }
 
 export function asksCapability(question) {
-  return /能做到吗|能不能做|做得到吗|实现了吗|有没有实现|现在系统|系统里面|系统里是怎么|怎么使用|代码里现在/.test(
+  return /能做到吗|能不能做|做得到吗|实现了吗|有没有实现|现在系统|系统里面|系统里是怎么|怎么使用|代码里现在|(?<![不])可以[\u4e00-\u9fffA-Za-z0-9]{1,16}吗/.test(
     String(question || ""),
   );
 }

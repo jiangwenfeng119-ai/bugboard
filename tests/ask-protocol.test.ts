@@ -646,4 +646,24 @@ describe("ask protocol", () => {
     expect(brief).toContain("不要用「这需要报障」开头");
     expect(callbackAllowed("http://127.0.0.1:3080/api/ask/optimizations/callback", "http://127.0.0.1:3080")).toBe(true);
   });
+
+  it("treats can-I-edit questions as capability checks, not defect drafts", () => {
+    const question = "开采购退货单里面，采购渠道可以自己编辑吗？";
+    expect(asksCapability(question)).toBe(true);
+    expect(asksCapability("采购渠道不可以自己编辑吗")).toBe(false);
+    expect(chooseAskPath({ question })).toBe("deep");
+    const answer = draftAskAnswer({
+      question,
+      documents: "",
+      hits: [],
+      excerpts: "- **采购退货**（`/purchase-return`）：退货开单",
+    });
+    expect(answer).toContain("采购退货");
+    expect(answer).toContain("判断：没有把握");
+    expect(answer).not.toContain("这需要报障");
+    expect(answer).not.toMatch(/判断：建议报障\s*$/);
+    const brief = appendDeepBrief({ prompt: `<question>\n${question}\n</question>`, tableAnswer: answer });
+    expect(brief).toContain("先正面回答实现了还是没有");
+    expect(brief).toContain("不要用「这需要报障」开头");
+  });
 });
