@@ -8,7 +8,8 @@ data
 coverage
 .env*
 README.md
-docs
+docs/*
+!docs/user-manual.md
 PRODUCT.md
 .cursor
 .impeccable
