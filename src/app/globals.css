@@ -3249,6 +3249,19 @@ a.bb-stat {
   font-variant-numeric: tabular-nums;
 }
 
+button.bb-pill-toggle {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+}
+
+button.bb-pill-toggle:hover,
+button.bb-pill-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--ink) 28%, var(--line));
+  background: color-mix(in srgb, var(--surface-2) 70%, white);
+}
+
 .bb-analytics-detail > td {
   background: color-mix(in srgb, var(--surface-2) 72%, white);
   padding-top: 0.35rem;

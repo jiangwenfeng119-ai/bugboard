@@ -5,6 +5,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconArrowRight } from "@/components/Icons";
 import { StatIcon } from "@/components/StatIcon";
+import {
+  reporterProjectOverflow,
+  visibleReporterProjects,
+} from "@/lib/reporter-project-pills";
 import { STATUS_LABEL, type BugStatus, type ReporterAnalytics, type ReporterStat } from "@/lib/types";
 import { AnalyticsCharts } from "./AnalyticsCharts";
 
@@ -270,8 +274,9 @@ function ReporterRows({
   presence: string | null;
   onToggle: () => void;
 }) {
-  const shown = row.projects.slice(0, 3);
-  const extra = row.projects.length - shown.length;
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
+  const shown = visibleReporterProjects(row.projects, projectsExpanded);
+  const extra = reporterProjectOverflow(row.projects.length);
   return (
     <>
       <tr>
@@ -319,7 +324,19 @@ function ReporterRows({
                   <b>{project.total}</b>
                 </span>
               ))}
-              {extra > 0 ? <span className="bb-pill">+{extra}</span> : null}
+              {extra > 0 ? (
+                <button
+                  type="button"
+                  className="bb-pill bb-pill-toggle"
+                  aria-expanded={projectsExpanded}
+                  aria-label={
+                    projectsExpanded ? "收起应用" : `展开其余 ${extra} 个应用`
+                  }
+                  onClick={() => setProjectsExpanded((value) => !value)}
+                >
+                  {projectsExpanded ? "收起" : `+${extra}`}
+                </button>
+              ) : null}
             </span>
           )}
         </td>
